@@ -1,0 +1,14 @@
+fileFormatVersion: 2
+guid: 5d19a2571695e8443a947f459a93b8e2
+timeCreated: 1650880899
+licenseType: Free
+ShaderImporter:
+  defaultTextures:
+  - _LightTexture0: {instanceID: 0}
+  - _LightTextureB0: {instanceID: 0}
+  - _ShadowMapTexture: {instanceID: 0}
+  - _ShadowJitter2D: {instanceID: 0}
+  - _ShadowJitter3D: {instanceID: 0}
+  userData: 
+  assetBundleName: hssssresources
+  assetBundleVariant: unity3d

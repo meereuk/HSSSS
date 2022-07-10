@@ -1,0 +1,20 @@
+fileFormatVersion: 2
+guid: 4a00fe85c67f18049b2999e070032890
+timeCreated: 1650777510
+licenseType: Free
+TrueTypeFontImporter:
+  serializedVersion: 3
+  fontSize: 64
+  forceTextureCase: -2
+  characterSpacing: 1
+  characterPadding: 0
+  includeFontData: 1
+  fontNames: []
+  fallbackFontReferences:
+  - {fileID: 12800000, guid: bc410b35a3dbdbb4ba9f788cbdaf9fb4, type: 3}
+  customCharacters: 
+  fontRenderingMode: 0
+  ascentCalculationMode: 1
+  userData: 
+  assetBundleName: hssssresources
+  assetBundleVariant: unity3d

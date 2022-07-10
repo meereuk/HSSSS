@@ -1,0 +1,11 @@
+fileFormatVersion: 2
+guid: 93cdff7f83c547c4c902fd4b5c8b675c
+timeCreated: 1651115834
+licenseType: Free
+ShaderImporter:
+  defaultTextures:
+  - _MainTex: {instanceID: 0}
+  - _ShadowJitter: {instanceID: 0}
+  userData: 
+  assetBundleName: hssssresources
+  assetBundleVariant: unity3d
