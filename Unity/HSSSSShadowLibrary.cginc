@@ -73,28 +73,22 @@
 // x : blocker search radius
 // y : light radius (tangent for directional)
 // z : minimum penumbra radius (also fixed pcf penumbra radius)
-#if defined(SHADOWMODE_DIR)
-//uniform texture2D _CustomShadowMap;
-//uniform SamplerState sampler_CustomShadowMap; 
-uniform sampler2D _CustomShadowMap;
-uniform float4 _CustomShadowMap_TexelSize;
-uniform float3 _DirLightPenumbra;
+#if defined(SHADOWS_SCREEN)
+	uniform sampler2D _CustomShadowMap;
+	uniform float4 _CustomShadowMap_TexelSize;
+	uniform float3 _DirLightPenumbra;
 #endif
 
-#if defined(SHADOWMODE_SPOT)
-//uniform texture2D _ShadowMapTexture;
-//uniform SamplerState sampler_ShadowMapTexture;
-uniform sampler2D _ShadowMapTexture;
-uniform float4 _ShadowMapTexture_TexelSize;
-uniform float3 _SpotLightPenumbra;
+#if defined(SHADOWS_DEPTH)
+	uniform sampler2D _ShadowMapTexture;
+	uniform float4 _ShadowMapTexture_TexelSize;
+	uniform float3 _SpotLightPenumbra;
 #endif
 
-#if defined(SHADOWMODE_POINT)
-//uniform textureCUBE _ShadowMapTexture;
-//uniform SamplerState sampler_ShadowMapTexture;
-uniform samplerCUBE _ShadowMapTexture;
-uniform float4 _ShadowMapTexture_TexelSize;
-uniform float3 _PointLightPenumbra;
+#if defined(SHADOWS_CUBE)
+	uniform samplerCUBE _ShadowMapTexture;
+	uniform float4 _ShadowMapTexture_TexelSize;
+	uniform float3 _PointLightPenumbra;
 #endif
 
 uniform sampler2D _ShadowJitterTexture;
@@ -106,12 +100,14 @@ inline float4 GetCascadeWeights(float viewDepth)
 	return float4(viewDepth >= _LightSplitsNear) * float4(viewDepth < _LightSplitsFar);	
 }
 
-// shadorcoord for directional and spot
-inline float4 GetShadowCoordinate(float3 vec, float viewDepth)
+inline float3 GetShadowCoordinate(float3 vec, float viewDepth)
 {
 	float4 wpos = float4(vec, 1.0f);
 
-	#if defined(SHADOWMODE_DIR)
+	#if defined(SHADOWS_DEPTH)
+		float4 coord = mul(unity_World2Shadow[0], wpos);
+		return coord.xyz / coord.w;
+	#elif defined(SHADOWS_SCREEN)
 		float4 coord[4] = {
 			mul(unity_World2Shadow[0], wpos),
 			mul(unity_World2Shadow[1], wpos),
@@ -119,201 +115,120 @@ inline float4 GetShadowCoordinate(float3 vec, float viewDepth)
 			mul(unity_World2Shadow[3], wpos)
 		};
 		float4 weight = GetCascadeWeights(viewDepth);
-		return coord[0] * weight.x + coord[1] * weight.y + coord[2] * weight.z + coord[3] * weight.w;
-	#elif defined(SHADOWMODE_SPOT)
-		return mul(unity_World2Shadow[0], wpos);
+		return (coord[0] * weight.x + coord[1] * weight.y + coord[2] * weight.z + coord[3] * weight.w).xyz;
 	#endif
-	
-	return 0.0f;
 }
 
-// uv offset scaling for directional and spot
-inline float GetOffsetScale(float viewDepth)
-{
-	float4 rotation = float4(normalize(cross(_LightDir.xyz, _LightDir.zxy)), 0.0f);
-
-	#if defined(SHADOWMODE_DIR)
-		float4 coord[4] = {
-			mul(unity_World2Shadow[0], rotation),
-			mul(unity_World2Shadow[1], rotation),
-			mul(unity_World2Shadow[2], rotation),
-			mul(unity_World2Shadow[3], rotation)
-		};
-		float4 weight = GetCascadeWeights(viewDepth);
-		float4 refCoord = coord[0] * weight.x + coord[1] * weight.y + coord[2] * weight.z + coord[3] * weight.w;
-		return length(refCoord.xy);
-	#elif defined(SHADOWMODE_SPOT)
-		float4 refCoord = mul(unity_World2Shadow[0], rotation);
-		return length(refCoord.xy);
-	#endif
-
-	return 1.0f;
-}
-
-// shadow acne filter, from jensen's inequality
-inline float ShadowAcneFilter(float4 occluderDepth, float receiverDepth)
-{
-	float2 occlusion;
-	occlusion.x = dot(occluderDepth > receiverDepth, 0.25f);
-	occlusion.y = dot(occluderDepth, 0.25f) > receiverDepth;
-	return 1.0f - (1.0f - occlusion.x) * (1.0f - occlusion.y);
-}
-
+#if defined(SHADOWS_CUBE) || defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
 inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half NdotL)
 {
-	// r: shadow, g: mean z-diff.
-	float2 shadow = float2(0.0f, 0.0f);
-
-	#if defined(SHADOWMODE_POINT)
-		float3 rotationX = normalize(cross(vec, vec.zxy));
-		float3 rotationY = normalize(cross(vec, rotationX));
-		float receiverDepth = length(vec) * _LightPositionRange.w;
-	#elif defined(SHADOWMODE_SPOT)
-		float4 shadowCoord = GetShadowCoordinate(vec, viewDepth);
-		float2 shadowUv = shadowCoord.xy / shadowCoord.w;
-		float receiverDepth = shadowCoord.z / shadowCoord.w;
-		float offsetScale = GetOffsetScale(viewDepth);
-		float depthScaleFactor = abs(GetShadowCoordinate(vec + _LightDir, viewDepth).z / GetShadowCoordinate(vec + _LightDir, viewDepth).w - receiverDepth);
-	#elif defined(SHADOWMODE_DIR)
-		float4 shadowCoord = GetShadowCoordinate(vec, viewDepth);
-		float2 shadowUv = shadowCoord.xy;
-		float receiverDepth = shadowCoord.z;
-		float offsetScale = GetOffsetScale(viewDepth);
-		float depthScaleFactor = abs(GetShadowCoordinate(vec + _LightDir, viewDepth).z - receiverDepth);
-	#endif
+	// equatorial axe
+	float3 rotationX = normalize(cross(_LightDir.xyz, _LightDir.zxy));
+	float3 rotationY = normalize(cross(_LightDir.xyz, rotationX));
 
 	// shadow jittering
 	float2 jitter = mad(tex2D(_ShadowJitterTexture, uv * _ScreenParams.xy * _ShadowJitterTexture_TexelSize.xy + _Time.yy).rg, 2.0f, -1.0f);
 	float2x2 rotationMatrix = float2x2(float2(jitter.x, -jitter.y), float2(jitter.y, jitter.x));
 
-	/////////////////////////////////
-	// penumbra radius calculation //
-	/////////////////////////////////
-
-	// variable penumbra (pcss)
-	#if defined(_PCSS_ON)
-		#if defined(SHADOWMODE_POINT)
-			float searchRadius = 0.01f * _PointLightPenumbra.x;
-			float lightRadius = 0.01f * _PointLightPenumbra.y;
-		#elif defined(SHADOWMODE_SPOT)
-			float searchRadius = 0.01f * _SpotLightPenumbra.x * offsetScale * receiverDepth / (receiverDepth - _LightShadowData.w * depthScaleFactor) / shadowCoord.w;
-			float lightRadius = 0.01f * _SpotLightPenumbra.y;
-		#elif defined(SHADOWMODE_DIR)
-			float searchRadius = 0.01f * _DirLightPenumbra.x * offsetScale;
-			float lightRadius = 0.01f * _DirLightPenumbra.y;
-		#endif
-
-		int occluderCount = 0;
-		float occluderMeanDepth = 0.0f;
-
-		// occluder search
-		[unroll]
-		for (int i = 0; i < PCF_NUM_TAPS; i ++)
-		{
-			float2 disk = mul(poissonDisk[i], rotationMatrix);
-
-			#if defined(SHADOWMODE_POINT)
-				//float3 sampleUv = mad(rotationX * poissonDisk[i].x + rotationY * poissonDisk[i].y, searchRadius, vec);
-				float3 sampleUv = mad(rotationX * disk.x + rotationY * disk.y, searchRadius, vec);
-				float occluderDepth = texCUBE(_ShadowMapTexture, sampleUv);
-				if (occluderDepth < receiverDepth)
-				{
-					occluderCount += 1;
-					occluderMeanDepth  += occluderDepth;
-				}
-			#elif defined(SHADOWMODE_SPOT)
-				//float2 sampleUv = mad(poissonDisk[i], searchRadius, shadowUv);
-				float2 sampleUv = mad(disk, searchRadius, shadowUv);
-				float occluderDepth = tex2D(_ShadowMapTexture, sampleUv);
-				if (occluderDepth < receiverDepth)
-				{
-					occluderCount += 1;
-					occluderMeanDepth  += occluderDepth;
-				}
-			#elif defined(SHADOWMODE_DIR)
-				//float2 sampleUv = mad(poissonDisk[i], searchRadius, shadowUv);
-				float2 sampleUv = mad(disk, searchRadius, shadowUv);
-				float occluderDepth = tex2D(_CustomShadowMap, sampleUv);
-				if (occluderDepth < receiverDepth)
-				{
-					occluderCount += 1;
-					occluderMeanDepth  += occluderDepth;
-				}
-			#endif
-		}
-
-		// penumbra radius
-		#if defined(SHADOWMODE_POINT)
-			occluderMeanDepth = occluderCount > 0 ? occluderMeanDepth / occluderCount : receiverDepth;
-			float minPenumbra = _PointLightPenumbra.z * 0.001f;
-			float maxPenumbra = lightRadius * abs(receiverDepth - occluderMeanDepth) / receiverDepth;
-			float penumbraRadius = max(minPenumbra, maxPenumbra);
-		#elif defined(SHADOWMODE_SPOT)
-			occluderMeanDepth = occluderCount > 0 ? occluderMeanDepth / occluderCount : receiverDepth;
-			float minPenumbra = _SpotLightPenumbra.z * 0.001f;
-			float maxPenumbra = lightRadius * abs(receiverDepth - occluderMeanDepth) / receiverDepth;
-			float penumbraRadius = max(minPenumbra, maxPenumbra) * offsetScale / shadowCoord.w;
-		#elif defined(SHADOWMODE_DIR)
-			occluderMeanDepth = occluderCount > 0 ? occluderMeanDepth / occluderCount : receiverDepth;
-			float minPenumbra = _DirLightPenumbra.z * 0.001f;
-			float maxPenumbra = lightRadius * abs(receiverDepth - occluderMeanDepth) / depthScaleFactor;
-			float penumbraRadius = max(minPenumbra, maxPenumbra) * offsetScale;
-		#endif
-
-		// z-diff. for the deep scattering
-		#if defined(SHADOWMODE_POINT)
-			shadow.g = receiverDepth - occluderMeanDepth;
-			shadow.g = shadow.g / _LightPositionRange.w;
-		#elif defined(SHADOWMODE_SPOT)
-			shadow.g = receiverDepth - occluderMeanDepth;
-			shadow.g = shadow.g / depthScaleFactor;
-		#elif  defined(SHADOWMODE_DIR)
-			shadow.g = receiverDepth - occluderMeanDepth;
-			shadow.g = shadow.g / depthScaleFactor;
-		#endif
-
-	// fixed penumbra (no pcss)
-	#else
-		#if defined(SHADOWMODE_POINT)
-			float penumbraRadius = 0.001f * _PointLightPenumbra.z;
-		#elif defined(SHADOWMODE_SPOT)
-			float penumbraRadius = 0.001f * _SpotLightPenumbra.z * offsetScale / shadowCoord.w;
-		#elif defined(SHADOWMODE_DIR)
-			float penumbraRadius = 0.001f * _DirLightPenumbra.z * offsetScale;
-		#endif
+	// initialize shadow coordinate and depth
+	#if defined(SHADOWS_CUBE)
+		float3 pixelCoord = vec;
+		float pixelDepth = length(vec) * _LightPositionRange.w;
+	#elif defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
+		float3 pixelCoord = GetShadowCoordinate(vec, viewDepth);
+		float pixelDepth = pixelCoord.z;
 	#endif
 
-	//////////////////////////////
-	// pcf soft shadow sampling //
-	//////////////////////////////
+	// penumbra sliders
+	#if defined(SHADOWS_CUBE)
+		float3 radius = float3(0.01f, 0.01f, 0.001f) * _PointLightPenumbra;
+	#elif defined(SHADOWS_DEPTH)
+		float3 radius = float3(0.01f, 0.01f, 0.001f) * _SpotLightPenumbra;
+	#elif defined(SHADOWS_SCREEN)
+		float3 radius = float3(0.01f, 0.01f, 0.001f) * _DirLightPenumbra;
+	#endif
 
 	// slope-based bias
-	#if defined(SHADOWMODE_POINT)
-		receiverDepth = receiverDepth * lerp(0.990f, 1.0f, NdotL) - lerp(0.001f, 0.0f, NdotL) * _LightPositionRange.w;
-	#elif defined(SHADOWMODE_SPOT) || defined(SHADOWMODE_DIR)
-		receiverDepth = receiverDepth - lerp(0.001f, 0.0f, NdotL) * depthScaleFactor;
+	#if defined(SHADOWS_CUBE)
+		pixelDepth = pixelDepth * lerp(0.990f, 1.0f, NdotL) - lerp(0.001f, 0.0f, NdotL) * _LightPositionRange.w;
+	#elif defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
+		pixelDepth = pixelDepth - lerp(0.001f, 0.0f, NdotL);
+	#endif
+
+	// r: shadow, g: mean z-diff.
+	float2 shadow = float2(0.0f, 0.0f);
+
+	#if defined(_PCSS_ON)
+		float casterCount = 0;
+		float casterDepth = 0.0f;
+
+		// blocker search loop
+		[unroll]
+		for (uint i = 0; i < PCF_NUM_TAPS; i ++)
+		{
+			float2 disk = mul(poissonDisk[i], rotationMatrix);
+			float3 sampleCoord = mad(rotationX * disk.x + rotationY * disk.y, radius.x, vec);
+
+			#if defined(SHADOWS_CUBE)
+				float sampleDepth = texCUBE(_ShadowMapTexture, sampleCoord);
+			#elif defined(SHADOWS_DEPTH)
+				float sampleDepth = tex2D(_ShadowMapTexture, GetShadowCoordinate(sampleCoord, viewDepth).xy);
+			#elif defined(SHADOWS_SCREEN)
+				float sampleDepth = tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, viewDepth).xy);
+			#endif
+
+			if (sampleDepth < pixelDepth)
+			{
+				casterCount += 1.0f;
+				casterDepth += sampleDepth;
+			}
+		}
+
+		casterDepth = casterCount > 0.0f ? casterDepth / casterCount : pixelDepth;
+
+		// penumbra size
+		#if defined(SHADOWS_SCREEN)
+			float penumbra = max(radius.z, radius.y * (pixelDepth - casterDepth));
+		#elif defined(SHADOWS_CUBE) || defined(SHADOWS_DEPTH)
+			float penumbra = max(radius.z, radius.y * (pixelDepth - casterDepth) / (casterDepth));
+		#endif
+
+		shadow.g = pixelDepth - casterDepth;
+
+		#if defined(SHADOWS_CUBE)
+			shadow.g /= _LightPositionRange.w;
+		#elif defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
+			shadow.g /= GetShadowCoordinate(vec + _LightDir, viewDepth).z - pixelDepth;
+		#endif
+
+	#else
+		float penumbra = radius.z;
+	#endif
+
+	// calculates thickness if pcss disabled
+	#if !defined(_PCSS_ON)
+		float casterCount = 0.0f;
+		float casterDepth = 0.0f;
 	#endif
 
 	[unroll]
-	for (int j = 0; j < PCF_NUM_TAPS; j ++)
+	for (uint j = 0; j < PCF_NUM_TAPS; j ++)
 	{
 		float2 disk = mul(poissonDisk[j], rotationMatrix);
+		float3 sampleCoord = mad(rotationX * disk.x + rotationY * disk.y, penumbra, vec);
 
-		#if defined(SHADOWMODE_POINT)
-			float3 sampleUv = mad(rotationX * disk.x + rotationY * disk.y, penumbraRadius, vec);
-			shadow.r += texCUBE(_ShadowMapTexture, sampleUv) > receiverDepth ? 1.0f : 0.0f;
-		#elif defined(SHADOWMODE_SPOT)
-			float2 sampleUv = mad(disk, penumbraRadius, shadowUv);
-			shadow.r += tex2D(_ShadowMapTexture, sampleUv) > receiverDepth ? 1.0f : 0.0f;
-		#elif defined(SHADOWMODE_DIR)
-			float2 sampleUv = mad(disk, penumbraRadius, shadowUv);
-			shadow.r += tex2D(_CustomShadowMap, sampleUv) > receiverDepth ? 1.0f : 0.0f;
+		#if defined(SHADOWS_CUBE)
+			shadow.r += texCUBE(_ShadowMapTexture, sampleCoord) > pixelDepth ? 1.0f : 0.0f;
+		#elif defined(SHADOWS_DEPTH)
+			shadow.r += tex2D(_ShadowMapTexture, GetShadowCoordinate(sampleCoord, viewDepth).xy) > pixelDepth ? 1.0f : 0.0f;
+		#elif defined(SHADOWS_SCREEN)
+			shadow.r += tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, viewDepth).xy) > pixelDepth ? 1.0f : 0.0f;
 		#endif
 	}
 
 	shadow.r = lerp(shadow.r / PCF_NUM_TAPS, 1.0f, _LightShadowData.r);
-
 	return shadow;
 }
+#endif
 
 #endif

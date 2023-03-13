@@ -98,10 +98,11 @@ public class ScreenSpaceScattering : MonoBehaviour
 	private void SetGlobalParams()
     {
 		Shader.EnableKeyword("_PCSS_ON");
-		Shader.EnableKeyword("_PCF_TAPS_32");
+		Shader.EnableKeyword("_PCF_TAPS_64");
 		Shader.EnableKeyword("_SCREENSPACE_SSS");
 		Shader.EnableKeyword("_MICRODETAILS");
 		Shader.EnableKeyword("_RT_SHADOW_HQ");
+		Shader.EnableKeyword("_DIR_PCF_ON");
 
 		Shader.SetGlobalTexture("_ShadowJitterTexture", shadowJitter);
 		Shader.SetGlobalTexture("_DeferredTransmissionLut", deepScatterLut);
@@ -109,8 +110,9 @@ public class ScreenSpaceScattering : MonoBehaviour
 		Shader.SetGlobalVector("_DeferredSkinParams", new Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 		Shader.SetGlobalVector("_DeferredTransmissionParams", new Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 
-		Shader.SetGlobalVector("_PointLightPenumbra", new Vector3(4.0f, 4.0f, 0.0f));
-		Shader.SetGlobalVector("_SpotLightPenumbra", new Vector3(1.0f, 1.0f, 0.0f));
+		Shader.SetGlobalVector("_PointLightPenumbra", new Vector3(4.0f, 8.0f, 0.0f));
+		Shader.SetGlobalVector("_SpotLightPenumbra", new Vector3(8.0f, 8.0f, 0.0f));
+		Shader.SetGlobalVector("_DirLightPenumbra", new Vector3(0.0f, 0.0f, 0.5f));
 
 		Shader.SetGlobalFloat("_SSShadowRayLength", 0.04f);
         Shader.SetGlobalFloat("_SSShadowRayRadius", 0.08f);
