@@ -1,12 +1,3 @@
-// Alloy Physical Shader Framework
-// Copyright 2013-2016 RUST LLC.
-// http://www.alloy.rustltd.com/
-
-/////////////////////////////////////////////////////////////////////////////////
-/// @file Config.cginc
-/// @brief User configuration options.
-/////////////////////////////////////////////////////////////////////////////////
-
 #ifndef A_CONFIG_CGINC
 #define A_CONFIG_CGINC
 
@@ -36,5 +27,4 @@
 #define UNITY_SAMPLE_FULL_SH_PER_PIXEL 1
 #endif
 
-
-#endif // A_CONFIG_CGINC
+#endif
