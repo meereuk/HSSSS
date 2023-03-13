@@ -10,7 +10,7 @@
 #ifndef A_FRAMEWORK_TESSELLATION_CGINC
 #define A_FRAMEWORK_TESSELLATION_CGINC
 
-#include "Assets/Alloy/Shaders/Config.cginc"
+#include "Assets/HSSSS/Config.cginc"
 #include "Assets/HSSSS/Framework/Vertex.cginc"
 #include "Assets/HSSSS/Framework/Utility.cginc"
 
@@ -52,6 +52,10 @@
     #endif
     #ifdef _TESSELLATIONMODE_PHONG
         float _Phong;
+    #endif
+
+    #if defined(_VERTEXWRAP_ON)
+        sampler2D _CameraDepthTexture;
     #endif
 
     // NOTE: Forward-declared here so we can share Domain shader.
@@ -184,6 +188,35 @@
         float3 displacedPosition = pp[0] * bary.x + pp[1] * bary.y + pp[2] * bary.z;
         v.vertex.xyz = lerp(v.vertex.xyz, displacedPosition, _Phong);
     #endif
+
+    #ifdef _VERTEXWRAP_ON
+        float4 objCoord = v.vertex;
+        float4 camCoord = mul(UNITY_MATRIX_MVP, objCoord);
+        float4 scrCoord = ComputeScreenPos(objCoord);
+        float2 scrUv = scrCoord.xy / scrCoord.w;
+
+        float vtxDepth = -mul(UNITY_MATRIX_MV, objCoord).z;
+        float refDepth = LinearEyeDepth(tex2Dlod(_CameraDepthTexture, float4(scrUv, 0.0f, 0.0f)).r);
+
+        float offset = 0.0f;
+
+        for (int iter = 1; iter < 32; iter ++)
+        {
+            float rayDist = 0.0002f * iter;
+
+            objCoord.z = v.vertex.z - rayDist;
+            camCoord = mul(UNITY_MATRIX_MVP, objCoord);
+            scrCoord = ComputeScreenPos(camCoord);
+            scrUv = scrCoord.xy / scrCoord.w;
+
+            vtxDepth = -mul(UNITY_MATRIX_MV, objCoord).z;
+            float refDepth = LinearEyeDepth(tex2Dlod(_CameraDepthTexture, float4(scrUv, 0.0f, 0.0f)).r);
+
+            offset = refDepth > vtxDepth ? rayDist : offset;
+        }
+
+        v.vertex.z -= offset * 0.9f;
+    #endif
     
     // NOTE: This has to come second, since the Phong mode references the 
     // unmodified vertices in order to work!
@@ -192,8 +225,8 @@
         float oscillation = _Time.y;
         float2 tessUv = TRANSFORM_TEX(v.uv0.xy, _DispTex) + (_DispTexVelocity * oscillation);
         
-        #ifdef _VIRTUALTEXTURING_ON
-            d *= VTVertexSampleDisplacement(tessUv);
+        #ifdef _DISPALPHA_ON
+            d *= pow(tex2Dlod(_MainTex, float4(tessUv, 0.0f, 0.0f)).a, 4);
         #else
             d *= tex2Dlod(_DispTex, float4(tessUv, 0.0f, 0.0f)).g;
         #endif

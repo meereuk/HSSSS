@@ -1,68 +1,71 @@
 #ifndef A_DEFINITIONS_HAIR_CGINC
 #define A_DEFINITIONS_HAIR_CGINC
 
-#define _METALLIC_OFF
+#if defined(UNITY_PASS_DEFERRED)
+    #define _SPECCOLOR_ON
+#endif
 
-#include "Assets/HSSSS/Lighting/Hair.cginc"
+#define A_SCREEN_UV_ON
+
+#if defined(UNITY_PASS_FORWARDBASE) || defined(UNITY_PASS_FORWARDADD)
+    #include "Assets/HSSSS/Lighting/Hair.cginc"
+
+    half _AnisoAngle;
+    half _WrapDiffuse;
+    half _HighlightShift;
+    half _HighlightWidth;
+#else
+    #include "Assets/HSSSS/Lighting/Standard.cginc"
+#endif
+
 #include "Assets/HSSSS/Framework/Definition.cginc"
 
-A_SAMPLER2D(_NoiseMap);
-A_SAMPLER2D(_ShiftMap);
-
-half _WrapDiffuse;
-half _AnisoAngle;
-half _HighlightShift0;
-half _HighlightWidth0;
-half _HighlightShift1;
-half _HighlightWidth1;
-
-half4 _SpecColor_3;
-
-inline void aSampleHairAlbedo(inout ASurface s)
-{
-    half4 tex = tex2D(_MainTex, s.baseUv);
-    s.baseColor = _Color.rgb * tex.rgb;
-    #if defined(_ALPHATEST_ON)
-    s.opacity = _Color.a * tex.a;
-    clip(s.opacity - _Cutoff);
-    #if defined(_CUTOFF_MAX)
-    clip(s.opacity - 1.0h);
-    #endif
-    #endif
-    #if defined(_ALPHABLEND_ON)
-    half scale = 1.0h / _Cutoff;
-    s.opacity = clamp(_Color.a * tex.a * scale, 0.0h, 1.0h);
-    #endif
-}
-
-void aSampleHairEffect(inout ASurface s)
-{
-    half noise = tex2D(_NoiseMap, A_TRANSFORM_UV_SCROLL(s, _NoiseMap)).g;
-    half shift = tex2D(_ShiftMap, A_TRANSFORM_UV_SCROLL(s, _ShiftMap)).g - 0.5h;
-
-    s.highlightTint0 = noise * _SpecColor_3;
-    s.highlightShift0 = _HighlightShift0 + shift;
-    s.highlightWidth0 = _HighlightWidth0;
-    s.highlightTint1 = _SpecColor;
-    s.highlightShift1 = _HighlightShift1 + shift;
-    s.highlightWidth1 = _HighlightWidth1;
-
-    half theta = radians(_AnisoAngle);
-    s.diffuseWrap = _WrapDiffuse;
-    s.highlightTangent = half3(cos(theta), sin(theta), 0.0h);
-}
+sampler2D _BlueNoise;
+float4 _BlueNoise_TexelSize;
+float _FuzzBias;
 
 void aSurface(inout ASurface s)
 {
-    aSampleHairAlbedo(s);
-    #if !defined(UNITY_PASS_SHADOWCASTER)
-    #if !defined(UNITY_PASS_META)
-    aSampleSpecGloss(s);
-    aSampleOcclusion(s);
-    aSampleHairEffect(s);
-    aSampleBumpTangent(s);
-    aUpdateNormalData(s);
-    #endif
+    half4 albedo = tex2D(_MainTex, s.baseUv);
+    s.opacity = albedo.a;
+
+    #if defined(UNITY_PASS_SHADOWCASTER)
+        clip(s.opacity - _Cutoff);
+    #else
+        // hashed alpha
+        half hash = tex2D(_BlueNoise, s.screenUv * _ScreenParams.xy * _BlueNoise_TexelSize.xy + _FuzzBias * _Time.yy);
+        clip(s.opacity - lerp(_Cutoff, hash, _Metallic));
+
+        // albedo
+        s.baseColor = albedo * _Color;
+
+        // specular & glossiness
+        half gloss = tex2D(_SpecGlossMap, A_TRANSFORM_UV_SCROLL(s, _SpecGlossMap)).r;
+
+        s.specularity = 1.0h;
+        s.roughness = 1.0h - _Smoothness * gloss;
+
+        #if defined(UNITY_PASS_DEFERRED)
+            s.metallic = 0.0h;
+            s.specularColor = _SpecColor;
+        #else
+            s.highlightTint = _SpecColor;
+            // anisotropic rotations
+            half theta = radians(_AnisoAngle);
+            s.highlightTangent = half3(cos(theta), sin(theta), 0.0h);
+
+            s.highlightShift = _HighlightShift;
+            s.highlightWidth = _HighlightWidth;
+
+            // wrap lighting
+            s.diffuseWrap = _WrapDiffuse;
+        #endif
+
+        aSampleDetailAlbedo(s);
+        aSampleEmission(s);
+        aSampleOcclusion(s);
+        aSampleBumpTangent(s);
+        aUpdateNormalData(s);
     #endif
 }
 

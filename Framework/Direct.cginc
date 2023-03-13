@@ -39,7 +39,7 @@ struct ADirect {
         
     /// Shadowing.
     /// Expects values in the range [0,1].
-    half shadow;
+    half2 shadow;
     
     /// Specular highlight intensity.
     /// Expects values in the range [0,n].

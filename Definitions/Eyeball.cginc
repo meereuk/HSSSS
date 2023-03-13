@@ -1,7 +1,6 @@
 #ifndef A_DEFINITIONS_EYEBALL_CGINC
 #define A_DEFINITIONS_EYEBALL_CGINC
 
-#define A_SPECULAR_TINT_ON
 #define A_CLEARCOAT_ON
 #define _SKINEFFECT_ON
 #define _METALLIC_OFF
@@ -15,9 +14,13 @@
 #include "Assets/HSSSS/Lighting/StandardSkin.cginc"
 #include "Assets/HSSSS/Framework/Definition.cginc"
 
-sampler2D _ScleraTex;
+sampler2D _ScleraBaseMap;
+sampler2D _ScleraVeinMap;
+sampler2D _HeightMap;
+
 half _Parallax;
 half _PupilSize;
+half _VeinScale;
 
 inline void EyeParallaxOcclusion(inout ASurface s)
 {
@@ -40,13 +43,12 @@ inline void EyeParallaxOcclusion(inout ASurface s)
     float lastSampledHeight = 1.0f;
     float currentSampledHeight = 1.0f;
 
-    float2 dx = ddx(s.baseUv);
-    float2 dy = ddy(s.baseUv);
+    float2 dx = ddx_fine(s.baseUv);
+    float2 dy = ddy_fine(s.baseUv);
 
     while (currentSample < numSamples)
     {
-        // height map from the iris texture alpha
-        currentSampledHeight = -tex2Dgrad(_MainTex, s.baseUv + offset, dx, dy).a;
+        currentSampledHeight = tex2Dgrad(_HeightMap, s.baseUv + offset, dx, dy);
 
         if (currentSampledHeight > currentRayHeight)
         {
@@ -83,39 +85,53 @@ void aSurface(inout ASurface s)
     float4 uv01 = s.uv01;
 
     #if defined(UNITY_PASS_DEFERRED)
-    EyeParallaxOcclusion(s);
+        EyeParallaxOcclusion(s);
+        s.scatteringMask = 1.0h;
+        s.transmission = 0.2h;
+    #else
+        s.scatteringMask = 0.0h;
+        s.transmission = 0.0h;
     #endif
 
     half4 iris = tex2D(_MainTex, s.baseUv) * _Color;
-    half3 sclera = tex2D(_ScleraTex, s.baseUv) * _SpecColor;
+
+    half3 scleraBase = tex2D(_ScleraBaseMap, s.baseUv);
+    half3 scleraVein = tex2D(_ScleraVeinMap, s.baseUv);
+    half3 sclera = lerp(scleraBase, scleraVein, _VeinScale) * _SpecColor;
 
     half irisMask = iris.a;
-
     s.baseColor = lerp(sclera, iris, irisMask);
+
+    aSampleEmission(s);
 
     #if !defined(UNITY_PASS_SHADOWCASTER)
     #if !defined(UNITY_PASS_META)
-    s.metallic = 0.0h;
-    s.ambientOcclusion = 1.0;
+        s.metallic = 0.0h;
+        s.ambientOcclusion = 1.0;
 
-    half2 specgloss = tex2D(_SpecGlossMap, s.baseUv).ra;
-    specgloss = lerp(half2(1.0h, 1.0h), specgloss, irisMask);
+        s.specularity = _Metallic;
+        s.roughness = 1.0h - _Smoothness;
 
-    s.specularity = _Metallic * specgloss.x;
-    s.roughness = 1.0h - (_Smoothness * specgloss.y);
-    s.specularTint = irisMask;
+        s.clearCoatWeight = irisMask;
+        s.clearCoatRoughness = 0.0h;
 
-    s.clearCoatWeight = 1.0h;
-    s.clearCoatRoughness = 0.0h;
+        s.mask = 1.0h;
 
-    s.scatteringMask = 1.0h;
-    s.transmission = 0.2h;
+        half heightMask = tex2D(_HeightMap, s.baseUv);
 
-    s.mask = 1.0h;
+        s.normalTangent = UnpackScaleNormal(
+            tex2D(_BumpMap, A_TRANSFORM_UV_SCROLL(s, _BumpMap)), lerp(_BumpScale, 0.0h, heightMask)
+        );
 
-    aSampleBumpTangent(s);
-    aSampleDetailTangent(s);
-    aUpdateNormalData(s);
+        #if defined(_DETAILNORMAL_ON)
+            s.normalTangent = BlendNormals(
+                s.normalTangent, UnpackScaleNormal(
+                    tex2D(_DetailNormalMap, A_TRANSFORM_UV_SCROLL(s, _DetailNormalMap)), _DetailNormalMapScale
+                )
+            );
+        #endif
+
+        aUpdateNormalData(s);
     #endif
     #endif
 

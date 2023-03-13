@@ -65,7 +65,7 @@ float UnityDeferredComputeFadeDistance(float3 wpos, float z)
 	return lerp(z, sphereDist, unity_ShadowFadeCenterAndType.w);
 }
 
-half2 UnityDeferredComputeShadow(float3 vec, float fadeDist, float2 uv)
+half2 UnityDeferredComputeShadow(float3 vec, float fadeDist, float2 uv, half NdotL)
 {
 	// Fade Distance;
 	#if defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN) || defined(SHADOWS_CUBE)
@@ -84,7 +84,7 @@ half2 UnityDeferredComputeShadow(float3 vec, float fadeDist, float2 uv)
 	// Spot
 	#if defined(SPOT)
 	#if defined(SHADOWS_DEPTH)
-		float2 shadow = SamplePCFShadowMap(vec, 0.0f);
+		float2 shadow = SamplePCFShadowMap(vec, uv, 0.0f, NdotL);
 		shadow.x = saturate(shadow.x + fade);
 		return shadow;
 	#endif
@@ -93,7 +93,7 @@ half2 UnityDeferredComputeShadow(float3 vec, float fadeDist, float2 uv)
 	// Point
 	#if defined (POINT) || defined (POINT_COOKIE)
 	#if defined(SHADOWS_CUBE)
-		float2 shadow = SamplePCFShadowMap(vec, 0.0f);
+		float2 shadow = SamplePCFShadowMap(vec, uv, 0.0f, NdotL);
 		shadow.x = saturate(shadow.x + fade);
 		return shadow;
 	#endif
@@ -102,7 +102,7 @@ half2 UnityDeferredComputeShadow(float3 vec, float fadeDist, float2 uv)
 	return 1.0h;
 }
 
-half2 CustomDirectionalShadow(float3 vec, float viewDepth, float fadeDist)
+half2 CustomDirectionalShadow(float3 vec, float viewDepth, float fadeDist, float2 uv, half NdotL)
 {
 	// Fade Distance;
 	#if defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN) || defined(SHADOWS_CUBE)
@@ -112,7 +112,7 @@ half2 CustomDirectionalShadow(float3 vec, float viewDepth, float fadeDist)
 
 	#if defined(DIRECTIONAL) || defined(DIRECTIONAL_COOKIE)
 	#if defined(SHADOWS_SCREEN)
-		half2 shadow = SamplePCFShadowMap(vec, viewDepth);
+		half2 shadow = SamplePCFShadowMap(vec, uv, viewDepth, NdotL);
 		shadow.x = saturate(shadow.x + fade);
 		return shadow;
 	#endif

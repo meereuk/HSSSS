@@ -223,6 +223,9 @@
         d.probeHDR[1] = unity_SpecCube1_HDR;
 
         // Pass 1.0 for occlusion so we can apply it later in indirect().
+        gi = UnityGI_Base(d, 1.0h, s.ambientNormalWorld);
+        /*
+        // SSS for ambient lights
         #if defined(_SKINEFFECT_ON)
             half3 normalR = s.ambientNormalWorld;
             half3 normalG = normalize(lerp(s.normalWorld, s.ambientNormalWorld, 0.3));
@@ -240,6 +243,7 @@
         #else
             gi = UnityGI_Base(d, 1.0h, s.ambientNormalWorld);
         #endif
+        */
 
         #ifndef A_REFLECTION_PROBES_OFF
             Unity_GlossyEnvironmentData g;

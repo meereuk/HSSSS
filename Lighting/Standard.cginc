@@ -14,7 +14,7 @@ void aPostSurface(inout ASurface s)
 
 void aPackGbuffer(ASurface s, out half4 diffuseOcclusion, out half4 specularSmoothness, out half4 normalScattering, out half4 emissionTransmission)
 {
-    diffuseOcclusion = half4(s.albedo, s.specularOcclusion);
+    diffuseOcclusion = half4(s.albedo, s.ambientOcclusion);
     specularSmoothness = half4(s.f0, 1.0h - s.roughness);
     normalScattering = half4(s.normalWorld * 0.5h + 0.5h, 1.0h);
     emissionTransmission = half4(s.emission, 1.0h);
@@ -22,12 +22,12 @@ void aPackGbuffer(ASurface s, out half4 diffuseOcclusion, out half4 specularSmoo
 
 void aUnpackGbuffer(inout ASurface s)
 {
-
+    s.specularOcclusion = aSpecularOcclusion(s.ambientOcclusion, aFresnel(s.NdotV));
 }
 
-half3 aDirect(ADirect d, ASurface s)
+void aDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
 {
-    return aStandardDirect(d, s);
+    aStandardDirect(d, s, diffuse, specular);
 }
 
 half3 aIndirect(AIndirect i, ASurface s)

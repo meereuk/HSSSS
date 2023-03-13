@@ -10,6 +10,8 @@ public class TESTGUI : MonoBehaviour {
 
 	private static Vector2 windowPosition = new Vector2(64.0f, 64.0f);
 	private static Vector2 windowSize = new Vector2 (768.0f, 512.0f);
+	private static int toolBarState = 0;
+	private string[] toolBarStrings = new string[] { "Option1", "Option2"};
 
 	private Rect configWindow;
 
@@ -28,8 +30,12 @@ public class TESTGUI : MonoBehaviour {
     }
 
 	private void WindowFunction(int windowID)
-    {
+	{
 		GUILayout.Space(32.0f);
+
+		toolBarState = GUILayout.Toolbar(toolBarState, this.toolBarStrings);
+
+		/*
 		GUILayout.BeginHorizontal(GUILayout.Height(32.0f));
 		//
 		GUILayout.Button("Scattering", GUILayout.Width(178.0f));
@@ -38,6 +44,7 @@ public class TESTGUI : MonoBehaviour {
 		GUILayout.Button("Preset", GUILayout.Width(178.0f));
 
 		GUILayout.EndHorizontal();
+		*/
 		GUILayout.Space(16.0f);
 		//
 		GUILayout.Label("TEST Slider 1");

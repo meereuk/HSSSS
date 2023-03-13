@@ -1,7 +1,7 @@
-#ifndef A_FRAMEWORK_FEATURE_CGINC
-#define A_FRAMEWORK_FEATURE_CGINC
+#ifndef COMMON_FEATURES_CGINC
+#define COMMON_FEATURES_CGINC
 
-#include "Assets/Alloy/Shaders/Config.cginc"
+#include "Assets/HSSSS/Config.cginc"
 #include "Assets/HSSSS/Framework/Surface.cginc"
 #include "Assets/HSSSS/Framework/Utility.cginc"
 
@@ -22,74 +22,111 @@
     s.baseTiling = TEX##_ST.xy;
 
 A_SAMPLER2D(_MainTex);
-A_SAMPLER2D(_DetailAlbedoMap);
 A_SAMPLER2D(_SpecGlossMap);
 A_SAMPLER2D(_OcclusionMap);
 A_SAMPLER2D(_BumpMap);
-A_SAMPLER2D(_BlendNormalMap);
-A_SAMPLER2D(_DetailNormalMap);
-A_SAMPLER2D(_EmissionMap);
 A_SAMPLER2D(_Thickness);
 
 half4 _Color;
-half3 _RimColor;
-half3 _EmissionColor;
-
 half _Cutoff;
 half _Metallic;
 half _Smoothness;
 half _OcclusionStrength;
 half _BumpScale;
-half _BlendNormalMapScale;
-half _DetailNormalMapScale;
 
-half _RimWeight;
-half _RimPower;
-half _RimBias;
-half _Emission;
+#if defined(_DETAILALBEDO_ON)
+    A_SAMPLER2D(_DetailAlbedoMap);
+#endif
 
 #if defined(_COLORMASK_ON)
-A_SAMPLER2D(_ColorMask);
-half4 _Color_3;
+    A_SAMPLER2D(_ColorMask);
+    half4 _Color_3;
+#endif
+
+#if defined(_EMISSION_ON)
+    A_SAMPLER2D(_EmissionMap);
+    half3 _EmissionColor;
+#endif
+
+#if defined(_ALPHAHASHED_ON)
+    sampler2D _BlueNoise;
+    float4 _BlueNoise_TexelSize;
+    float _FuzzBias;
+#endif
+
+#if defined(_BLENDNORMAL_ON)
+    A_SAMPLER2D(_BlendNormalMap);
+    half _BlendNormalMapScale;
+#endif
+
+#if defined(_DETAILNORMAL_ON)
+    A_SAMPLER2D(_DetailNormalMap);
+    half _DetailNormalMapScale;
 #endif
 
 inline void aSampleAlbedo(inout ASurface s)
 {
     half4 tex = tex2D(_MainTex, s.baseUv);
 
-    #if defined(_COLORMASK_ON)
-    half mask = tex2D(_ColorMask, A_TRANSFORM_UV_SCROLL(s, _ColorMask)).g;
-    s.baseColor = lerp(_Color.rgb * tex.rgb, _Color_3.rgb * tex.rgb , mask);
-    #else
-    s.baseColor = _Color.rgb * tex.rgb;
-    #endif
-
-    #if defined(_ALPHABLEND_ON) || defined(_ALPHAPREMULTIPLY_ON) || defined(_ALPHATEST_ON) || defined(_ALPHAHASHED_ON)
     s.opacity = _Color.a * tex.a;
+
+    // alpha test
+    #if defined(_ALPHATEST_ON)
+        clip(s.opacity - _Cutoff);
     #endif
 
-    #if defined(_ALPHATEST_ON)
-    #if defined(_CUTOFF_MAX)
-    clip(s.opacity - 1.0h);
+    // alpha hashed
+    #if defined(_ALPHAHASHED_ON)
+        half hash = tex2Dlod(_BlueNoise, 
+        float4(s.screenUv * _ScreenParams.xy * _BlueNoise_TexelSize.xy + _FuzzBias * _Time.yy, 0.0f, 2.0f * s.viewDepth));
+        clip(s.opacity - hash - _Cutoff);
+    #endif
+
+    // 2-color sampling
+    #if defined(_COLORMASK_ON)
+        half colorMask = tex2D(_ColorMask, A_TRANSFORM_UV_SCROLL(s, _ColorMask)).g;
+        s.baseColor = tex.rgb * lerp(_Color.rgb, _Color_3.rgb, colorMask);
     #else
-    clip(s.opacity - _Cutoff);
+        s.baseColor = _Color.rgb * tex.rgb;
     #endif
+
+    /*
+    // alpha blend
+    #if defined(_ALPHABLEND_ON) || defined(_ALPHAPREMULTIPLY_ON) || defined(_ALPHATEST_ON) || defined(_ALPHAHASHED_ON) || defined (A_FINAL_GBUFFER_ON)
+        s.opacity = _Color.a * tex.a;
     #endif
+
+    // alpha test
+    #if defined(_ALPHATEST_ON)
+        clip(s.opacity - _Cutoff);
+    #endif
+
+    // alpha hashed
+    #if defined(_ALPHAHASHED_ON)
+        half hash = tex2Dlod(_BlueNoise, 
+        float4(s.screenUv * _ScreenParams.xy * _BlueNoise_TexelSize.xy + _FuzzBias * _Time.yy, 0.0f, 2.0f * s.viewDepth));
+        clip(s.opacity - hash - _Cutoff);
+    #endif
+    */
 }
 
 inline void aSampleDetailAlbedo(inout ASurface s)
 {
-    s.baseColor *= tex2D(_DetailAlbedoMap, A_TRANSFORM_UV_SCROLL(s, _DetailAlbedoMap));
+    #if defined(_DETAILALBEDO_ON)
+        half4 tex = tex2D(_DetailAlbedoMap, A_TRANSFORM_UV_SCROLL(s, _DetailAlbedoMap));
+        s.baseColor = s.baseColor * tex.rgb;
+    #endif
 }
 
 inline void aSampleSpecGloss(inout ASurface s)
 {
     half2 tex = tex2D(_SpecGlossMap, A_TRANSFORM_UV_SCROLL(s, _SpecGlossMap)).ra;
+
     #if defined(_METALLIC_OFF)
         #if defined(_SKINEFFECT_ON)
-            s.specularity = _SpecColor.r * tex.r;
+            s.specularity = _SpecColor.r;
             #if defined(_WET_SPECGLOSS)
-                s.baseColor = s.baseColor * lerp(1.0h, 0.8h, tex.r * _Smoothness);
+                s.baseColor = s.baseColor * lerp(1.0h, 0.9h, tex.r * _Smoothness);
                 s.roughness = 1.0h - lerp(_Metallic, _Smoothness, tex.r);
 
                 s.clearCoatWeight = 1.0h - s.roughness;
@@ -97,13 +134,17 @@ inline void aSampleSpecGloss(inout ASurface s)
             #else
                 s.roughness = 1.0h - _Smoothness * tex.g;
             #endif
+        #elif defined(_SPECCOLOR_ON)
+            s.specularity = _Metallic;
+            s.specularColor = _SpecColor;
+            s.roughness = 1.0h - _Smoothness * tex.g;
         #else
             s.specularity = _Metallic * tex.r;
             s.roughness = 1.0h - _Smoothness * tex.g;
         #endif
     #else
-        s.metallic = _Metallic;
-        s.specularity = _SpecColor * tex.r;
+        s.metallic = _Metallic * tex.r;
+        s.specularity = _SpecColor.r;
         s.roughness = 1.0h - _Smoothness * tex.g;
     #endif
 }
@@ -122,42 +163,72 @@ inline void aSampleBumpTangent(inout ASurface s)
     );
 }
 
+// blend normal
 inline void aSampleBlendTangent(inout ASurface s)
 {
-    s.normalTangent = BlendNormals(
-        s.normalTangent, UnpackScaleNormal(
-            tex2D(_BlendNormalMap, A_TRANSFORM_UV_SCROLL(s, _BlendNormalMap)), _BlendNormalMapScale
-        )
-    );
+    #if defined(_BLENDNORMAL_ON)
+        s.normalTangent = BlendNormals(
+            s.normalTangent, UnpackScaleNormal(
+                tex2D(_BlendNormalMap, A_TRANSFORM_UV_SCROLL(s, _BlendNormalMap)), _BlendNormalMapScale
+            )
+        );
+    #endif
 }
 
+// detail normal
 inline void aSampleDetailTangent(inout ASurface s)
 {
-    s.normalTangent = BlendNormals(
-        s.normalTangent, UnpackScaleNormal(
-            tex2D(_DetailNormalMap, A_TRANSFORM_UV_SCROLL(s, _DetailNormalMap)), _DetailNormalMapScale
-        )
-    );
+    #if defined(_DETAILNORMAL_ON)
+        s.normalTangent = BlendNormals(
+            s.normalTangent, UnpackScaleNormal(
+                tex2D(_DetailNormalMap, A_TRANSFORM_UV_SCROLL(s, _DetailNormalMap)), _DetailNormalMapScale
+            )
+        );
+    #endif
 }
 
-inline void aSampleTransmission(inout ASurface s)
-{
-    s.transmission = 1.0h - tex2D(_Thickness, A_TRANSFORM_UV_SCROLL(s, _Thickness)).r;
-}
-
-inline void aSampleScattering(inout ASurface s)
-{
-    s.scatteringMask = 1.0h;
-}
-
+// emission
 inline void aSampleEmission(inout ASurface s)
 {
-    s.emission = _Emission * _EmissionColor * tex2D(_EmissionMap, A_TRANSFORM_UV_SCROLL(s, _EmissionMap));
+    #if defined(_EMISSION_ON)
+        half4 emission = tex2D(_EmissionMap, A_TRANSFORM_UV_SCROLL(s, _EmissionMap));
+        s.emission = _EmissionColor * emission.rgb * emission.a;
+    #endif
 }
+
+/*
+// rimlight
+#if defined(_RIMLIGHT)
+half3 _RimColor;
+half _RimWeight;
+half _RimPower;
+half _RimBias;
 
 inline void aSampleRimLight(inout ASurface s)
 {
     s.emission += _RimColor * (_RimWeight * aRimLight(_RimBias, _RimPower, s.NdotV));
+}
+#endif
+*/
+
+inline void aSampleTransmission(inout ASurface s)
+{
+    #if defined(UNITY_PASS_DEFERRED) && defined(_SKINEFFECT_ON)
+        s.transmission = 1.0h - tex2D(_Thickness, A_TRANSFORM_UV_SCROLL(s, _Thickness)).r;
+    #else
+        s.transmission = 0.0h;
+    #endif
+}
+
+inline void aSampleScattering(inout ASurface s)
+{
+    #if defined(UNITY_PASS_DEFERRED) && defined(_SKINEFFECT_ON)
+        s.scatteringMask = 1.0h;
+    #elif defined(UNITY_PASS_DEFERRED) && defined(_THINLAYER_ON)
+        s.scatteringMask = 0.67h;
+    #else
+        s.scatteringMask = 0.0h;
+    #endif
 }
 
 inline void aSetDefaultBaseUv(inout ASurface s)

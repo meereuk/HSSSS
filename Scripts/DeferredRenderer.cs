@@ -78,7 +78,7 @@ public class DeferredRenderer : MonoBehaviour
         sssWeight = 1.0f,
 
         skinLutBias = 0.0f,
-        skinLutScale = 1.0f,
+        skinLutScale = 0.5f,
 
         shadowLutBias = 0.0f,
         shadowLutScale = 0.5f,
@@ -94,7 +94,7 @@ public class DeferredRenderer : MonoBehaviour
 
         transWeight = 1.0f,
         transShadowWeight = 0.8f,
-        transDistortion = 0.0f,
+        transDistortion = 0.4f,
         transFalloff = 4.0f
     };
 
@@ -161,13 +161,13 @@ public class DeferredRenderer : MonoBehaviour
                 Shader.SetGlobalTexture("_DeferredSkinLut", skinLut);
                 Shader.SetGlobalTexture("_DeferredShadowLut", shadowLut);
 
-                Shader.EnableKeyword("_PCF_TAPS_64");
+                Shader.EnableKeyword("_PCF_TAPS_16");
                 Shader.EnableKeyword("_DIR_PCF_ON");
                 Shader.EnableKeyword("_PCSS_ON");
                 Shader.EnableKeyword("_FACEWORKS_TYPE1");
-                Shader.SetGlobalVector("_DirLightPenumbra", new Vector3(1.0f, 1.0f, 1.0f));
-                Shader.SetGlobalVector("_SpotLightPenumbra", new Vector3(1.0f, 1.0f, 1.0f));
-                Shader.SetGlobalVector("_PointLightPenumbra", new Vector3(0.0f, 0.0f, 50.0f));
+                Shader.SetGlobalVector("_DirLightPenumbra", new Vector3(4.0f, 4.0f, 1.0f));
+                Shader.SetGlobalVector("_SpotLightPenumbra", new Vector3(4.0f, 4.0f, 1.0f));
+                Shader.SetGlobalVector("_PointLightPenumbra", new Vector3(4.0f, 4.0f, 1.0f));
 
                 Shader.SetGlobalVector("_DeferredSkinParams",
                     new Vector4(skinSettings.sssWeight, skinSettings.skinLutBias, skinSettings.skinLutScale, skinSettings.normalBlurWeight));

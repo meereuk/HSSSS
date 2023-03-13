@@ -25,7 +25,12 @@ half3 aUnityLightDirect(
     d.NdotLm = dot(s.normalWorld, d.direction);
     aUpdateLightingInputs(d, s);
 
-    return aDirect(d, s);
+    half3 diffuse = 0.0h;
+    half3 specular = 0.0h;
+
+    aDirect(d, s, diffuse, specular);
+
+    return diffuse + specular;
 }
 
 /// Calculates global illumination from UnityGI data.
@@ -142,7 +147,12 @@ half3 aForwardDirect(
     aDirectionalLight(d, s, d.direction);
 #endif
 
-    return aDirect(d, s);
+    half3 diffuse = 0.0h;
+    half3 specular = 0.0h;
+
+    aDirect(d, s, diffuse, specular);
+
+    return diffuse + specular;
 }
 
 /// Populates the G-buffer with Unity-compatible material data.

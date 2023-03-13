@@ -1,24 +1,31 @@
 #ifndef A_LIGHTING_STANDARD_SKIN_CGINC
 #define A_LIGHTING_STANDARD_SKIN_CGINC
 
-#define A_SURFACE_CUSTOM_LIGHTING_DATA \
-    half3 blurredNormalTangent; 
+#define A_SURFACE_CUSTOM_LIGHTING_DATA half3 blurredNormalTangent;
 
 #include "Assets/HSSSS/Framework/Lighting.cginc"
 
-sampler2D _DeferredBlurredNormalBuffer;
-sampler2D _DeferredSkinLut;
 half4 _DeferredSkinParams;
 
-#if defined(_FACEWORKS_TYPE2)
-sampler2D _DeferredShadowLut;
-half2 _DeferredShadowParams;
+#if !defined(_SCREENSPACE_SSS)
+    sampler2D _DeferredBlurredNormalBuffer;
+    sampler2D _DeferredSkinLut;
 #endif
 
-half3 _DeferredSkinColorBleedAoWeights;
+#if defined(_FACEWORKS_TYPE2)
+    sampler2D _DeferredShadowLut;
+    half2 _DeferredShadowParams;
+#endif
+
+#if defined(_BAKED_THICKNESS)
+    half3 _DeferredSkinTransmissionAbsorption;
+#else
+    sampler2D _DeferredTransmissionLut;
+    half _DeferredThicknessBias;
+#endif
 
 sampler2D _DeferredTransmissionBuffer;
-half3 _DeferredSkinTransmissionAbsorption;
+half3 _DeferredSkinColorBleedAoWeights;
 half4 _DeferredTransmissionParams;
 
 void aPreSurface(inout ASurface s)
@@ -30,71 +37,114 @@ void aPreSurface(inout ASurface s)
 void aPostSurface(inout ASurface s)
 {
     s.scatteringMask *= _DeferredSkinParams.x;
+    #if defined(_SCREENSPACE_SSS)
+        s.blurredNormalTangent = s.normalTangent;
+        s.ambientNormalWorld = s.normalWorld;
+    #else
+        s.blurredNormalTangent = normalize(lerp(s.normalTangent, s.blurredNormalTangent, s.scatteringMask * _DeferredSkinParams.w));
+        s.ambientNormalWorld = A_NORMAL_WORLD(s, s.blurredNormalTangent);
+    #endif
     
-    // Blurred normals for indirect diffuse and direct scattering.
-    s.blurredNormalTangent = normalize(lerp(s.normalTangent, s.blurredNormalTangent, s.scatteringMask * _DeferredSkinParams.w));
-    s.ambientNormalWorld = A_NORMAL_WORLD(s, s.blurredNormalTangent);
 }
 
-void aPackGbuffer
-(
-    ASurface s,
-    out half4 diffuseOcclusion,
-    out half4 specularSmoothness,
-    out half4 normalScattering,
-    out half4 emissionTransmission
-)
+void aPackGbuffer(ASurface s, out half4 gbuffer0, out half4 gbuffer1, out half4 gbuffer2, out half4 gbuffer3)
 {
-    // Pass the sharp normals to avoid double-blurring.
-    diffuseOcclusion = half4(s.albedo, s.specularOcclusion);
-    specularSmoothness = half4(s.f0, 1.0h - s.roughness);
-    normalScattering = half4(s.normalWorld * 0.5h + 0.5h, 1.0h - s.scatteringMask);
-    emissionTransmission = half4(s.emission, 1.0h - s.transmission);
+    gbuffer0 = half4(s.albedo, s.ambientOcclusion);
+    gbuffer1 = half4(s.f0, 1.0h - s.roughness);
+    gbuffer2 = half4(s.normalWorld * 0.5h + 0.5h, 1.0h - s.scatteringMask);
+    gbuffer3 = half4(s.emission, 1.0h - s.transmission);
 }
 
 void aUnpackGbuffer(inout ASurface s)
 {
-    s.transmission = 1.0h - tex2D(_DeferredTransmissionBuffer, s.screenUv).a;
-    s.ambientNormalWorld = tex2D(_DeferredBlurredNormalBuffer, s.screenUv).xyz * 2.0h - 1.0h;
-    s.ambientNormalWorld = normalize(lerp(s.normalWorld, s.ambientNormalWorld, s.scatteringMask * _DeferredSkinParams.w));
+    s.specularOcclusion = aSpecularOcclusion(s.ambientOcclusion, aFresnel(s.NdotV));
+    s.transmission = saturate(1.0h - tex2D(_DeferredTransmissionBuffer, s.screenUv).a);
+    #if defined(_SCREENSPACE_SSS)
+        s.ambientNormalWorld = s.normalWorld;
+    #else
+        s.ambientNormalWorld = tex2D(_DeferredBlurredNormalBuffer, s.screenUv).xyz * 2.0h - 1.0h;
+        s.ambientNormalWorld = normalize(lerp(s.normalWorld, s.ambientNormalWorld, s.scatteringMask * _DeferredSkinParams.w));
+    #endif
 }
 
-half3 aDirect(ADirect d, ASurface s)
+void aDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
 {
-    half3 absorption = exp((1.0h - sqrt(s.transmission)) * _DeferredSkinTransmissionAbsorption);
-    half3 transmissionColor = lerp(s.transmission.rrr, absorption, s.scatteringMask);
+    aStandardDirect(d, s, diffuse, specular);
 
-    #if defined(_FACEWORKS_TYPE2)
-        half3 scattering = aStandardSkin(d, s,
-            _DeferredSkinLut, _DeferredShadowLut,
-            _DeferredSkinParams.y, _DeferredSkinParams.z,
-            _DeferredShadowParams.x, _DeferredShadowParams.y);
-    #else
-        half3 scattering = aStandardSkin(d, s,
-            _DeferredSkinLut, _DeferredSkinParams.y, _DeferredSkinParams.z);
-    #endif
+    // default
+    if (s.scatteringMask == 0.0h)
+    {
+        return;
+    }
 
-    half3 transmission = aStandardTransmission(d, s, transmissionColor,
-        _DeferredTransmissionParams.x, _DeferredTransmissionParams.z,
-        _DeferredTransmissionParams.y, _DeferredTransmissionParams.w);
-    
-    return aStandardDirect(d, s) + scattering + transmission;
+    // empty yet
+    else if (s.scatteringMask < 0.4f)
+    {
+        return;   
+    }
 
-    /*
-    half thickness = d.shadow.g;
-    half blurredNdL = dot(s.ambientNormalWorld, d.direction);
+    // non-skin sss + thin layer transmittance
+    else if (s.scatteringMask < 0.7f)
+    {
+        #if defined(_BAKED_THICKNESS)
+            return;
+        #else
+            half3 transmission = aThinTransmission(d, s, _DeferredTransmissionLut,
+                _DeferredTransmissionParams.x, _DeferredTransmissionParams.y, _DeferredThicknessBias);
 
-    half3 transmit = 0.05h * exp2(-4096.0f * thickness * thickness) * saturate(0.0h - blurredNdL);
-    transmit *= s.albedo * d.color * normalize(exp(_DeferredSkinTransmissionAbsorption)) * s.scatteringMask;
-    return aStandardDirect(d, s) + sss;// +transmit;
-    */
+            diffuse = diffuse + transmission;
+        #endif
+    }
+
+    // skin
+    else
+    {
+        /////////////////////////
+        // pre-integrated brdf //
+        /////////////////////////
+
+        // jimenez (do nothing)
+        #if defined(_SCREENSPACE_SSS)
+        // faceworks type2 (skin + shadow)
+        #elif defined(_FACEWORKS_TYPE2)
+            diffuse = aStandardSkin(d, s,
+                _DeferredSkinLut, _DeferredShadowLut,
+                _DeferredSkinParams.y, _DeferredSkinParams.z,
+                _DeferredShadowParams.x, _DeferredShadowParams.y);
+        // faceworks type2 and penner (skin)
+        #else
+            diffuse = aStandardSkin(d, s,
+                _DeferredSkinLut, _DeferredSkinParams.y, _DeferredSkinParams.z);
+        #endif
+
+        //////////////////////////////
+        // subsurface transmittance //
+        //////////////////////////////
+
+        // pre-baked thickness map
+        #if defined (_BAKED_THICKNESS)
+            half3 absorption = exp((1.0h - sqrt(s.transmission)) * _DeferredSkinTransmissionAbsorption);
+
+            half3 transmission = aStandardTransmission(d, s, absorption,
+                _DeferredTransmissionParams.x, _DeferredTransmissionParams.z,
+                _DeferredTransmissionParams.y, _DeferredTransmissionParams.w);
+        // on-the-fly sampling from the shadowmap
+        #else
+            half3 transmission = aStandardTransmission(d, s, _DeferredTransmissionLut,
+                _DeferredTransmissionParams.x, _DeferredTransmissionParams.y, _DeferredThicknessBias);
+        #endif
+
+        diffuse = diffuse + transmission;
+    }
 }
 
 half3 aIndirect(AIndirect i, ASurface s)
 {
     // Color Bleed AO.
-    i.diffuse *= pow(s.ambientOcclusion, half3(1.0h, 1.0h, 1.0h) - (_DeferredSkinColorBleedAoWeights * s.scatteringMask));
-    s.ambientOcclusion = 1.0h;
+    if (s.scatteringMask == 1.0h)
+    {
+        i.diffuse *= pow(s.ambientOcclusion, half3(1.0h, 1.0h, 1.0h) - _DeferredSkinColorBleedAoWeights);
+    }
     return aStandardIndirect(i, s);
 }
 

@@ -10,7 +10,7 @@
 #ifndef A_FRAMEWORK_UTILITY_CGINC
 #define A_FRAMEWORK_UTILITY_CGINC
 
-#include "Assets/Alloy/Shaders/Config.cginc"
+#include "Assets/HSSSS/Config.cginc"
 
 #include "UnityShaderVariables.cginc"
 
