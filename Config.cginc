@@ -36,4 +36,5 @@
 #define UNITY_SAMPLE_FULL_SH_PER_PIXEL 1
 #endif
 
+
 #endif // A_CONFIG_CGINC
