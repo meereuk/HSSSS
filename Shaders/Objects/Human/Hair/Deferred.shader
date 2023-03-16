@@ -2,32 +2,38 @@ Shader "HSSSS/Human/Hair/Deferred"
 {
     Properties
     {
-        [Header(Albedo)]
+        [Header(MaterialType)]
+        [KeywordEnum(Metallic, Specular)] _Workflow ("Specular Workflow", Float) = 0
+
+        [Space(8)][Header(Albedo)]
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Primary Color", Color) = (1,1,1,1)
 
+        [Space(8)][Header(DetailAlbedo)]
         [Toggle] _DETAILALBEDO ("Toggle DetailAlbedo", Float) = 0
         _DetailAlbedoMap ("Detail Albedo", 2D) = "white" {}
 
-        [Header(Emission)]
+        [Space(8)][Header(Emission)]
         [Toggle] _EMISSION ("Toggle Emission", Float) = 0
         _EmissionMap ("EmissionMap", 2D) = "white" {}
         _EmissionColor ("EmissionColor", Color) = (0, 0, 0, 1)
 
-        [Header(Specular)]
+        [Space(8)][Header(Specular)]
+        [Toggle] _SPECGLOSS ("Toggle", Float) = 0
         _SpecGlossMap ("Glossiness Map", 2D) = "white" {}
         _SpecColor ("Specular Color", Color) = (1,1,1,1)
         _Smoothness ("Smoothness", Range(0, 1)) = 0
 
-        [Header(Occlusion)]
+        [Space(8)][Header(Occlusion)]
+        [Toggle] _Occlusion ("Toggle", Float) = 0
         _OcclusionMap ("OcclusionMap", 2D) = "white" {}
         _OcclusionStrength ("OcclusionStrength", Range(0, 1)) = 0
 
-        [Header(Normal)]
+        [Space(8)][Header(Normal)]
         _BumpMap ("BumpMap", 2D) = "bump" {}
         _BumpScale ("BumpScale", Float) = 1
 
-        [Header(Transparency)]
+        [Space(8)][Header(Transparency)]
         _Metallic ("Hash", Range(0, 1)) = 0
         _Cutoff ("Cutoff", Range(0, 1)) = 0.5
         _FuzzBias ("FuzzBias", Range(0, 1)) = 0.0
@@ -57,15 +63,19 @@ Shader "HSSSS/Human/Hair/Deferred"
             #pragma multi_compile_fwdbase
             #pragma multi_compile_fog
 
+            #pragma shader_feature _WORKFLOW_METALLIC _WORKFLOW_SPECULAR
+
             #pragma shader_feature ___ _DETAILALBEDO_ON
             #pragma shader_feature ___ _EMISSION_ON
+            #pragma shader_feature ___ _SPECGLOSS_ON
+            #pragma shader_feature ___ _OCCLUSION_ON
 
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_FORWARDBASE
         
-            #include "Assets/HSSSS/Definitions/Hair.cginc"
+            #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
             ENDCG
         }
@@ -85,15 +95,19 @@ Shader "HSSSS/Human/Hair/Deferred"
             #pragma multi_compile_fwdadd_fullshadows
             #pragma multi_compile_fog
 
+            #pragma shader_feature _WORKFLOW_METALLIC _WORKFLOW_SPECULAR
+
             #pragma shader_feature ___ _DETAILALBEDO_ON
             #pragma shader_feature ___ _EMISSION_ON
+            #pragma shader_feature ___ _SPECGLOSS_ON
+            #pragma shader_feature ___ _OCCLUSION_ON
         
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
 
             #define UNITY_PASS_FORWARDADD
 
-            #include "Assets/HSSSS/Definitions/Hair.cginc"
+            #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
             ENDCG
         }
@@ -114,7 +128,7 @@ Shader "HSSSS/Human/Hair/Deferred"
         
             #define UNITY_PASS_SHADOWCASTER
         
-            #include "Assets/HSSSS/Definitions/Hair.cginc"
+            #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/Shadow.cginc"
             ENDCG
         }
@@ -133,15 +147,19 @@ Shader "HSSSS/Human/Hair/Deferred"
             #pragma multi_compile DIRLIGHTMAP_OFF DIRLIGHTMAP_COMBINED DIRLIGHTMAP_SEPARATE
             #pragma multi_compile DYNAMICLIGHTMAP_OFF DYNAMICLIGHTMAP_ON
 
+            #pragma shader_feature _WORKFLOW_METALLIC _WORKFLOW_SPECULAR
+
             #pragma shader_feature ___ _DETAILALBEDO_ON
             #pragma shader_feature ___ _EMISSION_ON
+            #pragma shader_feature ___ _SPECGLOSS_ON
+            #pragma shader_feature ___ _OCCLUSION_ON
 
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
 
             #define UNITY_PASS_DEFERRED
 
-            #include "Assets/HSSSS/Definitions/Hair.cginc"
+            #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/Deferred.cginc"
             ENDCG
         }

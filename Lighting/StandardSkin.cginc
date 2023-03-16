@@ -72,13 +72,7 @@ void aDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
     aStandardDirect(d, s, diffuse, specular);
 
     // default
-    if (s.scatteringMask == 0.0h)
-    {
-        return;
-    }
-
-    // empty yet
-    else if (s.scatteringMask < 0.4f)
+    if (s.scatteringMask < 0.4f)
     {
         return;   
     }
@@ -87,13 +81,13 @@ void aDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
     else if (s.scatteringMask < 0.7f)
     {
         #if defined(_BAKED_THICKNESS)
-            return;
+            half3 transmission = 0.0h;
         #else
             half3 transmission = aThinTransmission(d, s, _DeferredTransmissionLut,
                 _DeferredTransmissionParams.x, _DeferredTransmissionParams.y, _DeferredThicknessBias);
-
-            diffuse = diffuse + transmission;
         #endif
+
+        diffuse = diffuse + transmission;
     }
 
     // skin

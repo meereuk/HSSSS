@@ -7,8 +7,8 @@
 #include "Assets/HSSSS/Framework/Indirect.cginc"
 #include "Assets/HSSSS/Framework/Surface.cginc"
 #include "Assets/HSSSS/Framework/Utility.cginc"
-
 #include "Assets/HSSSS/Framework/Direct.cginc"
+#include "Assets/HSSSS/Framework/AreaLight.cginc"
 
 #include "HLSLSupport.cginc"
 #include "UnityCG.cginc"
@@ -21,12 +21,106 @@
 
 #define A_SKIN_BUMP_BLUR_BIAS (3.0)
 
-void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
+inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
 {
+    half3 direct = d.color * d.shadow.r * d.NdotL;
+
+    // specular brdf
+    specular = direct * s.specularOcclusion * d.specularIntensity * aSpecularBrdf(s.f0, s.beckmannRoughness, d.LdotH, d.NdotH, d.NdotL, s.NdotV);
+
+    // disney brdf
+    diffuse = direct * aDiffuseBrdf(s.albedo, s.roughness, d.LdotH, d.NdotL, s.NdotV);
+
+    // sheen specular
+    half sheen = direct * s.specularOcclusion * d.specularIntensity * FSchlick(s.f0, d.LdotH) * DCharlie(s.beckmannRoughness, d.NdotH) * VNeubelt(s.NdotV, d.NdotL);
+
+    if (s.scatteringMask < 0.4h)
+    {
+        return;
+    }
+
+    else if (s.scatteringMask < 0.7h)
+    {
+        // energy conserved wrap diffuse
+        diffuse = s.albedo * d.color * d.shadow.r;
+        diffuse *= saturate((d.NdotLm + 0.5h) / 2.25h);
+        diffuse *= saturate(normalize(s.albedo) + d.NdotL);
+
+        // charlie 'sheen' specular
+        /*
+        specular = direct * FSchlick(s.f0, d.LdotH);
+        specular *= DCharlie(s.beckmannRoughness, d.NdotH);
+        specular *= VNeubelt(s.NdotV, d.NdotL);
+        specular *= s.specularOcclusion * d.specularIntensity;
+        */
+        specular += sheen;
+    }
+
+    else if (s.scatteringMask == 1.0h)
+    {
+        specular += sheen;
+    }
+
+    /*
     half3 direct = d.color * d.shadow.r * d.NdotL;
     diffuse = direct * aDiffuseBrdf(s.albedo, s.roughness, d.LdotH, d.NdotL, s.NdotV);
     specular = direct * s.specularOcclusion * d.specularIntensity * aSpecularBrdf(s.f0, s.beckmannRoughness, d.LdotH, d.NdotH, d.NdotL, s.NdotV);
+    */
 }
+
+/*
+inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
+{
+    #if defined(_PCF_TAPS_8) || defined(_PCF_TAPS_16) || defined(_PCF_TAPS_32) || defined(_PCF_TAPS_64)
+        half3 rotationX = normalize(cross(d.direction, d.direction.zxy));
+	    half3 rotationY = normalize(cross(d.direction, rotationX));
+
+        float2 jitter = mad(tex2D(_ShadowJitterTexture, s.screenUv * _ScreenParams.xy * _ShadowJitterTexture_TexelSize.xy + _Time.yy).rg, 2.0f, -1.0f);
+	    float2x2 rotationMatrix = float2x2(float2(jitter.x, -jitter.y), float2(jitter.y, jitter.x));
+
+        #if defined(DIRECTIONAL)
+            half radius = _DirLightPenumbra.y;
+        #elif defined(SPOT)
+            half radius = _SpotLightPenumbra.y;
+        #elif defined(POINT)
+            half radius = _PointLightPenumbra.y;
+        #else
+            half radius = 0.0h;
+        #endif
+
+        diffuse = 0.0h;
+        specular = 0.0h;
+
+        for(uint i = 0; i < PCF_NUM_TAPS; i ++)
+        {
+            float2 disk = mul(poissonDisk[i], rotationMatrix);
+
+            #if defined(DIRECTIONAL)
+                half3 lightVector = normalize(mad(rotationX * disk.x + rotationY * disk.y, radius, d.direction));
+            #else
+                half3 lightVector = normalize(mad(rotationX * disk.x + rotationY * disk.y, radius, d.direction / _LightPositionRange.w));
+            #endif
+            half3 halfVector = normalize(lightVector + s.viewDirWorld);
+
+            half LdotH = aDotClamp(halfVector, lightVector);
+            half NdotH = aDotClamp(s.normalWorld, halfVector);
+            half NdotL = aDotClamp(s.normalWorld, lightVector);
+
+            half3 direct = d.color * d.shadow.r * NdotL;
+
+            diffuse += direct * aDiffuseBrdf(s.albedo, s.roughness, LdotH, NdotL, s.NdotV);
+            specular += direct * s.specularOcclusion * d.specularIntensity * aSpecularBrdf(s.f0, s.beckmannRoughness, LdotH, NdotH, NdotL, s.NdotV);
+        }
+
+        diffuse /= PCF_NUM_TAPS;
+        specular /= PCF_NUM_TAPS;
+    #else
+        half3 direct = d.color * d.shadow.r * d.NdotL;
+        diffuse = direct * aDiffuseBrdf(s.albedo, s.roughness, d.LdotH, d.NdotL, s.NdotV);
+        specular = direct * s.specularOcclusion * d.specularIntensity * aSpecularBrdf(s.f0, s.beckmannRoughness, d.LdotH, d.NdotH, d.NdotL, s.NdotV);
+    #endif
+}
+*/
 
 half3 aStandardIndirect(AIndirect i, ASurface s)
 {

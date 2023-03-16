@@ -51,9 +51,9 @@
             half4 frag(v2f_img IN) : COLOR
             {
                 half mask = tex2D(_CameraGBufferTexture2, IN.uv).a;
-                clip(0.99h - mask);
+                clip(0.01h - mask);
                 float2 axis = RandomAxis(IN.uv).xy;
-                return BlurInDir(IN, axis, mask == 0.0h);
+                return BlurInDir(IN, axis);
             }
             ENDCG
         }
@@ -72,9 +72,9 @@
             half4 frag(v2f_img IN) : COLOR
             {
                 half mask = tex2D(_CameraGBufferTexture2, IN.uv).a;
-                clip(0.99h - mask);
+                clip(0.01h - mask);
                 float2 axis = RandomAxis(IN.uv).yx * float2(1.0f, -1.0f);
-                return BlurInDir(IN, axis, mask == 0.0h);
+                return BlurInDir(IN, axis);
             }
             ENDCG
         }
@@ -105,12 +105,7 @@
                 half4 ambientSpecular = tex2D(_CameraReflectionsTexture, IN.uv);
                 half4 ambientDiffuse = tex2D(_AmbientDiffuseBuffer, IN.uv);
 
-                if (gbuffer2.a == 1.0h)
-                {
-                    return gbuffer3;
-                }
-
-                else
+                if (gbuffer2.a == 0.0h)
                 {
                     half4 result = tex2D(_MainTex, IN.uv);
                     half3 lightColor = max(0.0h, (gbuffer3.rgb - ambientDiffuse.rgb - ambientSpecular.rgb + 0.0001h) / (gbuffer0.rgb + 0.0001h));
@@ -121,6 +116,11 @@
                     result.rgb = result.rgb + ambientSpecular.rgb + gbuffer3.aaa * lightColor;
 
                     return result;
+                }
+
+                else
+                {
+                    return gbuffer3;
                 }
             }
             ENDCG

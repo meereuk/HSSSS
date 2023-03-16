@@ -108,11 +108,11 @@ public class ScreenSpaceScattering : MonoBehaviour
 		Shader.SetGlobalTexture("_DeferredTransmissionLut", deepScatterLut);
 
 		Shader.SetGlobalVector("_DeferredSkinParams", new Vector4(1.0f, 1.0f, 1.0f, 1.0f));
-		Shader.SetGlobalVector("_DeferredTransmissionParams", new Vector4(1.0f, 1.0f, 1.0f, 1.0f));
+		Shader.SetGlobalVector("_DeferredTransmissionParams", new Vector4(0.0f, 1.0f, 1.0f, 1.0f));
 
 		Shader.SetGlobalVector("_PointLightPenumbra", new Vector3(4.0f, 8.0f, 0.0f));
 		Shader.SetGlobalVector("_SpotLightPenumbra", new Vector3(8.0f, 8.0f, 0.0f));
-		Shader.SetGlobalVector("_DirLightPenumbra", new Vector3(0.0f, 0.0f, 0.5f));
+		Shader.SetGlobalVector("_DirLightPenumbra", new Vector3(8.0f, 2.0f, 0.0f));
 
 		Shader.SetGlobalFloat("_SSShadowRayLength", 0.04f);
         Shader.SetGlobalFloat("_SSShadowRayRadius", 0.08f);

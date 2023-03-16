@@ -1,15 +1,13 @@
 #ifndef A_DEFINITIONS_EYEBALL_CGINC
 #define A_DEFINITIONS_EYEBALL_CGINC
 
-#define A_CLEARCOAT_ON
-#define _SKINEFFECT_ON
-#define _METALLIC_OFF
-
 #if defined(UNITY_PASS_DEFERRED)
 #if !defined(A_VIEW_VECTOR_TANGENT_ON)
     #define A_VIEW_VECTOR_TANGENT_ON
 #endif
 #endif
+
+#define A_CLEARCOAT_ON
 
 #include "Assets/HSSSS/Lighting/StandardSkin.cginc"
 #include "Assets/HSSSS/Framework/Definition.cginc"

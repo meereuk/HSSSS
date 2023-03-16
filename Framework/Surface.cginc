@@ -116,7 +116,7 @@ struct ASurface {
     /// Expects values in the range [0,1].
     half specularity;
 
-#ifdef _SPECCOLOR_ON
+#ifdef _WORKFLOW_SPECULAR
     half3 specularColor;
 #endif
 #ifdef A_SPECULAR_TINT_ON
@@ -286,47 +286,48 @@ void aUpdateSpecularData(inout ASurface s)
 /// @param[in,out] s Material surface data.
 void aUpdateBrdfData(inout ASurface s)
 {
-    half metallicInv = 1.0h - s.metallic;
-    half3 dielectricF0 = aSpecularityToF0(s.specularity);
+    //#if defined(_WORKFLOW_METALLIC)
+        half metallicInv = 1.0h - s.metallic;
+        half3 dielectricF0 = aSpecularityToF0(s.specularity);
     
-    // Ensures energy-conserving color when using weird detail modes.
-    s.baseColor = saturate(s.baseColor);
+        // Ensures energy-conserving color when using weird detail modes.
+        s.baseColor = saturate(s.baseColor);
+    
+        #ifdef A_SPECULAR_TINT_ON
+            dielectricF0 *= aSpecularTint(s.baseColor, s.specularTint);
+        #endif
+    
+        s.albedo = s.baseColor * metallicInv;
+        s.f0 = lerp(dielectricF0, s.baseColor, s.metallic);
+    
+        #ifdef A_CLEARCOAT_ON
+            // Specularity of 0.5 gives us a polyurethane like coating.
+            half clearCoatWeight = 0.5h * s.clearCoatWeight;
+            s.f0 += aSpecularityToF0(clearCoatWeight);
+            s.f0 = saturate(s.f0);
+            s.roughness = lerp(s.roughness, s.clearCoatRoughness, clearCoatWeight);
+        #endif
 
+        #ifdef _ALPHAPREMULTIPLY_ON
+            // Interpolate from a translucent dielectric to an opaque metal.
+            s.opacity = s.metallic + metallicInv * s.opacity;
+    
+            // Premultiply opacity with albedo for translucent shaders.
+            s.albedo *= s.opacity;
+        #endif
+
+        #if defined(_WORKFLOW_SPECULAR)
+            s.f0 = saturate(s.specularColor);
+        #endif
+
+        // Transmission can't happen through metal.
+        s.transmission *= metallicInv;
     /*
-    #ifdef _SPECCOLOR_ON
-        dielectricF0 *= s.specularColor;
-    #endif
-    */
-    
-    #ifdef A_SPECULAR_TINT_ON
-        dielectricF0 *= aSpecularTint(s.baseColor, s.specularTint);
-    #endif
-    
-    s.albedo = s.baseColor * metallicInv;
-    s.f0 = lerp(dielectricF0, s.baseColor, s.metallic);
-    
-    #ifdef A_CLEARCOAT_ON
-        // Specularity of 0.5 gives us a polyurethane like coating.
-        half clearCoatWeight = 0.5h * s.clearCoatWeight;
-        s.f0 += aSpecularityToF0(clearCoatWeight);
-        s.f0 = saturate(s.f0);
-        s.roughness = lerp(s.roughness, s.clearCoatRoughness, clearCoatWeight);
-    #endif
-
-    #ifdef _SPECCOLOR_ON
+    #elif defined(_WORKFLOW_SPECULAR)
+        s.albedo = saturate(s.baseColor);
         s.f0 = saturate(s.specularColor);
     #endif
-
-    #ifdef _ALPHAPREMULTIPLY_ON
-        // Interpolate from a translucent dielectric to an opaque metal.
-        s.opacity = s.metallic + metallicInv * s.opacity;
-    
-        // Premultiply opacity with albedo for translucent shaders.
-        s.albedo *= s.opacity;
-    #endif
-
-    // Transmission can't happen through metal.
-    s.transmission *= metallicInv;
+    */
 }
 
 #endif // A_FRAMEWORK_SURFACE_CGINC

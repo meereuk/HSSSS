@@ -1,10 +1,7 @@
 #ifndef HSSSS_CONTACTSHADOW_CGINC
 #define HSSSS_CONTACTSHADOW_CGINC
 
-#ifndef HSSSS_SHADOWLIB_CGINC
-	uniform sampler2D _ShadowJitterTexture;
-	uniform float4 _ShadowJitterTexture_TexelSize;
-#endif
+#include "Assets/HSSSS/Framework/AreaLight.cginc"
 
 #if defined(_RT_SHADOW_LQ)
 	#define _SSShadowTraceIter 8

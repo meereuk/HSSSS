@@ -64,6 +64,8 @@ Shader "HSSSS/Human/Hair/Anisotropic"
 
             #pragma shader_feature ___ _DETAILALBEDO_ON
             #pragma shader_feature ___ _EMISSION_ON
+            #pragma shader_feature ___ _SPECGLOSS_ON
+            #pragma shader_feature ___ _OCCLUSION_ON
             
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
@@ -92,6 +94,8 @@ Shader "HSSSS/Human/Hair/Anisotropic"
 
             #pragma shader_feature ___ _DETAILALBEDO_ON
             #pragma shader_feature ___ _EMISSION_ON
+            #pragma shader_feature ___ _SPECGLOSS_ON
+            #pragma shader_feature ___ _OCCLUSION_ON
         
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader

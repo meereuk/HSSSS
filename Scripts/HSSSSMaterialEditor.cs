@@ -3,7 +3,7 @@ using UnityEngine;
 
 namespace UnityEditor
 {
-	public class HSSSSShaderGUI : ShaderGUI
+	public class HSSSSMaterialEditor : ShaderGUI
 	{
 		private static GUIContent label = new GUIContent("", "");
 

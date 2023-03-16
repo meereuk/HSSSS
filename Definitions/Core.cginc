@@ -1,10 +1,10 @@
-#ifndef A_DEFINITIONS_CORE_CGINC
-#define A_DEFINITIONS_CORE_CGINC
+#ifndef HSSSS_DEFINITIONS_CORE
+#define HSSSS_DEFINITIONS_CORE
 
 #include "Assets/HSSSS/Lighting/StandardSkin.cginc"
 #include "Assets/HSSSS/Framework/Definition.cginc"
 
-#if defined(UNITY_PASS_SHADOWCASTER) && defined(_THINLAYER_ON)
+#if defined(UNITY_PASS_SHADOWCASTER)
     #define UNITY_STANDARD_USE_DITHER_MASK
 #endif
 
@@ -13,8 +13,8 @@ void aSurface(inout ASurface s)
     aSampleAlbedo(s);
     aSampleDetailAlbedo(s);
     aSampleEmission(s);
+    aSampleAlphaClip(s);
     #if !defined(UNITY_PASS_SHADOWCASTER)
-    #if !defined(UNITY_PASS_META)
         aSampleTransmission(s);
         aSampleScattering(s);
         aSampleSpecGloss(s);
@@ -22,8 +22,13 @@ void aSurface(inout ASurface s)
         aSampleBumpTangent(s);
         aSampleBlendTangent(s);
         aSampleDetailTangent(s);
-        aUpdateNormalData(s);
-    #endif
+        #if defined(_MATERIALTYPE_SKIN)
+        #if defined(_MICRODETAILS_ON)
+            aSampleMicroTangent(s);
+        #else
+            aUpdateNormalData(s);
+        #endif
+        #endif
     #endif
 }
 

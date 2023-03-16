@@ -61,7 +61,7 @@ Shader "Hidden/HSSSS/Deferred Shading"
                     //_SpecularBuffer[coord.x + round(_ScreenParams.x) * coord.y] += specular;
                     //return diffuse;
 
-                    if (s.scatteringMask == 0.0h)
+                    if (s.scatteringMask != 1.0h)
                     {
                         return half4(diffuse + specular, 0.0h);
                     }

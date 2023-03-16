@@ -34,7 +34,8 @@ half aFresnel(half w)
     return exp2((-5.55473h * w - 6.98316h) * w);
 }
 
-half3 aDiffuseBrdf(half3 albedo, half roughness, half LdotH, half NdotL, half NdotV)
+// disney diffuse brdf
+inline half3 aDiffuseBrdf(half3 albedo, half roughness, half LdotH, half NdotL, half NdotV)
 {
     half FL = aFresnel(NdotL);
     half FV = aFresnel(NdotV);
@@ -44,22 +45,57 @@ half3 aDiffuseBrdf(half3 albedo, half roughness, half LdotH, half NdotL, half Nd
     return albedo * Fd;
 }
 
-half3 aSpecularBrdf(half3 f0, half a, half LdotH, half NdotH, half NdotL, half NdotV)
+// schlick fresnel
+inline half3 FSchlick(half3 f0, half LdotH)
 {
-    // Schlick's Fresnel approximation.
-    half3 f = lerp(f0, half3(1.0h, 1.0h, 1.0h), aFresnel(LdotH));
+    return lerp(f0, half3(1.0h, 1.0h, 1.0h), aFresnel(LdotH));
+}
 
-    // GGX (Trowbridge-Reitz) NDF
+// ggx normal distribution
+inline half DGGX(half a, half NdotH)
+{
     half a2 = a * a;
     half denom = aLerpOneTo(a2, NdotH * NdotH);
-    half d = a2 / (denom * denom);
+    return a2 / (denom * denom);
+}
 
-    // John Hable's visibility function.
-    half k = a * 0.5h;
-    half v = lerp(k * k, 1.0h, LdotH * LdotH);
+// 'charlie' sheen distribution
+inline half DCharlie(half a, half NdotH)
+{
+    half invA = 1.0h / a;
+    half cos2h = NdotH * NdotH;
+    half sin2h = max(1.0h - cos2h, 0.0078125);
+    return 0.5h * (2.0h + invA) * pow(sin2h, invA * 0.5h);
+}
 
-    // Cook-Torrance microfacet model.
-    return f * (d / (4.0h * v));
+// smith visibility
+inline half VSmith(half a, half NdotV, half NdotL)
+{
+    half a2 = a * a;
+    half lambdaV = NdotL * sqrt((NdotV - a2 * NdotV) * NdotV + a2);
+    half lambdaL = NdotV * sqrt((NdotL - a2 * NdotL) * NdotL + a2);
+    return  saturate(0.5h / (lambdaV + lambdaL));
+}
+
+// fast smith visibility
+inline half VSmithFast(half a, half NdotV, half NdotL)
+{
+    return saturate(0.5h / lerp(2.0h * NdotL * NdotV, NdotL + NdotV, a));
+}
+
+// neubelt visibility (for sheen specular)
+inline half VNeubelt(half NdotV, half NdotL)
+{
+    return saturate(0.25h / (NdotL + NdotV - NdotL * NdotV));
+}
+
+// cook-torrance specular brdf
+inline half3 aSpecularBrdf(half3 f0, half a, half LdotH, half NdotH, half NdotL, half NdotV)
+{
+    half d = DGGX(a, NdotH);
+    half v = VSmithFast(a, NdotV, NdotL);
+    half3 f = FSchlick(f0, LdotH);
+    return d * v * f;
 }
 
 half3 aEnvironmentBrdf(half3 f0, half roughness, half NdotV)

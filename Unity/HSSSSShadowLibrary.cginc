@@ -1,109 +1,65 @@
 #ifndef HSSSS_SHADOWLIB_CGINC
 #define HSSSS_SHADOWLIB_CGINC
 
-#if defined(DIRECTIONAL)
-#define SHADOWMODE_DIR
-#endif
+#include "Assets/HSSSS/Framework/AreaLight.cginc"
 
-#if defined(SPOT)
-#define SHADOWMODE_SPOT
-#endif
-
-#if defined(POINT)
-#define SHADOWMODE_POINT
-#endif
-
-// Poisson Disc for Sampling
-// 64-tap PCF
-#if defined(_PCF_TAPS_64)
-	#define PCF_NUM_TAPS 64
-	const static float2 poissonDisk[PCF_NUM_TAPS] =
-	{
-		{0.088388, 0.000000}, {-0.112890, 0.103409}, {0.017294, -0.196884}, {0.142265, 0.185602},
-		{-0.261105, -0.046225}, {0.247377, -0.157297}, {-0.082801, 0.307744}, {-0.157703, -0.303838},
-		{0.342284, 0.125116}, {-0.356177, 0.146887}, {0.171812, -0.366801}, {0.126702, 0.404517},
-		{-0.382275, -0.221762}, {0.448614, -0.098402}, {-0.273954, 0.389245}, {-0.062974, -0.488080},
-		{0.388060, 0.327448}, {-0.522479, 0.021279}, {0.381350, -0.378992}, {-0.025882, 0.551378},
-		{-0.362297, -0.434803}, {0.574365, 0.077732}, {-0.486983, 0.338246},{0.133497, -0.591072},
-		{0.307141, 0.537100}, {-0.601181, -0.192402}, {0.584400, -0.269330}, {-0.253665, 0.604435},
-		{-0.225208, -0.628167}, {0.600639, 0.316497}, {-0.667727, 0.175223}, {0.380103, -0.589669},
-		{0.119873, 0.702455}, {-0.571470, -0.443689}, {0.731777, -0.059705}, {-0.506463, 0.546061},
-		{0.004684, -0.755176}, {0.513533, 0.567645}, {-0.772194, -0.072655}, {0.626468, -0.474052},
-		{-0.143532, 0.782439}, {-0.427856, -0.682185}, {0.785587, 0.216602}, {-0.734080, 0.375252},
-		{0.291126, -0.781382}, {0.316619, 0.781467}, {-0.769645, -0.366345}, {0.823701, -0.252398},
-		{-0.441481, 0.750271}, {-0.183094, -0.860183}, {0.723230, 0.515752}, {-0.890364, 0.109269},
-		{0.588372, -0.688572}, {0.031539, 0.913752}, {-0.646421, -0.658561}, {0.929916, 0.049433},
-		{-0.725554, 0.596979}, {0.132943, -0.938490}, {0.540524, 0.788604}, {-0.939178, -0.218249},
-		{0.846992, -0.477406}, {-0.304583, 0.931755}, {-0.408046, -0.900034}, {0.916072, 0.391151}
-	};
-// 32-tap PCF
-#elif defined(_PCF_TAPS_32)
-	#define PCF_NUM_TAPS 32
-	const static float2 poissonDisk[PCF_NUM_TAPS] =
-	{
-		{0.125000, 0.000000}, {-0.159650, 0.146242}, {0.024457, -0.278436}, {0.201193, 0.262481},
-		{-0.369258, -0.065373}, {0.349843, -0.222451}, {-0.117098, 0.435216}, {-0.223025, -0.429692},
-		{0.484063, 0.176940}, {-0.503710, 0.207729}, {0.242979, -0.518735}, {0.179183, 0.572074},
-		{-0.540619, -0.313618}, {0.634436, -0.139161}, {-0.387429, 0.550476}, {-0.089059, -0.690249},
-		{0.548799, 0.463081}, {-0.738897, 0.030093}, {0.539310, -0.535976}, {-0.036603, 0.779766},
-		{-0.512365, -0.614904}, {0.812275, 0.109929}, {-0.688698, 0.478352}, {0.188793, -0.835902},
-		{0.434363, 0.759575}, {-0.850199, -0.272098}, {0.826467, -0.380890}, {-0.358737, 0.854800},
-		{-0.318493, -0.888362}, {0.849432, 0.447594}, {-0.944309, 0.247803}, {0.537547, -0.833918}
-	};
-// 16-tap PCF
-#elif defined(_PCF_TAPS_16)
-	#define PCF_NUM_TAPS 16
-	const static float2 poissonDisk[PCF_NUM_TAPS] =
-	{
-		{0.176777, 0.000000}, {-0.225780, 0.206818}, {0.034587, -0.393769}, {0.284530, 0.371204},
-		{-0.522210, -0.092451}, {0.494753, -0.314594}, {-0.165602, 0.615488}, {-0.315405, -0.607676},
-		{0.684569, 0.250232}, {-0.712353, 0.293773}, {0.343624, -0.733602}, {0.253403, 0.809035},
-		{-0.764550, -0.443523}, {0.897228, -0.196804}, {-0.547908, 0.778490}, {-0.125948, -0.976159}
-	};
-// 8-tap PCF
-#else
-	#define PCF_NUM_TAPS 8
-	const static float2 poissonDisk[PCF_NUM_TAPS] =
-	{
-		{0.250000, 0.000000}, {-0.319301, 0.292484}, {0.048913, -0.556873}, {0.402387, 0.524962},
-		{-0.738516, -0.130745}, {0.699687, -0.444903}, {-0.234196, 0.870432}, {-0.446050, -0.859383}
-	};
-#endif
-
-// x : blocker search radius
-// y : light radius (tangent for directional)
-// z : minimum penumbra radius (also fixed pcf penumbra radius)
 #if defined(SHADOWS_SCREEN)
 	uniform sampler2D _CustomShadowMap;
 	uniform float4 _CustomShadowMap_TexelSize;
-	uniform float3 _DirLightPenumbra;
 #endif
 
 #if defined(SHADOWS_DEPTH)
 	uniform sampler2D _ShadowMapTexture;
 	uniform float4 _ShadowMapTexture_TexelSize;
-	uniform float3 _SpotLightPenumbra;
 #endif
 
 #if defined(SHADOWS_CUBE)
 	uniform samplerCUBE _ShadowMapTexture;
 	uniform float4 _ShadowMapTexture_TexelSize;
-	uniform float3 _PointLightPenumbra;
 #endif
 
-uniform sampler2D _ShadowJitterTexture;
-uniform float4 _ShadowJitterTexture_TexelSize;
-
 // cascade weights
-inline float4 GetCascadeWeights(float viewDepth)
+inline uint2 GetCascadeIndex(float viewDepth)
 {
-	return float4(viewDepth >= _LightSplitsNear) * float4(viewDepth < _LightSplitsFar);	
+	#if defined(SHADOWS_DEPTH)
+		return uint2(0, 0);
+	#elif defined(SHADOWS_SCREEN)
+		float4 weight = float4(viewDepth >= _LightSplitsNear) * float4(viewDepth < _LightSplitsFar);
+
+		uint idx = 3;
+
+		idx = weight.x == 1.0f ? 0 : idx;
+		idx = weight.y == 1.0f ? 1 : idx;
+		idx = weight.z == 1.0f ? 2 : idx;
+
+		// return current and next cascade
+		return uint2(idx, min(idx + 1, 3));
+	#endif
 }
 
-inline float3 GetShadowCoordinate(float3 vec, float viewDepth)
+// cascade blending
+inline float2 GetCascadeWeights(uint cascade, float viewDepth)
+{
+	float weight = smoothstep(
+		lerp(_LightSplitsNear[cascade], _LightSplitsFar[cascade], 0.9f),
+		_LightSplitsFar[cascade], viewDepth
+	);
+
+	return float2(1.0f - weight, weight);
+}
+
+inline float3 GetShadowCoordinate(float3 vec, uint cascade)
 {
 	float4 wpos = float4(vec, 1.0f);
+	float4 coord = mul(unity_World2Shadow[cascade], wpos);
 
+	#if defined(SHADOWS_DEPTH)
+		return coord.xyz / coord.w;
+	#elif defined(SHADOWS_SCREEN)
+		return coord.xyz;
+	#endif
+
+	/*
 	#if defined(SHADOWS_DEPTH)
 		float4 coord = mul(unity_World2Shadow[0], wpos);
 		return coord.xyz / coord.w;
@@ -117,6 +73,7 @@ inline float3 GetShadowCoordinate(float3 vec, float viewDepth)
 		float4 weight = GetCascadeWeights(viewDepth);
 		return (coord[0] * weight.x + coord[1] * weight.y + coord[2] * weight.z + coord[3] * weight.w).xyz;
 	#endif
+	*/
 }
 
 #if defined(SHADOWS_CUBE) || defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
@@ -135,11 +92,15 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 		float3 pixelCoord = vec;
 		float pixelDepth = length(vec) * _LightPositionRange.w;
 	#elif defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
-		float3 pixelCoord = GetShadowCoordinate(vec, viewDepth);
+		uint2 cascade = GetCascadeIndex(viewDepth);
+		float3 pixelCoord = GetShadowCoordinate(vec, cascade.x);
 		float pixelDepth = pixelCoord.z;
 	#endif
 
 	// penumbra sliders
+	// x: blocker search radius (in cm)
+	// y: light source radius (in cm)
+	// z: minimum or fixed size pnumbra (in mm)
 	#if defined(SHADOWS_CUBE)
 		float3 radius = float3(0.01f, 0.01f, 0.001f) * _PointLightPenumbra;
 	#elif defined(SHADOWS_DEPTH)
@@ -148,15 +109,26 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 		float3 radius = float3(0.01f, 0.01f, 0.001f) * _DirLightPenumbra;
 	#endif
 
+	// depth scale factor
+	#if defined(SHADOWS_CUBE)
+		float depthScale = 1.0f / _LightPositionRange.w;
+	#elif defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
+		float depthScale = 1.0f / (GetShadowCoordinate(vec + _LightDir, cascade.x).z - pixelDepth);
+	#endif
+
 	// slope-based bias
 	#if defined(SHADOWS_CUBE)
-		pixelDepth = pixelDepth * lerp(0.990f, 1.0f, NdotL) - lerp(0.001f, 0.0f, NdotL) * _LightPositionRange.w;
+		pixelDepth = pixelDepth * lerp(0.990f, 1.0f, NdotL) - lerp(0.001f, 0.0f, NdotL) / depthScale;
 	#elif defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
-		pixelDepth = pixelDepth - lerp(0.001f, 0.0f, NdotL);
+		pixelDepth = pixelDepth - lerp(0.001f, 0.0f, NdotL) / depthScale;
 	#endif
 
 	// r: shadow, g: mean z-diff.
 	float2 shadow = float2(0.0f, 0.0f);
+
+	///////////////////////////////////
+	// percentage-closer soft shadow //
+	///////////////////////////////////
 
 	#if defined(_PCSS_ON)
 		float casterCount = 0;
@@ -172,9 +144,9 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 			#if defined(SHADOWS_CUBE)
 				float sampleDepth = texCUBE(_ShadowMapTexture, sampleCoord);
 			#elif defined(SHADOWS_DEPTH)
-				float sampleDepth = tex2D(_ShadowMapTexture, GetShadowCoordinate(sampleCoord, viewDepth).xy);
+				float sampleDepth = tex2D(_ShadowMapTexture, GetShadowCoordinate(sampleCoord, cascade.x).xy);
 			#elif defined(SHADOWS_SCREEN)
-				float sampleDepth = tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, viewDepth).xy);
+				float sampleDepth = tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.x).xy);
 			#endif
 
 			if (sampleDepth < pixelDepth)
@@ -188,27 +160,24 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 
 		// penumbra size
 		#if defined(SHADOWS_SCREEN)
-			float penumbra = max(radius.z, radius.y * (pixelDepth - casterDepth));
+			float penumbra = max(radius.z, radius.y * (pixelDepth - casterDepth) * depthScale);
 		#elif defined(SHADOWS_CUBE) || defined(SHADOWS_DEPTH)
-			float penumbra = max(radius.z, radius.y * (pixelDepth - casterDepth) / (casterDepth));
+			float penumbra = max(radius.z, radius.y * (pixelDepth - casterDepth) / casterDepth);
 		#endif
 
-		shadow.g = pixelDepth - casterDepth;
-
-		#if defined(SHADOWS_CUBE)
-			shadow.g /= _LightPositionRange.w;
-		#elif defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
-			shadow.g /= GetShadowCoordinate(vec + _LightDir, viewDepth).z - pixelDepth;
-		#endif
-
+		// thickness calculation
+		shadow.g = (pixelDepth - casterDepth) * depthScale;
 	#else
+		// fixed sized penumbra
 		float penumbra = radius.z;
 	#endif
 
-	// calculates thickness if pcss disabled
-	#if !defined(_PCSS_ON)
-		float casterCount = 0.0f;
-		float casterDepth = 0.0f;
+	/////////////////////////////////
+	// percentage closer filtering //
+	/////////////////////////////////
+
+	#if defined(SHADOWS_SCREEN)
+		float2 cascadeWeight = GetCascadeWeights(cascade.x, viewDepth);
 	#endif
 
 	[unroll]
@@ -220,14 +189,43 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 		#if defined(SHADOWS_CUBE)
 			shadow.r += texCUBE(_ShadowMapTexture, sampleCoord) > pixelDepth ? 1.0f : 0.0f;
 		#elif defined(SHADOWS_DEPTH)
-			shadow.r += tex2D(_ShadowMapTexture, GetShadowCoordinate(sampleCoord, viewDepth).xy) > pixelDepth ? 1.0f : 0.0f;
+			shadow.r += tex2D(_ShadowMapTexture, GetShadowCoordinate(sampleCoord, cascade.x).xy) > pixelDepth ? 1.0f : 0.0f;
 		#elif defined(SHADOWS_SCREEN)
-			shadow.r += tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, viewDepth).xy) > pixelDepth ? 1.0f : 0.0f;
+			// cascade blending
+			shadow.r += tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.x).xy) > pixelDepth ? cascadeWeight.x : 0.0f;
+			shadow.r += tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.y).xy) > pixelDepth ? cascadeWeight.y : 0.0f;
 		#endif
 	}
 
 	shadow.r = lerp(shadow.r / PCF_NUM_TAPS, 1.0f, _LightShadowData.r);
 	return shadow;
+
+	/////////////////////////////
+	// variance shadow mapping //
+	/////////////////////////////
+	/*
+	float2 moment = float2(0.0f, 0.0f);
+
+	[unroll]
+	for (uint j = 0; j < PCF_NUM_TAPS; j ++)
+	{
+		float2 disk = mul(poissonDisk[j], rotationMatrix);
+		float3 sampleCoord = mad(rotationX * disk.x + rotationY * disk.y, penumbra, vec);
+
+		#if defined(SHADOWS_CUBE)
+			float sampleDepth = texCUBE(_ShadowMapTexture, sampleCoord);
+		#elif defined(SHADOWS_DEPTH)
+			float sampleDepth = tex2D(_ShadowMapTexture, GetShadowCoordinate(sampleCoord, viewDepth).xy);
+		#elif defined(SHADOWS_SCREEN)
+			float sampleDepth = tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, viewDepth).xy);
+		#endif
+
+		moment.x += sampleDepth;
+		moment.y += sampleDepth * sampleDepth;
+	}
+
+	moment /= PCF_NUM_TAPS;
+	*/
 }
 #endif
 

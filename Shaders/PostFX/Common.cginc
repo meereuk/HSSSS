@@ -33,7 +33,7 @@ float2 _DeferredBlurredNormalsParams;
 float4 _MainTex_TexelSize;
 float4 _SkinJitter_TexelSize;
 
-half4 BlurInDir(v2f_img IN, float2 direction, bool isSkin)
+half4 BlurInDir(v2f_img IN, float2 direction)
 {
 	float2 uv = IN.uv;
 
@@ -43,16 +43,7 @@ half4 BlurInDir(v2f_img IN, float2 direction, bool isSkin)
 	float scale = _DeferredBlurredNormalsParams.x * unity_CameraProjection._m11 / depthM;
 	float2 finalStep = scale * direction * dot(direction, _MainTex_TexelSize.xy);
 
-    half3 colorB = 0.0h;
-
-    if (isSkin)
-    {
-	    colorB = colorM * blurKernel[0].rgb;
-    }
-    else
-    {
-        colorB = colorM * blurKernel[0].ggg;
-    }
+    half3 colorB = colorM * blurKernel[0].rgb;
 	
 	UNITY_UNROLL
 	for (int i = 1; i < NUM_TAPS; i++)
@@ -62,14 +53,7 @@ half4 BlurInDir(v2f_img IN, float2 direction, bool isSkin)
 		half3 depth = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, offsetUv));
 		half3 s = min(1.0f, _DeferredBlurredNormalsParams.y * abs(depth - depthM));
 
-        if (isSkin)
-        {
-		    colorB += lerp(color, colorM, s) * blurKernel[i].rgb;
-        }
-        else
-        {
-            colorB += lerp(color, colorM, s) * blurKernel[i].ggg;
-        }
+        colorB += lerp(color, colorM, s) * blurKernel[i].rgb;
 	}
         
 	return half4(colorB, tex2D(_MainTex, uv).a);
