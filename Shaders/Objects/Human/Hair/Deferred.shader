@@ -74,6 +74,7 @@ Shader "HSSSS/Human/Hair/Deferred"
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_FORWARDBASE
+            #define _ALPHAHASHED_ON
         
             #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
@@ -106,6 +107,7 @@ Shader "HSSSS/Human/Hair/Deferred"
             #pragma fragment aFragmentShader
 
             #define UNITY_PASS_FORWARDADD
+            #define _ALPHAHASHED_ON
 
             #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
@@ -158,6 +160,7 @@ Shader "HSSSS/Human/Hair/Deferred"
             #pragma fragment aFragmentShader
 
             #define UNITY_PASS_DEFERRED
+            #define _ALPHAHASHED_ON
 
             #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/Deferred.cginc"

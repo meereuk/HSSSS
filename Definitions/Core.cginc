@@ -8,6 +8,10 @@
     #define UNITY_STANDARD_USE_DITHER_MASK
 #endif
 
+#if defined(_ALPHAHASHED_ON)
+    #define A_SCREEN_UV_ON
+#endif
+
 void aSurface(inout ASurface s)
 {
     aSampleAlbedo(s);

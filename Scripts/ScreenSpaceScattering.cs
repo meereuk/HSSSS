@@ -35,10 +35,15 @@ public class ScreenSpaceScattering : MonoBehaviour
 	public void OnDisable()
     {
 		this.mCamera.RemoveAllCommandBuffers();
+		this.blitMaterial = null;
+		this.blurMaterial = null;
+		this.blitShader = null;
+		this.blurShader = null;
     }
 
 	public void Start ()
 	{
+		this.SetMaterials();
 		this.SetGlobalParams();
 		this.InitializeBuffers();
 	}
@@ -52,39 +57,45 @@ public class ScreenSpaceScattering : MonoBehaviour
 
 	private void InitializeBuffers()
     {
-		int tickRT = Shader.PropertyToID("_TickRenderTexture");
-		int tockRT = Shader.PropertyToID("_TockRenderTexture");
+		int flipRT = Shader.PropertyToID("_FlipRenderTexture");
+		int flopRT = Shader.PropertyToID("_FlopRenderTexture");
 		int ambiRT = Shader.PropertyToID("_AmbientDiffuseBuffer");
 
-		this.nBuffer = new CommandBuffer() { name = "OverrideGBuffer3" };
-		this.nBuffer.GetTemporaryRT(tickRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGB32);
-		this.nBuffer.GetTemporaryRT(ambiRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf);
+		// override gbuffers
 
-		this.nBuffer.Blit(BuiltinRenderTextureType.CameraTarget, tickRT, this.blitMaterial, 0);
+		this.nBuffer = new CommandBuffer() { name = "OverrideGBuffer3" };
+		this.nBuffer.GetTemporaryRT(flipRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+		this.nBuffer.GetTemporaryRT(ambiRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+
+		this.nBuffer.Blit(BuiltinRenderTextureType.CameraTarget, flipRT, this.blitMaterial, 0);
 		this.nBuffer.Blit(BuiltinRenderTextureType.CameraTarget, ambiRT, this.blitMaterial, 1);
 		this.nBuffer.Blit(ambiRT, BuiltinRenderTextureType.CameraTarget);
-		this.nBuffer.ReleaseTemporaryRT(tickRT);
+		this.nBuffer.ReleaseTemporaryRT(flipRT);
+		this.nBuffer.ReleaseTemporaryRT(flopRT);
 		this.mCamera.AddCommandBuffer(CameraEvent.AfterGBuffer, this.nBuffer);
 
+		// separable blur buffer
+
 		this.mBuffer = new CommandBuffer() { name = "SeparableBlur" };
-		this.mBuffer.GetTemporaryRT(tickRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
-		this.mBuffer.GetTemporaryRT(tockRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
 
-		this.mBuffer.Blit(BuiltinRenderTextureType.CameraTarget, tickRT, this.blurMaterial, 0);
+		this.mBuffer.GetTemporaryRT(flipRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+		this.mBuffer.GetTemporaryRT(flopRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
 
+		// subtract ambient specular
+		this.mBuffer.Blit(null, flipRT, this.blurMaterial, 0);
+
+		// separable blur
 		for (int iter = 0; iter < 2; iter ++)
         {
-			this.mBuffer.Blit(tickRT, tockRT, this.blurMaterial, 1);
-			this.mBuffer.Blit(tockRT, tickRT, this.blurMaterial, 2);
+			this.mBuffer.Blit(flipRT, flopRT, this.blurMaterial, 1);
+			this.mBuffer.Blit(flopRT, flipRT, this.blurMaterial, 2);
         }
 
-		this.mBuffer.Blit(tickRT, tockRT, this.blurMaterial, 3);
-		this.mBuffer.Blit(tockRT, BuiltinRenderTextureType.CameraTarget);
-
-		this.mBuffer.ReleaseTemporaryRT(tickRT);
-		this.mBuffer.ReleaseTemporaryRT(tockRT);
-		this.mBuffer.ReleaseTemporaryRT(ambiRT);
-
+		// collect everything
+		this.mBuffer.Blit(flipRT, flopRT, this.blurMaterial, 3);
+		this.mBuffer.Blit(flopRT, BuiltinRenderTextureType.CameraTarget);
+		this.mBuffer.ReleaseTemporaryRT(flipRT);
+		this.mBuffer.ReleaseTemporaryRT(flopRT);
 		this.mCamera.AddCommandBuffer(CameraEvent.AfterLighting, this.mBuffer);
 		
 		/*
@@ -93,6 +104,16 @@ public class ScreenSpaceScattering : MonoBehaviour
 		this.mBuffer.GetTemporaryRT(tockRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf);
 		this.mCamera.AddCommandBuffer(CameraEvent.AfterLighting, this.mBuffer);
 		*/
+	}
+	
+	private void SetMaterials()
+	{
+		this.blitShader = Shader.Find("Hidden/HSSSS/TransmissionBlit");
+		this.blurShader = Shader.Find("Hidden/HSSSS/ScreenSpaceDiffuseBlur");
+		this.blitMaterial = new Material(this.blitShader);
+		this.blurMaterial = new Material(this.blurShader);
+		this.blurMaterial.SetTexture("_SkinJitter", skinJitter);
+		this.blurMaterial.SetVector("_DeferredBlurredNormalsParams", new Vector2(16.0f, 0.0f));
 	}
 
 	private void SetGlobalParams()
@@ -110,20 +131,12 @@ public class ScreenSpaceScattering : MonoBehaviour
 		Shader.SetGlobalVector("_DeferredSkinParams", new Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 		Shader.SetGlobalVector("_DeferredTransmissionParams", new Vector4(0.0f, 1.0f, 1.0f, 1.0f));
 
-		Shader.SetGlobalVector("_PointLightPenumbra", new Vector3(4.0f, 8.0f, 0.0f));
-		Shader.SetGlobalVector("_SpotLightPenumbra", new Vector3(8.0f, 8.0f, 0.0f));
-		Shader.SetGlobalVector("_DirLightPenumbra", new Vector3(8.0f, 2.0f, 0.0f));
+		Shader.SetGlobalVector("_PointLightPenumbra", new Vector3(1.0f, 1.0f, 0.0f));
+		Shader.SetGlobalVector("_SpotLightPenumbra", new Vector3(1.0f, 1.0f, 0.0f));
+		Shader.SetGlobalVector("_DirLightPenumbra", new Vector3(0.0f, 0.0f, 0.0f));
 
 		Shader.SetGlobalFloat("_SSShadowRayLength", 0.04f);
         Shader.SetGlobalFloat("_SSShadowRayRadius", 0.08f);
 		Shader.SetGlobalFloat("_SSShadowDepthBias", 0.00f);
-
-		this.blitShader = Shader.Find("Hidden/HSSSS/TransmissionBlit");
-		this.blitMaterial = new Material(this.blitShader);
-
-		this.blurShader = Shader.Find("Hidden/HSSSS/ScreenSpaceDiffuseBlur");
-		this.blurMaterial = new Material(this.blurShader);
-		this.blurMaterial.SetTexture("_SkinJitter", skinJitter);
-		this.blurMaterial.SetVector("_DeferredBlurredNormalsParams", new Vector2(2.0f, 40.0f));
 	}
 }

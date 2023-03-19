@@ -1,23 +1,21 @@
-#ifndef HSSSS_SSRT_CGINC
-#define HSSSS_SSRT_CGINC
+#ifndef HSSSS_SSBN_CGINC
+#define HSSSS_SSBN_CGINC
 
+#include "Assets/HSSSS/Framework/AreaLight.cginc"
 #include "UnityCG.cginc"
 
-// vertex input
 struct appdata
 {
     float4 vertex : POSITION;
     float2 uv : TEXCOORD0;
 };
 
-// fragment input
 struct v2f
 {
     float2 uv : TEXCOORD0;
     float4 vertex : SV_POSITION;
 };
 
-// vertex shader
 v2f vert (appdata v)
 {
     v2f o;
@@ -26,21 +24,8 @@ v2f vert (appdata v)
     return o;
 }
 
-sampler2D _MainTex;
-float4 _MainTex_TexelSize;
-// albedo and occlusion
-sampler2D _CameraGBufferTexture0;
-// specular and roughness
-sampler2D _CameraGBufferTexture1;
-// world space normal
-sampler2D _CameraGBufferTexture2;
-// light buffer
-sampler2D _CameraGBufferTexture3;
-// depth
 sampler2D _CameraDepthTexture;
-// jittering
-sampler2D _ShadowJitterTexture;
-float4 _ShadowJitterTexture_TexelSize;
+sampler2D _CameraGBufferTexture2;
 
 float4x4 _MATRIX_V;
 float4x4 _MATRIX_P;
@@ -50,41 +35,11 @@ float4x4 _MATRIX_IV;
 float4x4 _MATRIX_IP;
 float4x4 _MATRIX_IVP;
 
-#define NUM_STEP 32
-#define NUM_RAYS 32
+#define NUM_STEP 8
+#define NUM_RAYS 64
 #define MAX_RAYS 128
-#define RAY_DIST 2.0
-
-#define NUM_TAPS 17
-
-const static float2 blurKernel[NUM_TAPS] = {
-    float2(0.536343, 0),
-    float2(0.00317394, -2),
-    float2(0.0100386, -1.53125),
-    float2(0.0144609, -1.125),
-    float2(0.0216301, -0.78125),
-    float2(0.0347317, -0.5),
-    float2(0.0571056, -0.28125),
-    float2(0.0582416, -0.125),
-    float2(0.0324462, -0.03125),
-    float2(0.0324462, 0.03125),
-    float2(0.0582416, 0.125),
-    float2(0.0571056, 0.28125),
-    float2(0.0347317, 0.5),
-    float2(0.0216301, 0.78125),
-    float2(0.0144609, 1.125),
-    float2(0.0100386, 1.53125),
-    float2(0.00317394, 2),
-};
-
-//ray information
-struct ray
-{
-    bool hit;
-    float len;
-    float3 dir;
-    float2 uv;
-};
+#define RAY_DIST 0.02
+#define Z_BIAS 0.00001
 
 const static half3 hemiSphere[MAX_RAYS] = 
 {
@@ -122,6 +77,11 @@ const static half3 hemiSphere[MAX_RAYS] =
     {-0.26679593, -0.25411146, 0.92964902}, {0.70640857, -0.35919189, 0.60989190}, {-0.29454581, 0.92986161, 0.22045444}, {-0.71873742, 0.37604540, 0.58481312}
 };
 
+inline float3 SampleNormalWorld(float2 uv)
+{
+    return normalize(mad(tex2D(_CameraGBufferTexture2, uv).rgb, 2.0h, -1.0h));
+}
+
 inline float3 SamplePositionWorld(float2 uv)
 {
     float depth = tex2D(_CameraDepthTexture, uv);
@@ -130,24 +90,10 @@ inline float3 SamplePositionWorld(float2 uv)
     return wpos.xyz / wpos.w;
 }
 
-inline float3 SampleNormalWorld(float2 uv)
+inline half RayTraceIteration(float3 pos, float3 dir, float len)
 {
-    return normalize(mad(tex2D(_CameraGBufferTexture2, uv).rgb, 2.0f, -1.0f));
-}
-
-inline float3 SampleAlbedoBuffer(float2 uv)
-{
-    return tex2D(_CameraGBufferTexture0, uv).rgb;
-}
-
-inline float3 SampleLightBuffer(float2 uv)
-{
-    return tex2D(_MainTex, uv).rgb + tex2D(_CameraGBufferTexture3, uv).rgb;
-}
-
-inline void RayTraceIteration(float3 pos, inout ray ray)
-{
-    float3 stride = ray.dir * RAY_DIST / NUM_STEP;
+    float3 stride = dir * len / NUM_STEP;
+    bool intersect = false;
 
     [unroll]
     for (uint iter = 1; iter <= NUM_STEP; iter ++)
@@ -162,25 +108,17 @@ inline void RayTraceIteration(float3 pos, inout ray ray)
         float rayDepth = -vpos.z;
         float refDepth = LinearEyeDepth(tex2D(_CameraDepthTexture, uv));
 
-        float zDiff = rayDepth - refDepth;
+        float zDiff = rayDepth - refDepth;  
 
-        if (zDiff > 0.01f && zDiff < 1.0f)
-        {
-            ray.hit = true;
-            ray.len = dot(stride * iter, stride * iter);
-            ray.uv = uv;
-            return;
-        }
+        intersect = zDiff > Z_BIAS && zDiff < 1.0f;
     }
+
+    return intersect ? 0.0h : 1.0h;
 }
 
-inline half3 ComputeIndirectLight(float2 uv)
+inline half4 ComputeIndirectOcclusion(float2 uv)
 {
-    /*
-    float3 jitter = normalize(mad(tex2D(_ShadowJitterTexture,
-        uv * _ScreenParams.xy * _ShadowJitterTexture_TexelSize.xy + _Time.yy), 2.0f, -1.0f));
-        */
-
+    //float3 jitter = normalize(mad(tex2D(_ShadowJitterTexture, uv * _ScreenParams.xy * _ShadowJitterTexture_TexelSize.xy + _Time.yy), 2.0f, -1.0f));
     float3 jitter = float3(
         frac(sin(dot(uv + _Time.xx, 1.0f * float2(12.9898, 78.233))) * 43758.5453123),
         frac(sin(dot(uv + _Time.yy, 2.0f * float2(12.9898, 78.233))) * 43758.5453123),
@@ -189,67 +127,32 @@ inline half3 ComputeIndirectLight(float2 uv)
 
     jitter = normalize(mad(jitter, 2.0f, -1.0f));
 
-    float3 albedo = SampleAlbedoBuffer(uv);
-    half3 normal = SampleNormalWorld(uv);
-    half3 wcoord = SamplePositionWorld(uv);
+    float3 wnrm = SampleNormalWorld(uv);
+    float3 wpos = SamplePositionWorld(uv);
 
-    float3 tangent = normalize(jitter - normal * dot(jitter, normal));
-    float3 bitangent = normalize(cross(normal, tangent));
+    float3 tangent = normalize(jitter - wnrm * dot(jitter, wnrm));
+    float3 bitangent = normalize(cross(wnrm, tangent));
 
-    float3x3 tbn = float3x3(tangent, bitangent, normal);
+    float3x3 tbn = float3x3(tangent, bitangent, wnrm);
 
-    half3 indirect = 0.0h;
+    half ao = 0.0f;
+    half3 bnrm = 0.0f;
 
-    uint offset = 64 * uint(frac(sin(dot(uv + _Time.xx, float2(12.9898, 78.233))) * 43758.5453123));
-
-    for(uint iter = 0; iter < NUM_RAYS; iter ++)
+    [unroll]
+    for (uint iter = 0; iter < NUM_RAYS; iter ++)
     {
-        ray ray;
-
-        ray.dir = normalize(mul(hemiSphere[iter], tbn));
-        ray.hit = false;
-        ray.len = 1.0h;
-        ray.uv = uv;
-
-        RayTraceIteration(wcoord, ray);
-
-        if (ray.hit && ray.len > 0.01h)
-        {
-            half3 refLight = SampleLightBuffer(ray.uv);
-            half3 refNormal = SampleNormalWorld(ray.uv);
-
-            half ndotl = saturate(dot(ray.dir, normal));
-            half ndotn = dot(refNormal, normal);
-            half atten = 0.25h / max(ray.len, 1.0h);
-
-            indirect += ndotl * atten * refLight * albedo;
-        }
+        float3 wdir = normalize(mul(hemiSphere[iter], tbn));
+        float len = (7.00f + jitter.x) * RAY_DIST / 8.00f;
+        half vis = RayTraceIteration(wpos, wdir, len);
+        ao += vis;
+        bnrm += wdir * vis;
     }
 
-    return indirect / NUM_RAYS;
-}
+    bnrm = ao > 0.1h ? normalize(bnrm) : wnrm;
+    bnrm = mad(bnrm, 0.5h, 0.5h);
+    ao /= NUM_RAYS;
 
-half4 BlurInDir(float2 uv, float2 dir)
-{
-    half4 colorM = tex2D(_MainTex, uv);
-	half depthM = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));
-
-    float scale = 64.0f * unity_CameraProjection._m11 / depthM;
-	float2 finalStep = scale * dir * dot(dir, _MainTex_TexelSize.xy);
-
-    half4 colorB = colorM * blurKernel[0].x;
-	
-	[unroll]
-	for (int i = 1; i < NUM_TAPS; i++)
-	{
-		float2 offsetUv = uv + finalStep * blurKernel[i].y;
-        half4 color = tex2D(_MainTex, offsetUv);
-        half depth = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, offsetUv));
-        half s = min(1.0f, 4.0 * abs(depth - depthM));
-        colorB += lerp(color, colorM, s) * blurKernel[i].x;
-	}
-        
-	return colorB;
+    return half4(bnrm, ao);
 }
 
 #endif

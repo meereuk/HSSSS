@@ -23,41 +23,34 @@
 
 inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
 {
-    half3 direct = d.color * d.shadow.r * d.NdotL;
+    half3 diffuseLight = d.color * d.shadow.r;
+    half3 specularLight = diffuseLight * s.specularOcclusion * d.specularIntensity * d.NdotL;
 
-    // specular brdf
-    specular = direct * s.specularOcclusion * d.specularIntensity * aSpecularBrdf(s.f0, s.beckmannRoughness, d.LdotH, d.NdotH, d.NdotL, s.NdotV);
+    half sheen = FSchlick(s.f0, d.LdotH) * DCharlie(s.beckmannRoughness, d.NdotH) * VNeubelt(s.NdotV, d.NdotL);
 
-    // disney brdf
-    diffuse = direct * aDiffuseBrdf(s.albedo, s.roughness, d.LdotH, d.NdotL, s.NdotV);
+    specular = aSpecularBrdf(s.f0, s.beckmannRoughness, d.LdotH, d.NdotH, d.NdotL, s.NdotV);
+    diffuse = aDiffuseBrdf(s.albedo, s.roughness, d.LdotH, d.NdotL, s.NdotV);
 
-    // sheen specular
-    half sheen = direct * s.specularOcclusion * d.specularIntensity * FSchlick(s.f0, d.LdotH) * DCharlie(s.beckmannRoughness, d.NdotH) * VNeubelt(s.NdotV, d.NdotL);
-
+    sheen *= specularLight;
+    specular *= specularLight;
+    diffuse *= diffuseLight;
+    
     if (s.scatteringMask < 0.4h)
     {
-        return;
+        diffuse *= d.NdotL;
     }
 
     else if (s.scatteringMask < 0.7h)
     {
         // energy conserved wrap diffuse
-        diffuse = s.albedo * d.color * d.shadow.r;
         diffuse *= saturate((d.NdotLm + 0.5h) / 2.25h);
-        diffuse *= saturate(normalize(s.albedo) + d.NdotL);
-
-        // charlie 'sheen' specular
-        /*
-        specular = direct * FSchlick(s.f0, d.LdotH);
-        specular *= DCharlie(s.beckmannRoughness, d.NdotH);
-        specular *= VNeubelt(s.NdotV, d.NdotL);
-        specular *= s.specularOcclusion * d.specularIntensity;
-        */
+        diffuse *= saturate(normalize(s.albedo + 1.0h) + d.NdotL);
         specular += sheen;
     }
 
     else if (s.scatteringMask == 1.0h)
     {
+        diffuse *= d.NdotL;
         specular += sheen;
     }
 

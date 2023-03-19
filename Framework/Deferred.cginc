@@ -15,17 +15,21 @@
 #include "UnityStandardUtils.cginc"
 
 #if defined(_PCF_TAPS_8) || defined(_PCF_TAPS_16) || defined(_PCF_TAPS_32) || defined(_PCF_TAPS_64)
+    #define _PCF_ON
+#endif
+
+#if defined(_RT_SHADOW_LQ) || defined(_RT_SHADOW_MQ) || defined(_RT_SHADOW_HQ)
+    #define _SSCS_ON
+#endif
+
+#if defined(_PCF_ON)
     #include "Assets/HSSSS/Unity/HSSSSDeferredLibrary.cginc"
 #else
     #include "UnityDeferredLibrary.cginc"
 #endif
 
-#if defined(_RT_SHADOW_LQ) || defined(_RT_SHADOW_MQ) || defined(_RT_SHADOW_HQ)
-    #define _RT_SHADOW
-#endif
-
-#if defined(_RT_SHADOW)
-#include "Assets/HSSSS/Unity/ScreenSpaceShadows.cginc"
+#if defined(_SSCS_ON)
+    #include "Assets/HSSSS/Unity/ScreenSpaceShadows.cginc"
 #endif
 
 sampler2D _CameraGBufferTexture0;
@@ -81,18 +85,19 @@ ADirect aDeferredDirect(ASurface s)
 
     // directional light
     #if defined(DIRECTIONAL) || defined(DIRECTIONAL_COOKIE)
-        #if defined(_PCF_TAPS_8) || defined(_PCF_TAPS_16) || defined(_PCF_TAPS_32) || defined(_PCF_TAPS_64)
+        // directional shadow
+        #if defined(_PCF_ON)
             #if defined(_DIR_PCF_ON)
-                d.shadow = CustomDirectionalShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, saturate(dot(s.normalWorld, d.direction)));
+                d.shadow = CustomDirectionalShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);// saturate(dot(s.normalWorld, d.direction)));
             #else
-                d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv, saturate(dot(s.normalWorld, d.direction)));
+                d.shadow = UnityDeferredComputeShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);//saturate(dot(s.normalWorld, d.direction)));
             #endif
         #else
             d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv);
         #endif
 
-        #if defined(_RT_SHADOW)
-        SampleScreenSpaceShadow(s.positionWorld, s.screenUv, -_LightDir.xyz, d.shadow);
+        #if defined(_SSCS_ON)
+            SampleScreenSpaceShadow(s.positionWorld, s.screenUv, d.shadow);
         #endif
 
         lightVector = -_LightDir.xyz;
@@ -111,22 +116,25 @@ ADirect aDeferredDirect(ASurface s)
 
         // spot light
         #if defined (SPOT)
-            float4 uvCookie = mul(_LightMatrix0, float4(s.positionWorld, 1.0f));
-            // negative bias because http://aras-p.info/blog/2010/01/07/screenspace-vs-mip-mapping/
-            half4 cookie = tex2Dbias(_LightTexture0, float4(uvCookie.xy / uvCookie.w, 0, -8));
-        
-            cookie.a *= (uvCookie.w < 0.0f);
-            d.color *= A_LIGHT_COOKIE(cookie);
-            #if defined(_PCF_TAPS_8) || defined(_PCF_TAPS_16) || defined(_PCF_TAPS_32) || defined(_PCF_TAPS_64)
-                d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv, saturate(dot(s.normalWorld, d.direction)));
+            // spot shadow
+            #if defined(_PCF_ON)
+                d.shadow = UnityDeferredComputeShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);//saturate(dot(s.normalWorld, d.direction)));
             #else
                 d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv);
             #endif
 
-            #if defined(_RT_SHADOW)
-            SampleScreenSpaceShadow(s.positionWorld, s.screenUv, lightVector, d.shadow);
+            #if defined(_SSCS_ON)
+                SampleScreenSpaceShadow(s.positionWorld, s.screenUv, d.shadow);
             #endif
             
+            // light cookie
+            float4 uvCookie = mul(_LightMatrix0, float4(s.positionWorld, 1.0f));
+            half4 cookie = tex2Dbias(_LightTexture0, float4(uvCookie.xy / uvCookie.w, 0, -8));
+        
+            cookie.a *= (uvCookie.w < 0.0f);
+            d.color *= A_LIGHT_COOKIE(cookie);
+            
+            // light attenuation
             #if A_USE_UNITY_ATTENUATION
                 float att = dot(lightVector, lightVector) * _LightPos.w;
                 d.color *= tex2D(_LightTextureB0, att.rr).UNITY_ATTEN_CHANNEL;
@@ -135,21 +143,24 @@ ADirect aDeferredDirect(ASurface s)
 
         // point light
         #if defined (POINT) || defined (POINT_COOKIE)
-            #if defined(_PCF_TAPS_8) || defined(_PCF_TAPS_16) || defined(_PCF_TAPS_32) || defined(_PCF_TAPS_64)
-                d.shadow = UnityDeferredComputeShadow(-lightVector, fadeDist, s.screenUv, d.NdotL);
+            // point shadow
+            #if defined(_PCF_ON)
+                d.shadow = UnityDeferredComputeShadow(-lightVector, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
             #else
                 d.shadow = UnityDeferredComputeShadow(-lightVector, fadeDist, s.screenUv);
             #endif
 
-            #if defined(_RT_SHADOW)
-            SampleScreenSpaceShadow(s.positionWorld, s.screenUv, lightVector, d.shadow);
+            #if defined(_SSCS_ON)
+                SampleScreenSpaceShadow(s.positionWorld, s.screenUv, d.shadow);
             #endif
-                
+
+            // light cookie
             #if defined (POINT_COOKIE)
                 half4 cookie = texCUBEbias(_LightTexture0, float4(mul(_LightMatrix0, half4(s.positionWorld, 1)).xyz, -8));
                 d.color *= A_LIGHT_COOKIE(cookie);
             #endif
 
+            // light attenuation
             #if A_USE_UNITY_ATTENUATION
                 float att = dot(lightVector, lightVector) * _LightPos.w;
                 d.color *= tex2D(_LightTextureB0, att.rr).UNITY_ATTEN_CHANNEL;

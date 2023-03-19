@@ -18,6 +18,8 @@
 	uniform float4 _ShadowMapTexture_TexelSize;
 #endif
 
+//sampler2D _BentNormalTexture;
+
 // cascade weights
 inline uint2 GetCascadeIndex(float viewDepth)
 {
@@ -58,49 +60,44 @@ inline float3 GetShadowCoordinate(float3 vec, uint cascade)
 	#elif defined(SHADOWS_SCREEN)
 		return coord.xyz;
 	#endif
-
-	/*
-	#if defined(SHADOWS_DEPTH)
-		float4 coord = mul(unity_World2Shadow[0], wpos);
-		return coord.xyz / coord.w;
-	#elif defined(SHADOWS_SCREEN)
-		float4 coord[4] = {
-			mul(unity_World2Shadow[0], wpos),
-			mul(unity_World2Shadow[1], wpos),
-			mul(unity_World2Shadow[2], wpos),
-			mul(unity_World2Shadow[3], wpos)
-		};
-		float4 weight = GetCascadeWeights(viewDepth);
-		return (coord[0] * weight.x + coord[1] * weight.y + coord[2] * weight.z + coord[3] * weight.w).xyz;
-	#endif
-	*/
 }
 
 #if defined(SHADOWS_CUBE) || defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
 inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half NdotL)
 {
-	// equatorial axe
-	float3 rotationX = normalize(cross(_LightDir.xyz, _LightDir.zxy));
-	float3 rotationY = normalize(cross(_LightDir.xyz, rotationX));
+	#if defined(SHADOWS_CUBE)
+		float3 lightDir = -vec;
+	#elif defined(SHADOWS_DEPTH)
+		float3 lightDir = normalize(_WorldSpaceLightPos0.xyz - vec);
+	#elif defined(SHADOWS_SCREEN)
+		float3 lightDir = normalize(_WorldSpaceLightPos0.xyz);
+	#endif
 
 	// shadow jittering
-	float2 jitter = mad(tex2D(_ShadowJitterTexture, uv * _ScreenParams.xy * _ShadowJitterTexture_TexelSize.xy + _Time.yy).rg, 2.0f, -1.0f);
-	float2x2 rotationMatrix = float2x2(float2(jitter.x, -jitter.y), float2(jitter.y, jitter.x));
+	float3 jitter = normalize(mad(tex2D(_ShadowJitterTexture, uv * _ScreenParams.xy * _ShadowJitterTexture_TexelSize.xy + _Time.yy), 2.0f, -1.0f));
+	// gram-schmidt process
+	float3 tangentM = normalize(jitter - lightDir * dot(jitter, lightDir));
+	float3 tangentB = normalize(cross(lightDir, tangentM));
+	float3x3 tbn = float3x3(tangentM, tangentB, lightDir);
 
 	// initialize shadow coordinate and depth
 	#if defined(SHADOWS_CUBE)
 		float3 pixelCoord = vec;
 		float pixelDepth = length(vec) * _LightPositionRange.w;
-	#elif defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
+	#elif defined(SHADOWS_DEPTH)
 		uint2 cascade = GetCascadeIndex(viewDepth);
 		float3 pixelCoord = GetShadowCoordinate(vec, cascade.x);
 		float pixelDepth = pixelCoord.z;
+	#elif defined(SHADOWS_SCREEN)
+		uint2 cascade = GetCascadeIndex(viewDepth);
+		float2x3 pixelCoord = float2x3(GetShadowCoordinate(vec, cascade.x), GetShadowCoordinate(vec, cascade.y));
+		float2 pixelDepth = float2(pixelCoord[0].z, pixelCoord[1].z);
 	#endif
 
 	// penumbra sliders
 	// x: blocker search radius (in cm)
 	// y: light source radius (in cm)
-	// z: minimum or fixed size pnumbra (in mm)
+	// z: minimum or fixed size penumbra (in mm)
 	#if defined(SHADOWS_CUBE)
 		float3 radius = float3(0.01f, 0.01f, 0.001f) * _PointLightPenumbra;
 	#elif defined(SHADOWS_DEPTH)
@@ -112,19 +109,24 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 	// depth scale factor
 	#if defined(SHADOWS_CUBE)
 		float depthScale = 1.0f / _LightPositionRange.w;
-	#elif defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
-		float depthScale = 1.0f / (GetShadowCoordinate(vec + _LightDir, cascade.x).z - pixelDepth);
+	#elif defined(SHADOWS_DEPTH)
+		float depthScale = 1.0f;// / _LightPositionRange.w;
+	#elif defined(SHADOWS_SCREEN)
+		float depthScale = 1.0f / (pixelDepth.x - GetShadowCoordinate(vec + lightDir, cascade.x).z);
 	#endif
 
 	// slope-based bias
 	#if defined(SHADOWS_CUBE)
 		pixelDepth = pixelDepth * lerp(0.990f, 1.0f, NdotL) - lerp(0.001f, 0.0f, NdotL) / depthScale;
-	#elif defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
-		pixelDepth = pixelDepth - lerp(0.001f, 0.0f, NdotL) / depthScale;
+	#elif defined(SHADOWS_DEPTH)
+		pixelDepth = GetShadowCoordinate(vec + lerp(0.002f * lightDir, 0.0f, NdotL), cascade.x).z;
 	#endif
 
 	// r: shadow, g: mean z-diff.
 	float2 shadow = float2(0.0f, 0.0f);
+
+	// rotated disk
+	float3 disk[PCF_NUM_TAPS];
 
 	///////////////////////////////////
 	// percentage-closer soft shadow //
@@ -138,8 +140,8 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 		[unroll]
 		for (uint i = 0; i < PCF_NUM_TAPS; i ++)
 		{
-			float2 disk = mul(poissonDisk[i], rotationMatrix);
-			float3 sampleCoord = mad(rotationX * disk.x + rotationY * disk.y, radius.x, vec);
+			disk[i] = mul(poissonDisk[i], tbn);
+			float3 sampleCoord = mad(disk[i], radius.x, vec);
 
 			#if defined(SHADOWS_CUBE)
 				float sampleDepth = texCUBE(_ShadowMapTexture, sampleCoord);
@@ -149,7 +151,7 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 				float sampleDepth = tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.x).xy);
 			#endif
 
-			if (sampleDepth < pixelDepth)
+			if (sampleDepth < pixelDepth.x)
 			{
 				casterCount += 1.0f;
 				casterDepth += sampleDepth;
@@ -160,13 +162,13 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 
 		// penumbra size
 		#if defined(SHADOWS_SCREEN)
-			float penumbra = max(radius.z, radius.y * (pixelDepth - casterDepth) * depthScale);
+			float penumbra = max(radius.z, radius.y * (pixelDepth.x - casterDepth) * depthScale);
 		#elif defined(SHADOWS_CUBE) || defined(SHADOWS_DEPTH)
-			float penumbra = max(radius.z, radius.y * (pixelDepth - casterDepth) / casterDepth);
+			float penumbra = max(radius.z, radius.y * (pixelDepth.x - casterDepth) / casterDepth);
 		#endif
 
 		// thickness calculation
-		shadow.g = (pixelDepth - casterDepth) * depthScale;
+		shadow.g = max(0.0f, pixelDepth.x - casterDepth) * depthScale;
 	#else
 		// fixed sized penumbra
 		float penumbra = radius.z;
@@ -183,8 +185,10 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 	[unroll]
 	for (uint j = 0; j < PCF_NUM_TAPS; j ++)
 	{
-		float2 disk = mul(poissonDisk[j], rotationMatrix);
-		float3 sampleCoord = mad(rotationX * disk.x + rotationY * disk.y, penumbra, vec);
+		#if !defined(_PCSS_ON)
+			disk[j] = mul(poissonDisk[j], tbn);
+		#endif
+		float3 sampleCoord = mad(disk[j], penumbra, vec);
 
 		#if defined(SHADOWS_CUBE)
 			shadow.r += texCUBE(_ShadowMapTexture, sampleCoord) > pixelDepth ? 1.0f : 0.0f;
@@ -192,13 +196,33 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 			shadow.r += tex2D(_ShadowMapTexture, GetShadowCoordinate(sampleCoord, cascade.x).xy) > pixelDepth ? 1.0f : 0.0f;
 		#elif defined(SHADOWS_SCREEN)
 			// cascade blending
-			shadow.r += tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.x).xy) > pixelDepth ? cascadeWeight.x : 0.0f;
-			shadow.r += tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.y).xy) > pixelDepth ? cascadeWeight.y : 0.0f;
+			shadow.r += tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.x).xy) > pixelDepth.x ? cascadeWeight.x : 0.0f;
+			shadow.r += tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.y).xy) > pixelDepth.y ? cascadeWeight.y : 0.0f;
 		#endif
 	}
 
 	shadow.r = lerp(shadow.r / PCF_NUM_TAPS, 1.0f, _LightShadowData.r);
-	return shadow;
+
+	/*
+	half4 bentNormal = tex2D(_BentNormalTexture, uv);
+	bentNormal.rgb = mad(bentNormal.rgb, 2.0h, -1.0h);
+	half threshold = cos(bentNormal.a * 3.14159265h / 2.0h);
+	//half bentNdotL = dot(lightDir, bentNormal.rgb);
+
+	half contactShadow = 0.0h;
+
+	[unroll]
+	for (uint k = 0; k < PCF_NUM_TAPS; k ++)
+	{
+		float3 sampleCoord = normalize(mad(disk[k], radius.y, lightDir / _LightPositionRange.w));
+		half bentNdotL = dot(sampleCoord, bentNormal.rgb);
+
+		contactShadow += bentNdotL > threshold ? 1.0h : 0.0h;
+	}
+
+	contactShadow = lerp(contactShadow / PCF_NUM_TAPS, 1.0f, _LightShadowData.r);
+	shadow.r = min(shadow.r, contactShadow);
+	*/
 
 	/////////////////////////////
 	// variance shadow mapping //
@@ -226,6 +250,8 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 
 	moment /= PCF_NUM_TAPS;
 	*/
+
+	return shadow;
 }
 #endif
 

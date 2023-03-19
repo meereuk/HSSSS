@@ -21,6 +21,7 @@ Shader "Hidden/HSSSS/Deferred Shading"
 
             CGPROGRAM
             #pragma target 5.0
+            #pragma exclude_renderers gles
             #pragma only_renderers d3d11
             #pragma vertex vert_deferred
             #pragma fragment frag
@@ -37,8 +38,7 @@ Shader "Hidden/HSSSS/Deferred Shading"
             #pragma multi_compile ___ _DIR_PCF_ON
             #pragma multi_compile ___ _PCSS_ON
             // contact shadow options
-            //#pragma multi_compile ___ _RT_SHADOW_HQ
-            //#pragma multi_compile ___ _RT_SHADOW_LQ _RT_SHADOW_MQ _RT_SHADOW_HQ
+            //#pragma multi_compile _ _RT_SHADOW_HQ
 
             #include "Assets/HSSSS/Lighting/StandardSkin.cginc"
             #include "Assets/HSSSS/Framework/Deferred.cginc"

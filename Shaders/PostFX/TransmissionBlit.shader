@@ -18,16 +18,16 @@
         sampler2D _MainTex;
         ENDCG
 
-        // copy transmission to gbuffer 3 alpha
+        // copy transmission from gbuffer 3 alpha
         Pass
         {
             CGPROGRAM    
             #pragma vertex vert_img
             #pragma fragment frag
             
-            half4 frag(v2f_img IN) : COLOR
+            half frag(v2f_img IN) : COLOR
             {
-                return tex2D(_MainTex, IN.uv);
+                return tex2D(_MainTex, IN.uv).a;
             }
             ENDCG
         }

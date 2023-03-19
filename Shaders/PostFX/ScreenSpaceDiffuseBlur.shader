@@ -25,13 +25,18 @@
             #include "UnityCG.cginc"
             #include "UnityDeferredLibrary.cginc"
 
-            sampler2D _MainTex;
+            sampler2D _CameraGBufferTexture2;
+            sampler2D _CameraGBufferTexture3;
             sampler2D _CameraReflectionsTexture;
             
             half4 frag(v2f_img IN) : COLOR
             {
-                half4 direct = tex2D(_MainTex, IN.uv);
+                half mask = tex2D(_CameraGBufferTexture2, IN.uv).a;
+                clip(0.01h - mask);
+
+                half4 direct = tex2D(_CameraGBufferTexture3, IN.uv);
                 half4 ambient = tex2D(_CameraReflectionsTexture, IN.uv);
+
                 direct.rgb = direct.rgb - ambient.rgb;
                 return direct;
             }
@@ -46,14 +51,11 @@
             #pragma fragment frag
 
             #include "Common.cginc"
-            sampler2D _CameraGBufferTexture2;
             
             half4 frag(v2f_img IN) : COLOR
             {
-                half mask = tex2D(_CameraGBufferTexture2, IN.uv).a;
-                clip(0.01h - mask);
-                float2 axis = RandomAxis(IN.uv).xy;
-                return BlurInDir(IN, axis);
+                SkipIfNonSkin(IN);
+                return BlurInDir(IN, RandomAxis(IN).xy);
             }
             ENDCG
         }
@@ -67,14 +69,11 @@
             #pragma fragment frag
 
             #include "Common.cginc"
-            sampler2D _CameraGBufferTexture2;
 
             half4 frag(v2f_img IN) : COLOR
             {
-                half mask = tex2D(_CameraGBufferTexture2, IN.uv).a;
-                clip(0.01h - mask);
-                float2 axis = RandomAxis(IN.uv).yx * float2(1.0f, -1.0f);
-                return BlurInDir(IN, axis);
+                SkipIfNonSkin(IN);
+                return BlurInDir(IN, RandomAxis(IN).yx * float2(1.0f, -1.0f));
             }
             ENDCG
         }
@@ -114,7 +113,6 @@
                     lightColor = luminance > 0.0h ? lightColor / luminance : 1.0h;
 
                     result.rgb = result.rgb + ambientSpecular.rgb + gbuffer3.aaa * lightColor;
-
                     return result;
                 }
 

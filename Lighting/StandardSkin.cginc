@@ -36,15 +36,18 @@ void aPreSurface(inout ASurface s)
 
 void aPostSurface(inout ASurface s)
 {
-    s.scatteringMask *= _DeferredSkinParams.x;
+    s.ambientNormalWorld = s.normalWorld;
+    s.blurredNormalTangent = s.normalTangent;
+    /*
     #if defined(_SCREENSPACE_SSS)
         s.blurredNormalTangent = s.normalTangent;
         s.ambientNormalWorld = s.normalWorld;
     #else
-        s.blurredNormalTangent = normalize(lerp(s.normalTangent, s.blurredNormalTangent, s.scatteringMask * _DeferredSkinParams.w));
+        //s.blurredNormalTangent = normalize(lerp(s.normalTangent, s.blurredNormalTangent, s.scatteringMask));// * _DeferredSkinParams.w));
+        s.blurredNormalTangent = s.scatteringMask == 1.0 ? s.blurredNormalTangent : 
         s.ambientNormalWorld = A_NORMAL_WORLD(s, s.blurredNormalTangent);
     #endif
-    
+    */
 }
 
 void aPackGbuffer(ASurface s, out half4 gbuffer0, out half4 gbuffer1, out half4 gbuffer2, out half4 gbuffer3)
@@ -58,12 +61,13 @@ void aPackGbuffer(ASurface s, out half4 gbuffer0, out half4 gbuffer1, out half4 
 void aUnpackGbuffer(inout ASurface s)
 {
     s.specularOcclusion = aSpecularOcclusion(s.ambientOcclusion, aFresnel(s.NdotV));
-    s.transmission = saturate(1.0h - tex2D(_DeferredTransmissionBuffer, s.screenUv).a);
+    s.transmission = saturate(1.0h - tex2D(_DeferredTransmissionBuffer, s.screenUv));
     #if defined(_SCREENSPACE_SSS)
         s.ambientNormalWorld = s.normalWorld;
     #else
-        s.ambientNormalWorld = tex2D(_DeferredBlurredNormalBuffer, s.screenUv).xyz * 2.0h - 1.0h;
-        s.ambientNormalWorld = normalize(lerp(s.normalWorld, s.ambientNormalWorld, s.scatteringMask * _DeferredSkinParams.w));
+        s.ambientNormalWorld = mad(tex2D(_DeferredBlurredNormalBuffer, s.screenUv).xyz, 2.0h, -1.0h);
+        s.ambientNormalWorld = s.scatteringMask == 1.0 ? s.ambientNormalWorld : s.normalWorld;
+        s.ambientNormalWorld = normalize(lerp(s.normalWorld, s.ambientNormalWorld, _DeferredSkinParams.w));
     #endif
 }
 

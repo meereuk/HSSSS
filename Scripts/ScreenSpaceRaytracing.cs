@@ -18,15 +18,14 @@ public class ScreenSpaceRaytracing : MonoBehaviour
     public void OnEnable()
     {
         this.mCamera = GetComponent<Camera>();
-        this.mShader = Shader.Find("Hidden/ScreenSpaceRayTracing");
-
+        //this.mShader = Shader.Find("Hidden/ScreenSpaceRayTracing");
+        this.mShader = Shader.Find("Hidden/ScreenSpaceBentNormal");
         this.mMaterial = new Material(this.mShader);
     }
     
     public void OnDisable()
     {
         this.RemoveCommandBuffer();
-
         this.mCamera = null;
         this.mShader = null;
     }
@@ -53,27 +52,62 @@ public class ScreenSpaceRaytracing : MonoBehaviour
 
     private void SetupCommandBuffer()
     {
+        int tempRT = Shader.PropertyToID("_BentNormalTexture");
+
+        this.mBuffer = new CommandBuffer() { name = "ScreenSpaceBentNormal" };
+        this.mBuffer.GetTemporaryRT(tempRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+
+        this.mBuffer.Blit(BuiltinRenderTextureType.CameraTarget, tempRT, this.mMaterial);
+        this.mBuffer.ReleaseTemporaryRT(tempRT);
+
+        this.mCamera.AddCommandBuffer(CameraEvent.AfterGBuffer, this.mBuffer);
+        
+        /*
         int tickRT = Shader.PropertyToID("_SSRTGITickRT");
         int tockRT = Shader.PropertyToID("_SSRTGITockRT");
 
         this.mBuffer = new CommandBuffer() { name = "ScreenSpaceRayTracing" };
-        this.mBuffer.GetTemporaryRT(tickRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
-        this.mBuffer.GetTemporaryRT(tockRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.mBuffer.GetTemporaryRT(tickRT,
+            -1, -1,//Screen.currentResolution.width / 2, Screen.currentResolution.height / 2,
+            0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.mBuffer.GetTemporaryRT(tockRT,
+            -1, -1, //Screen.currentResolution.width / 2, Screen.currentResolution.height / 2,
+            0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
 
-        this.mBuffer.Blit(BuiltinRenderTextureType.CameraTarget, tickRT, this.mMaterial);
-        this.mBuffer.Blit(tickRT, tockRT, this.mMaterial);
-        this.mBuffer.Blit(tockRT, tickRT, this.mMaterial);
-        this.mBuffer.Blit(tickRT, tockRT, this.mMaterial);
+        this.mBuffer.Blit(BuiltinRenderTextureType.CameraTarget, tickRT, this.mMaterial, 0);
+        
+        this.mBuffer.Blit(tickRT, tockRT, this.mMaterial, 1);
+        this.mBuffer.Blit(tockRT, tickRT, this.mMaterial, 1);
+        this.mBuffer.Blit(tickRT, tockRT, this.mMaterial, 1);
+        this.mBuffer.Blit(tockRT, tickRT, this.mMaterial, 1);
+        this.mBuffer.Blit(tickRT, tockRT, this.mMaterial, 1);
+        this.mBuffer.Blit(tockRT, tickRT, this.mMaterial, 1);
+        this.mBuffer.Blit(tickRT, tockRT, this.mMaterial, 1);
+        this.mBuffer.Blit(tockRT, tickRT, this.mMaterial, 1);
+
+        this.mBuffer.Blit(tickRT, tockRT, this.mMaterial, 2);
+        this.mBuffer.Blit(tockRT, tickRT, this.mMaterial, 3);
+        this.mBuffer.Blit(tickRT, tockRT, this.mMaterial, 2);
+        this.mBuffer.Blit(tockRT, tickRT, this.mMaterial, 3);
+
+        this.mBuffer.Blit(tickRT, tockRT, this.mMaterial, 2);
+        this.mBuffer.Blit(tockRT, tickRT, this.mMaterial, 3);
+        this.mBuffer.Blit(tickRT, tockRT, this.mMaterial, 2);
+        this.mBuffer.Blit(tockRT, tickRT, this.mMaterial, 3);
+
+        this.mBuffer.Blit(tickRT, tockRT, this.mMaterial, 4);
         this.mBuffer.Blit(tockRT, BuiltinRenderTextureType.CameraTarget);
 
         this.mBuffer.ReleaseTemporaryRT(tickRT);
+        this.mBuffer.ReleaseTemporaryRT(tockRT);
+        */
 
-        this.mCamera.AddCommandBuffer(CameraEvent.AfterLighting, this.mBuffer);
+        //this.mCamera.AddCommandBuffer(CameraEvent.AfterGBuffer, this.mBuffer);
     }
 
     private void RemoveCommandBuffer()
     {
-        this.mCamera.RemoveCommandBuffer(CameraEvent.AfterLighting, this.mBuffer);
+        this.mCamera.RemoveCommandBuffer(CameraEvent.AfterGBuffer, this.mBuffer);
         this.mBuffer = null;
     }
 }

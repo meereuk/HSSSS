@@ -28,7 +28,7 @@ void aSurface(inout ASurface s)
 {
     half4 albedo = tex2D(_MainTex, s.baseUv);
     s.opacity = albedo.a;
-
+    /*
     #if defined(UNITY_PASS_SHADOWCASTER)
         clip(s.opacity - _Cutoff);
     #else
@@ -67,6 +67,7 @@ void aSurface(inout ASurface s)
         aSampleBumpTangent(s);
         aUpdateNormalData(s);
     #endif
+    */
 }
 
 #endif

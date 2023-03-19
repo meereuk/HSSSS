@@ -2,18 +2,18 @@
 {
 	Properties
 	{
-		_MainTex ("Texture", 2D) = "white" {}
+		_MainTex ("Texture", any) = "" {}
 	}
+
+	CGINCLUDE
+		#include "ScreenSpaceRayTracing.cginc"
+	ENDCG
 
 	SubShader
 	{
 		Cull Off
 		ZWrite Off
 		ZTest Always
-
-		CGINCLUDE
-		#include "ScreenSPaceRayTracing.cginc"
-		ENDCG
 
 		Pass
 		{
@@ -23,10 +23,59 @@
 
 			half4 frag (v2f i) : SV_Target
 			{
-				half3 indirect = ComputeIndirectLight(i.uv);
-				half3 ref = tex2D(_MainTex, i.uv);
+				return 0.0h;
+			}
+			ENDCG
+		}
+		
+		Pass
+		{
+			CGPROGRAM
+			#pragma vertex vert
+			#pragma fragment frag
 
-				return half4(ref + indirect, 1.0f);
+			half4 frag (v2f i) : SV_Target
+			{
+				return half4(tex2D(_MainTex, i.uv).rgb + ComputeIndirectLight(i.uv), 0.0h);
+			}
+			ENDCG
+		}
+
+		Pass
+        {
+            CGPROGRAM
+                #pragma vertex vert_img
+                #pragma fragment frag
+
+                half4 frag (v2f_img IN) : COLOR
+                {
+                    return BlurInDir(IN.uv.xy, float2(1.0f, 0.0f));
+                }
+            ENDCG
+        }
+
+		Pass
+        {
+            CGPROGRAM
+                #pragma vertex vert_img
+                #pragma fragment frag
+
+                half4 frag (v2f_img IN) : COLOR
+                {
+                    return BlurInDir(IN.uv.xy, float2(0.0f, 1.0f));
+                }
+            ENDCG
+        }
+
+		Pass
+		{
+			CGPROGRAM
+			#pragma vertex vert
+			#pragma fragment frag
+
+			half4 frag (v2f i) : SV_Target
+			{
+				return tex2D(_MainTex, i.uv.xy) + tex2D(_CameraGBufferTexture3, i.uv.xy);
 			}
 			ENDCG
 		}

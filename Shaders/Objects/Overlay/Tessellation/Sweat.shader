@@ -32,9 +32,9 @@ Shader "HSSSS/Overlay/Tessellation/Sweat"
     {
         Tags
         {
-            "Queue" = "Transparent" 
+            "Queue" = "AlphaTest"
+            "RenderType" = "Opaque"
             "IgnoreProjector" = "True" 
-            "RenderType" = "Transparent"
             "PerformanceChecks" = "False"
             "ForceNoShadowCasting" = "True"
         }

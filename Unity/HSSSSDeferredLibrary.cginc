@@ -65,7 +65,7 @@ float UnityDeferredComputeFadeDistance(float3 wpos, float z)
 	return lerp(z, sphereDist, unity_ShadowFadeCenterAndType.w);
 }
 
-half2 UnityDeferredComputeShadow(float3 vec, float fadeDist, float2 uv, half NdotL)
+half2 UnityDeferredComputeShadow(float3 vec, float viewDepth, float fadeDist, float2 uv, half NdotL)
 {
 	// Fade Distance;
 	#if defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN) || defined(SHADOWS_CUBE)
@@ -84,7 +84,7 @@ half2 UnityDeferredComputeShadow(float3 vec, float fadeDist, float2 uv, half Ndo
 	// Spot
 	#if defined(SPOT)
 	#if defined(SHADOWS_DEPTH)
-		float2 shadow = SamplePCFShadowMap(vec, uv, 0.0f, NdotL);
+		float2 shadow = SamplePCFShadowMap(vec, uv, viewDepth, NdotL);
 		shadow.x = saturate(shadow.x + fade);
 		return shadow;
 	#endif
@@ -93,7 +93,7 @@ half2 UnityDeferredComputeShadow(float3 vec, float fadeDist, float2 uv, half Ndo
 	// Point
 	#if defined (POINT) || defined (POINT_COOKIE)
 	#if defined(SHADOWS_CUBE)
-		float2 shadow = SamplePCFShadowMap(vec, uv, 0.0f, NdotL);
+		float2 shadow = SamplePCFShadowMap(vec, uv, viewDepth, NdotL);
 		shadow.x = saturate(shadow.x + fade);
 		return shadow;
 	#endif
