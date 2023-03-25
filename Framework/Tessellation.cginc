@@ -1,24 +1,15 @@
-// Alloy Physical Shader Framework
-// Copyright 2013-2016 RUST LLC.
-// http://www.alloy.rustltd.com/
-
-///////////////////////////////////////////////////////////////////////////////
-/// @file Tessellation.cginc
-/// @brief Callbacks and data structures for tessellation.
-///////////////////////////////////////////////////////////////////////////////
-
-#ifndef A_FRAMEWORK_TESSELLATION_CGINC
-#define A_FRAMEWORK_TESSELLATION_CGINC
+#ifndef HSSSS_FRAMEWORK_TESSELLATION
+#define HSSSS_FRAMEWORK_TESSELLATION
 
 #include "Assets/HSSSS/Config.cginc"
 #include "Assets/HSSSS/Framework/Vertex.cginc"
 #include "Assets/HSSSS/Framework/Utility.cginc"
 
-#include "HLSLSupport.cginc"
 #include "UnityCG.cginc"
-#include "Tessellation.cginc"
-#include "Lighting.cginc"
 #include "UnityShaderVariables.cginc"
+#include "Tessellation.cginc"
+#include "HLSLSupport.cginc"
+#include "Lighting.cginc"
 
 #if defined(A_TESSELLATION_ON) && defined(UNITY_CAN_COMPILE_TESSELLATION)	
     #if defined(_TESSELLATIONMODE_COMBINED)
@@ -26,7 +17,8 @@
         #define _TESSELLATIONMODE_PHONG
     #endif
     
-    struct AVertexToTessellation {
+    struct AVertexToTessellation
+    {
         float4 vertex : INTERNALTESSPOS;
         half3 normal : NORMAL;
         float2 uv0 : TEXCOORD0;

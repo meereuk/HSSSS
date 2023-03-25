@@ -29,7 +29,7 @@
             sampler2D _CameraGBufferTexture3;
             sampler2D _CameraReflectionsTexture;
             
-            half4 frag(v2f_img IN) : COLOR
+            half4 frag(v2f_img IN) : SV_Target
             {
                 half mask = tex2D(_CameraGBufferTexture2, IN.uv).a;
                 clip(0.01h - mask);
@@ -52,7 +52,7 @@
 
             #include "Common.cginc"
             
-            half4 frag(v2f_img IN) : COLOR
+            half4 frag(v2f_img IN) : SV_Target
             {
                 SkipIfNonSkin(IN);
                 return BlurInDir(IN, RandomAxis(IN).xy);
@@ -70,7 +70,7 @@
 
             #include "Common.cginc"
 
-            half4 frag(v2f_img IN) : COLOR
+            half4 frag(v2f_img IN) : SV_Target
             {
                 SkipIfNonSkin(IN);
                 return BlurInDir(IN, RandomAxis(IN).yx * float2(1.0f, -1.0f));
@@ -95,7 +95,7 @@
             sampler2D _CameraGBufferTexture3;
             sampler2D _CameraReflectionsTexture;
             
-            half4 frag(v2f_img IN) : COLOR
+            half4 frag(v2f_img IN) : SV_Target
             {
                 half4 gbuffer0 = tex2D(_CameraGBufferTexture0, IN.uv);
                 half4 gbuffer2 = tex2D(_CameraGBufferTexture2, IN.uv);

@@ -25,7 +25,7 @@
             #pragma vertex vert_img
             #pragma fragment frag
 
-            half4 frag(v2f_img IN) : COLOR
+            half4 frag(v2f_img IN) : SV_Target
             {
                 uint2 coord = UnityPixelSnap(IN.pos);
                 _SpecularBuffer[coord.x + round(_ScreenParams.x) * coord.y] = 0.0h;

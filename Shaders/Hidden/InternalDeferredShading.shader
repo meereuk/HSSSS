@@ -38,7 +38,8 @@ Shader "Hidden/HSSSS/Deferred Shading"
             #pragma multi_compile ___ _DIR_PCF_ON
             #pragma multi_compile ___ _PCSS_ON
             // contact shadow options
-            //#pragma multi_compile _ _RT_SHADOW_HQ
+            //#define _RT_SHADOW_HQ
+            
 
             #include "Assets/HSSSS/Lighting/StandardSkin.cginc"
             #include "Assets/HSSSS/Framework/Deferred.cginc"

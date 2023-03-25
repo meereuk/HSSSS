@@ -10,6 +10,7 @@ namespace HSSSS
         private Shader mShader;
         private Material mMaterial;
         public Camera mCamera;
+        public Texture2D jitter;
         private CommandBuffer mBuffer;
 
         private Matrix4x4 viewMatrix;
@@ -22,6 +23,7 @@ namespace HSSSS
             this.mLight = GetComponent<Light>();
             this.mShader = Shader.Find("Hidden/HSSSS/ScreenSpaceContactShadow");
             this.mMaterial = new Material(this.mShader);
+            this.mMaterial.SetTexture("_JitterTexture", this.jitter);
             this.mCamera = Camera.main;
         }
 
@@ -37,16 +39,14 @@ namespace HSSSS
         private void Update()
         {
             this.viewMatrix = mCamera.worldToCameraMatrix;
-            this.projMatrix = mCamera.projectionMatrix;//GL.GetGPUProjectionMatrix(mCamera.projectionMatrix, false);
-            this.viewProjMatrix = this.projMatrix * mCamera.worldToCameraMatrix;
+            this.projMatrix = mCamera.projectionMatrix;
+            
+            this.mMaterial.SetMatrix("_WorldToViewMatrix", this.viewMatrix);
+            this.mMaterial.SetMatrix("_ViewToWorldMatrix", this.viewMatrix.inverse);
 
-            this.mMaterial.SetMatrix("_MATRIX_V", this.viewMatrix);
-            this.mMaterial.SetMatrix("_MATRIX_P", this.projMatrix);
-            this.mMaterial.SetMatrix("_MATRIX_VP", this.viewProjMatrix);
-
-            this.mMaterial.SetMatrix("_MATRIX_IV", this.viewMatrix.inverse);
-            this.mMaterial.SetMatrix("_MATRIX_IP", this.projMatrix.inverse);
-            this.mMaterial.SetMatrix("_MATRIX_IVP", this.viewProjMatrix.inverse);
+            this.mMaterial.SetFloat("_SSCSRayLength", 4.0f);
+            this.mMaterial.SetFloat("_SSCSRayRadius", 2.0f);
+            this.mMaterial.SetFloat("_SSCSDepthBias", 0.1f);
 
             this.mMaterial.SetVector("_LightPosition", this.mLight.gameObject.transform.position);
         }
@@ -71,16 +71,18 @@ namespace HSSSS
         {
             RenderTargetIdentifier sourceMap = BuiltinRenderTextureType.CurrentActive;
             int shadowMap = Shader.PropertyToID("_ScreenSpaceShadowMap");
-            int flipRT = Shader.PropertyToID("_SSCSFlipRT");
-            int flopRT = Shader.PropertyToID("_SSCSFlopRT");
+            int flipRT = Shader.PropertyToID("_SSCSTemporalFlipBuffer");
+            int flopRT = Shader.PropertyToID("_SSCSTemporalFlopBuffer");
 
             this.mBuffer = new CommandBuffer();
             this.mBuffer.name = "SSCSSampler";
-            this.mBuffer.SetShadowSamplingMode(sourceMap, ShadowSamplingMode.RawDepth);
+            //this.mBuffer.SetShadowSamplingMode(sourceMap, ShadowSamplingMode.RawDepth);
+            //this.mBuffer.GetTemporaryRT(flipRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.R8, RenderTextureReadWrite.Linear);
+            //this.mBuffer.GetTemporaryRT(flopRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.R8, RenderTextureReadWrite.Linear);
+            this.mBuffer.GetTemporaryRT(shadowMap, -1, -1, 0, FilterMode.Point, RenderTextureFormat.R8, RenderTextureReadWrite.Linear);
             this.mBuffer.GetTemporaryRT(flipRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.R8, RenderTextureReadWrite.Linear);
             this.mBuffer.GetTemporaryRT(flopRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.R8, RenderTextureReadWrite.Linear);
-            this.mBuffer.GetTemporaryRT(shadowMap, -1, -1, 0, FilterMode.Point, RenderTextureFormat.R8, RenderTextureReadWrite.Linear);
-            this.mBuffer.Blit(null, flipRT, this.mMaterial, 0);
+            this.mBuffer.Blit(BuiltinRenderTextureType.CurrentActive, flipRT, this.mMaterial, 0);
             this.mBuffer.Blit(flipRT, flopRT, this.mMaterial, 1);
             this.mBuffer.Blit(flopRT, flipRT, this.mMaterial, 2);
             this.mBuffer.Blit(flipRT, shadowMap);

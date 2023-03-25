@@ -3,7 +3,7 @@
 
 #include "Assets/HSSSS/Framework/Surface.cginc"
 
-#if defined(_MICRODETAILS_ON) && defined(_MATERIALTYPE_SKIN)
+#if defined(_MICRODETAILS_ON)
     A_SAMPLER2D(_DetailNormalMap_2);
     A_SAMPLER2D(_DetailNormalMap_3);
     A_SAMPLER2D(_DetailSkinPoreMap);

@@ -1,14 +1,5 @@
-// Alloy Physical Shader Framework
-// Copyright 2013-2016 RUST LLC.
-// http://www.alloy.rustltd.com/
-
-/////////////////////////////////////////////////////////////////////////////////
-/// @file Surface.cginc
-/// @brief ASurface structure, and related methods.
-/////////////////////////////////////////////////////////////////////////////////
-
-#ifndef A_FRAMEWORK_SURFACE_CGINC
-#define A_FRAMEWORK_SURFACE_CGINC
+#ifndef HSSSS_FRAMEWORK_SURFACE
+#define HSSSS_FRAMEWORK_SURFACE
 
 #include "Assets/HSSSS/Config.cginc"
 #include "Assets/HSSSS/Framework/Brdf.cginc"
@@ -286,7 +277,10 @@ void aUpdateSpecularData(inout ASurface s)
 /// @param[in,out] s Material surface data.
 void aUpdateBrdfData(inout ASurface s)
 {
-    //#if defined(_WORKFLOW_METALLIC)
+    #ifdef _WORKFLOW_SPECULAR
+        s.albedo = saturate(s.baseColor);
+        s.f0 = saturate(s.specularColor);
+    #else
         half metallicInv = 1.0h - s.metallic;
         half3 dielectricF0 = aSpecularityToF0(s.specularity);
     
@@ -311,23 +305,13 @@ void aUpdateBrdfData(inout ASurface s)
         #ifdef _ALPHAPREMULTIPLY_ON
             // Interpolate from a translucent dielectric to an opaque metal.
             s.opacity = s.metallic + metallicInv * s.opacity;
-    
             // Premultiply opacity with albedo for translucent shaders.
             s.albedo *= s.opacity;
         #endif
 
-        #if defined(_WORKFLOW_SPECULAR)
-            s.f0 = saturate(s.specularColor);
-        #endif
-
         // Transmission can't happen through metal.
         s.transmission *= metallicInv;
-    /*
-    #elif defined(_WORKFLOW_SPECULAR)
-        s.albedo = saturate(s.baseColor);
-        s.f0 = saturate(s.specularColor);
     #endif
-    */
 }
 
 #endif // A_FRAMEWORK_SURFACE_CGINC

@@ -1,4 +1,4 @@
-Shader "HSSSS/Human/Hair/Anisotropic"
+Shader "HSSSS/Human/Hair/Deferred"
 {
     Properties
     {
@@ -6,33 +6,27 @@ Shader "HSSSS/Human/Hair/Anisotropic"
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Primary Color", Color) = (1,1,1,1)
 
-        [Toggle] _DETAILALBEDO ("Toggle DetailAlbedo", Float) = 0
+        [Space(8)][Header(DetailAlbedo)]
         _DetailAlbedoMap ("Detail Albedo", 2D) = "white" {}
 
-        [Header(Emission)]
-        [Toggle] _EMISSION ("Toggle Emission", Float) = 0
+        [Space(8)][Header(Emission)]
         _EmissionMap ("EmissionMap", 2D) = "white" {}
         _EmissionColor ("EmissionColor", Color) = (0, 0, 0, 1)
 
-        [Header(Specular)]
+        [Space(8)][Header(Specular)]
         _SpecGlossMap ("Glossiness Map", 2D) = "white" {}
         _SpecColor ("Specular Color", Color) = (1,1,1,1)
         _Smoothness ("Smoothness", Range(0, 1)) = 0
 
-        _AnisoAngle ("Anisotropic Rotation", Range(0, 180)) = 0
-        _HighlightShift ("Specular Shift", Range(-1, 1)) = 0
-        _HighlightWidth ("Specular Width", Range(0, 1)) = 0
-        _WrapDiffuse ("Wrap Lighting", Range(0, 1)) = 0
-
-        [Header(Occlusion)]
+        [Space(8)][Header(Occlusion)]
         _OcclusionMap ("OcclusionMap", 2D) = "white" {}
         _OcclusionStrength ("OcclusionStrength", Range(0, 1)) = 0
 
-        [Header(Normal)]
+        [Space(8)][Header(Normal)]
         _BumpMap ("BumpMap", 2D) = "bump" {}
         _BumpScale ("BumpScale", Float) = 1
 
-        [Header(Transparency)]
+        [Space(8)][Header(Transparency)]
         _Metallic ("Hash", Range(0, 1)) = 0
         _Cutoff ("Cutoff", Range(0, 1)) = 0.5
         _FuzzBias ("FuzzBias", Range(0, 1)) = 0.0
@@ -44,11 +38,10 @@ Shader "HSSSS/Human/Hair/Anisotropic"
         Tags
         {
             "Queue" = "AlphaTest"
-            "IgnoreProjector" = "True"
             "RenderType" = "TransparentCutout"
         }
 
-        LOD 400
+        LOD 300
 
         Pass
         {
@@ -62,17 +55,13 @@ Shader "HSSSS/Human/Hair/Anisotropic"
             #pragma multi_compile_fwdbase
             #pragma multi_compile_fog
 
-            #pragma shader_feature ___ _DETAILALBEDO_ON
-            #pragma shader_feature ___ _EMISSION_ON
-            #pragma shader_feature ___ _SPECGLOSS_ON
-            #pragma shader_feature ___ _OCCLUSION_ON
-            
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_FORWARDBASE
-
-            #include "Assets/HSSSS/Definitions/Hair.cginc"
+            #define _ALPHAHASHED_ON
+        
+            #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
             ENDCG
         }
@@ -91,18 +80,14 @@ Shader "HSSSS/Human/Hair/Anisotropic"
         
             #pragma multi_compile_fwdadd_fullshadows
             #pragma multi_compile_fog
-
-            #pragma shader_feature ___ _DETAILALBEDO_ON
-            #pragma shader_feature ___ _EMISSION_ON
-            #pragma shader_feature ___ _SPECGLOSS_ON
-            #pragma shader_feature ___ _OCCLUSION_ON
         
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
 
             #define UNITY_PASS_FORWARDADD
+            #define _ALPHAHASHED_ON
 
-            #include "Assets/HSSSS/Definitions/Hair.cginc"
+            #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
             ENDCG
         }
@@ -120,14 +105,40 @@ Shader "HSSSS/Human/Hair/Anisotropic"
 
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
-
-            #define UNITY_PASS_SHADOWCASTER
         
-            #include "Assets/HSSSS/Definitions/Hair.cginc"
+            #define UNITY_PASS_SHADOWCASTER
+            #define UNITY_STANDARD_USE_DITHER_MASK
+        
+            #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/Shadow.cginc"
+            ENDCG
+        }
+
+        Pass
+        {
+            Name "DEFERRED"
+            Tags { "LightMode" = "Deferred" }
+
+            CGPROGRAM
+            #pragma target 3.0
+            #pragma exclude_renderers nomrt gles
+
+            #pragma multi_compile ___ UNITY_HDR_ON
+            #pragma multi_compile LIGHTMAP_OFF LIGHTMAP_ON
+            #pragma multi_compile DIRLIGHTMAP_OFF DIRLIGHTMAP_COMBINED DIRLIGHTMAP_SEPARATE
+            #pragma multi_compile DYNAMICLIGHTMAP_OFF DYNAMICLIGHTMAP_ON
+
+            #pragma vertex aVertexShader
+            #pragma fragment aFragmentShader
+
+            #define UNITY_PASS_DEFERRED
+            #define _ALPHAHASHED_ON
+
+            #include "Assets/HSSSS/Definitions/Core.cginc"
+            #include "Assets/HSSSS/Passes/Deferred.cginc"
             ENDCG
         }
     }
 
-    FallBack "VertexLit"
+    FallBack "Standard"
 }

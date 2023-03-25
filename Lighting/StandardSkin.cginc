@@ -30,7 +30,8 @@ half4 _DeferredTransmissionParams;
 
 void aPreSurface(inout ASurface s)
 {
-    s.scatteringMask = 1.0h;
+    s.transmission = 0.0h;
+    s.scatteringMask = 0.0h;
     s.blurredNormalTangent = A_FLAT_NORMAL;
 }
 

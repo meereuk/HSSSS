@@ -1,10 +1,8 @@
-Shader "HSSSS/Human/Eye/POM"
+Shader "HSSSS/Human/Eyeball"
 {
     Properties
     {
-        [Header(MaterialType)]
-
-        [Space(8)][Header(Cornea)]
+        [Header(Cornea)]
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Main Color", Color) = (1,1,1,1)
 
@@ -28,12 +26,10 @@ Shader "HSSSS/Human/Eye/POM"
         _BumpScale("BumpScale", Float) = 1
 
         [Space(8)][Header(DetailNormal)]
-        [Toggle] _DETAILNORMAL ("Toggle DetailNormal", Float) = 0
         _DetailNormalMap("DetailNormalMap", 2D) = "bump" {}
         _DetailNormalMapScale("DetailNormalMapScale", Float) = 1
 
         [Space(8)][Header(Emission)]
-        [Toggle] _EMISSION ("Toggle Emission", Float) = 0
         _EmissionMap ("EmissionMap", 2D) = "white" {}
         _EmissionColor ("EmissionColor", Color) = (0, 0, 0, 1)
     }
@@ -59,10 +55,6 @@ Shader "HSSSS/Human/Eye/POM"
         
             #pragma multi_compile_fwdbase
             #pragma multi_compile_fog
-
-            #pragma shader_feature ___ _EMISSION_ON
-            #pragma shader_feature ___ _SPECGLOSS_ON
-            #pragma shader_feature ___ _DETAILNORMAL_ON
             
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
@@ -88,10 +80,6 @@ Shader "HSSSS/Human/Eye/POM"
         
             #pragma multi_compile_fwdadd_fullshadows
             #pragma multi_compile_fog
-
-            #pragma shader_feature ___ _EMISSION_ON
-            #pragma shader_feature ___ _SPECGLOSS_ON
-            #pragma shader_feature ___ _DETAILNORMAL_ON
         
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
@@ -137,10 +125,6 @@ Shader "HSSSS/Human/Eye/POM"
             #pragma multi_compile LIGHTMAP_OFF LIGHTMAP_ON
             #pragma multi_compile DIRLIGHTMAP_OFF DIRLIGHTMAP_COMBINED DIRLIGHTMAP_SEPARATE
             #pragma multi_compile DYNAMICLIGHTMAP_OFF DYNAMICLIGHTMAP_ON
-
-            #pragma shader_feature ___ _EMISSION_ON
-            #pragma shader_feature ___ _SPECGLOSS_ON
-            #pragma shader_feature ___ _DETAILNORMAL_ON
         
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
@@ -149,28 +133,6 @@ Shader "HSSSS/Human/Eye/POM"
         
             #include "Assets/HSSSS/Definitions/Eyeball.cginc"
             #include "Assets/HSSSS/Passes/Deferred.cginc"
-            ENDCG
-        }
-    
-        Pass
-        {
-            Name "Meta"
-            Tags { "LightMode" = "Meta" }
-            Cull Off
-
-            CGPROGRAM
-            #pragma target 5.0
-            #pragma exclude_renderers nomrt gles
-
-            #pragma shader_feature ___ _EMISSION_ON
-                
-            #pragma vertex aVertexShader
-            #pragma fragment aFragmentShader
-        
-            #define UNITY_PASS_META
-        
-            #include "Assets/HSSSS/Definitions/Eyeball.cginc"
-            #include "Assets/HSSSS/Passes/Meta.cginc"
             ENDCG
         }
     }

@@ -1,31 +1,26 @@
-Shader "HSSSS/Human/Hair/Deferred"
+Shader "HSSSS/Human/Skin"
 {
+
     Properties
     {
-        [Header(MaterialType)]
-        [KeywordEnum(Metallic, Specular)] _Workflow ("Specular Workflow", Float) = 0
+        [HideInInspector][Enum(Standard, 0, Null, 1, Cloth, 2, Skin, 3)]
+        _MaterialType("Material Type",Float) = 3
 
         [Space(8)][Header(Albedo)]
         _MainTex ("Main Texture", 2D) = "white" {}
-        _Color ("Primary Color", Color) = (1,1,1,1)
-
-        [Space(8)][Header(DetailAlbedo)]
-        [Toggle] _DETAILALBEDO ("Toggle DetailAlbedo", Float) = 0
-        _DetailAlbedoMap ("Detail Albedo", 2D) = "white" {}
+        _Color ("Main Color", Color) = (1,1,1,1)
 
         [Space(8)][Header(Emission)]
-        [Toggle] _EMISSION ("Toggle Emission", Float) = 0
-        _EmissionMap ("EmissionMap", 2D) = "white" {}
-        _EmissionColor ("EmissionColor", Color) = (0, 0, 0, 1)
+        _EmissionMap ("Emission Map", 2D) = "white" {}
+        _EmissionColor ("Emission Color", Color) = (0, 0, 0, 1)
 
         [Space(8)][Header(Specular)]
-        [Toggle] _SPECGLOSS ("Toggle", Float) = 0
-        _SpecGlossMap ("Glossiness Map", 2D) = "white" {}
-        _SpecColor ("Specular Color", Color) = (1,1,1,1)
+        _SpecGlossMap ("SpecGlossMap", 2D) = "white" {}
+        _SpecColor ("SpecColor", Color) = (1,1,1,1)
+        _Metallic ("Specularity", Range(0, 1)) = 0
         _Smoothness ("Smoothness", Range(0, 1)) = 0
 
         [Space(8)][Header(Occlusion)]
-        [Toggle] _Occlusion ("Toggle", Float) = 0
         _OcclusionMap ("OcclusionMap", 2D) = "white" {}
         _OcclusionStrength ("OcclusionStrength", Range(0, 1)) = 0
 
@@ -33,20 +28,31 @@ Shader "HSSSS/Human/Hair/Deferred"
         _BumpMap ("BumpMap", 2D) = "bump" {}
         _BumpScale ("BumpScale", Float) = 1
 
-        [Space(8)][Header(Transparency)]
-        _Metallic ("Hash", Range(0, 1)) = 0
-        _Cutoff ("Cutoff", Range(0, 1)) = 0.5
-        _FuzzBias ("FuzzBias", Range(0, 1)) = 0.0
-        _BlueNoise ("Blue Noise", 2D) = "black" {}
-    }
+        [Space(8)][Header(BlendNormal)]
+        _BlendNormalMap ("BlendNormalMap", 2D) = "bump" {}
+        _BlendNormalMapScale("BlendNormalMapScale", Float) = 1
 
+        [Space(8)][Header(DetailNormal)]
+        _DetailNormalMap ("DetailNormalMap", 2D) = "bump" {}
+        _DetailNormalMapScale ("DetailNormalMapScale", Float) = 1
+
+        [Space(8)][Header(MicroDetails)]
+        _DetailNormalMap_2 ("DetailNormalMap_2", 2D) = "bump" {}
+        _DetailNormalMapScale_2 ("DetailNormalMapScale_2", Float) = 1
+        _DetailNormalMap_3 ("DetailNormalMap_2", 2D) = "bump" {}
+        _DetailNormalMapScale_3 ("DetailNormalMapScale_2", Float) = 1
+        _DetailSkinPoreMap ("DetailSkinPoreMap", 2D) = "white" {}
+
+        [Space(8)][Header(Transmission)]
+        _Thickness ("ThicknessMap", 2D) = "white" {}
+    }
 
     SubShader
     {
         Tags
         {
-            "Queue" = "AlphaTest"
-            "RenderType" = "TransparentCutout"
+            "Queue" = "Geometry" 
+            "RenderType" = "Opaque"
         }
 
         LOD 300
@@ -63,20 +69,12 @@ Shader "HSSSS/Human/Hair/Deferred"
             #pragma multi_compile_fwdbase
             #pragma multi_compile_fog
 
-            #pragma shader_feature _WORKFLOW_METALLIC _WORKFLOW_SPECULAR
-
-            #pragma shader_feature ___ _DETAILALBEDO_ON
-            #pragma shader_feature ___ _EMISSION_ON
-            #pragma shader_feature ___ _SPECGLOSS_ON
-            #pragma shader_feature ___ _OCCLUSION_ON
-
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_FORWARDBASE
-            #define _ALPHAHASHED_ON
         
-            #include "Assets/HSSSS/Definitions/Core.cginc"
+            #include "Assets/HSSSS/Definitions/Skin.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
             ENDCG
         }
@@ -95,21 +93,13 @@ Shader "HSSSS/Human/Hair/Deferred"
         
             #pragma multi_compile_fwdadd_fullshadows
             #pragma multi_compile_fog
-
-            #pragma shader_feature _WORKFLOW_METALLIC _WORKFLOW_SPECULAR
-
-            #pragma shader_feature ___ _DETAILALBEDO_ON
-            #pragma shader_feature ___ _EMISSION_ON
-            #pragma shader_feature ___ _SPECGLOSS_ON
-            #pragma shader_feature ___ _OCCLUSION_ON
         
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
 
             #define UNITY_PASS_FORWARDADD
-            #define _ALPHAHASHED_ON
 
-            #include "Assets/HSSSS/Definitions/Core.cginc"
+            #include "Assets/HSSSS/Definitions/Skin.cginc"
             #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
             ENDCG
         }
@@ -130,7 +120,7 @@ Shader "HSSSS/Human/Hair/Deferred"
         
             #define UNITY_PASS_SHADOWCASTER
         
-            #include "Assets/HSSSS/Definitions/Core.cginc"
+            #include "Assets/HSSSS/Definitions/Skin.cginc"
             #include "Assets/HSSSS/Passes/Shadow.cginc"
             ENDCG
         }
@@ -149,24 +139,18 @@ Shader "HSSSS/Human/Hair/Deferred"
             #pragma multi_compile DIRLIGHTMAP_OFF DIRLIGHTMAP_COMBINED DIRLIGHTMAP_SEPARATE
             #pragma multi_compile DYNAMICLIGHTMAP_OFF DYNAMICLIGHTMAP_ON
 
-            #pragma shader_feature _WORKFLOW_METALLIC _WORKFLOW_SPECULAR
-
-            #pragma shader_feature ___ _DETAILALBEDO_ON
-            #pragma shader_feature ___ _EMISSION_ON
-            #pragma shader_feature ___ _SPECGLOSS_ON
-            #pragma shader_feature ___ _OCCLUSION_ON
+            #pragma multi_compile ___ _MICRODETAILS_ON
 
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
 
             #define UNITY_PASS_DEFERRED
-            #define _ALPHAHASHED_ON
 
-            #include "Assets/HSSSS/Definitions/Core.cginc"
+            #include "Assets/HSSSS/Definitions/Skin.cginc"
             #include "Assets/HSSSS/Passes/Deferred.cginc"
             ENDCG
         }
     }
 
-    FallBack "VertexLit"
+    FallBack "Standard"
 }

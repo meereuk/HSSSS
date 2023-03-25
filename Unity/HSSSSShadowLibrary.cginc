@@ -1,7 +1,13 @@
 #ifndef HSSSS_SHADOWLIB_CGINC
+// Upgrade NOTE: excluded shader from OpenGL ES 2.0 because it uses non-square matrices
+#pragma exclude_renderers gles
 #define HSSSS_SHADOWLIB_CGINC
 
 #include "Assets/HSSSS/Framework/AreaLight.cginc"
+
+#if defined(_RT_SHADOW_HQ)
+	#include "Assets/HSSSS/Unity/ScreenSpaceShadows.cginc"
+#endif
 
 #if defined(SHADOWS_SCREEN)
 	uniform sampler2D _CustomShadowMap;
@@ -203,25 +209,31 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 
 	shadow.r = lerp(shadow.r / PCF_NUM_TAPS, 1.0f, _LightShadowData.r);
 
+	#if defined(_RT_SHADOW_HQ)
+		SampleScreenSpaceShadow(uv, shadow);
+	#endif
+
 	/*
-	half4 bentNormal = tex2D(_BentNormalTexture, uv);
-	bentNormal.rgb = mad(bentNormal.rgb, 2.0h, -1.0h);
-	half threshold = cos(bentNormal.a * 3.14159265h / 2.0h);
-	//half bentNdotL = dot(lightDir, bentNormal.rgb);
+	#if defined(_RT_SHADOW_HQ)
+		//SampleScreenSpaceShadow(uv, lightDir, shadow);
+		half4 bentNormal = tex2D(_SSGITemporalAOBuffer, uv);
+		bentNormal.rgb = normalize(mad(bentNormal.rgb, 2.0h, - 1.0h));
+		half threshold = cos(bentNormal.a * 0.5h * UNITY_PI);
 
-	half contactShadow = 0.0h;
+		half contactShadow = 0.0h;
 
-	[unroll]
-	for (uint k = 0; k < PCF_NUM_TAPS; k ++)
-	{
-		float3 sampleCoord = normalize(mad(disk[k], radius.y, lightDir / _LightPositionRange.w));
-		half bentNdotL = dot(sampleCoord, bentNormal.rgb);
+		[unroll]
+		for (uint k = 0; k < PCF_NUM_TAPS; k ++)
+		{
+			float3 sampleCoord = normalize(mad(disk[k], 0.04f, lightDir));
+			half bentNdotL = dot(sampleCoord, bentNormal.rgb);
+			contactShadow += smoothstep(max(threshold, 0.0h), min(threshold + 0.2h, 1.0h), bentNdotL);
+			//saturate(bentNdotL - threshold);// ? 1.0h : 0.0h;
+		}
 
-		contactShadow += bentNdotL > threshold ? 1.0h : 0.0h;
-	}
-
-	contactShadow = lerp(contactShadow / PCF_NUM_TAPS, 1.0f, _LightShadowData.r);
-	shadow.r = min(shadow.r, contactShadow);
+		contactShadow = lerp(contactShadow / PCF_NUM_TAPS, 1.0f, _LightShadowData.r);
+		shadow.r = min(shadow.r, contactShadow);
+	#endif
 	*/
 
 	/////////////////////////////

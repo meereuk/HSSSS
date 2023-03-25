@@ -1,4 +1,4 @@
-Shader "HSSSS/Overlay/Forward"
+Shader "HSSSS/Human/Eyelash"
 {
     Properties
     {
@@ -9,25 +9,7 @@ Shader "HSSSS/Overlay/Forward"
         [Space(8)][Header(Emission)]
         _EmissionMap ("Emission Map", 2D) = "white" {}
         _EmissionColor ("Emission Color", Color) = (0, 0, 0, 1)
-
-        [Space(8)][Header(Specular)]
-        _SpecGlossMap ("SpecGlossMap", 2D) = "white" {}
-        _SpecColor ("SpecColor", Color) = (1,1,1,1)
-        _Metallic ("Specularity", Range(0, 1)) = 0
-        _Smoothness ("Smoothness", Range(0, 1)) = 0
-
-        [Space(8)][Header(Occlusion)]
-        _OcclusionMap ("OcclusionMap", 2D) = "white" {}
-        _OcclusionStrength ("OcclusionStrength", Range(0, 1)) = 0
-
-        [Space(8)][Header(Normal)]
-        _BumpMap ("BumpMap", 2D) = "bump" {}
-        _BumpScale ("BumpScale", Float) = 1
     }
-
-    CGINCLUDE
-        #define _WORKFLOW_SPECULAR
-    ENDCG
 
     SubShader
     {
@@ -40,7 +22,6 @@ Shader "HSSSS/Overlay/Forward"
         }
 
         LOD 300
-        Offset -1, -1
 
         Pass
         {
@@ -49,6 +30,7 @@ Shader "HSSSS/Overlay/Forward"
 
             Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
+            Cull Off
 
             CGPROGRAM
             #pragma target 3.0
@@ -75,6 +57,7 @@ Shader "HSSSS/Overlay/Forward"
         
             Blend SrcAlpha One
             ZWrite Off
+            Cull Off
 
             CGPROGRAM
             #pragma target 3.0

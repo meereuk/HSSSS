@@ -27,50 +27,94 @@ v2f vert (appdata v)
     return o;
 }
 
-half4x4 _MATRIX_V;
-half4x4 _MATRIX_P;
-half4x4 _MATRIX_VP;
-
-half4x4 _MATRIX_IV;
-half4x4 _MATRIX_IP;
-half4x4 _MATRIX_IVP;
+half4x4 _WorldToViewMatrix;
+half4x4 _ViewToWorldMatrix;
 
 half3 _LightPosition;
 
 sampler2D _MainTex;
 sampler2D _CameraDepthTexture;
+sampler2D _BackFaceDepthBuffer;
 sampler2D _CameraGBufferTexture2;
 
+sampler2D _ShadowJitterTexture;
+
+float4 _MainTex_TexelSize;
+float4 _ShadowJitterTexture_TexelSize;
+
+#define NUM_TAPS 7
+
+const static half2 blurKernel[NUM_TAPS] =
+{
+    {0.2148h,  0.0h},
+    {0.0713h, -3.0h},
+    {0.1315h, -2.0h},
+    {0.1898h, -1.0h},
+    {0.0713h,  3.0h},
+    {0.1315h,  2.0h},
+    {0.1898h,  1.0h}
+};
+
+#define _SSCSNumStride 32
+
 half _SSCSRayLength;
+half _SSCSRayRadius;
 half _SSCSMeanDepth;
 half _SSCSDepthBias;
 
-// view-space ray tracing
-inline half RayTraceLoop(half4 pos, half4 dir)
+struct ray
 {
-    half rayLength = _SSCSRayLength * 0.01h;
-    half meanDepth = _SSCSMeanDepth * 0.01h;
-    half depthBias = _SSCSDepthBias * 0.01h;
+    half4 pos;
+    half4 dir;
+    half2 uv;
+    half len;
+    bool hit;
+};
 
-    half4 V0 = mul(_MATRIX_V, pos);
-    half4 VD = mul(_MATRIX_V, dir);
+inline half GradientNoise(half2 uv)
+{
+    return frac(sin(dot(uv, half2(12.9898, 78.2333))) * 43758.5453123);
+}
 
-    half len = mad(VD.z, rayLength, V0.z) > _ProjectionParams.y ? -(V0.z + _ProjectionParams.z) / VD.z : rayLength;
+inline half3x3 GramSchmidtMatrix(half2 uv, half3 axis)
+{
+    half3 jitter = tex2D(_ShadowJitterTexture,
+        uv * _ScreenParams.xy * _ShadowJitterTexture_TexelSize.xy + _Time.yy);
+
+    jitter = normalize(mad(jitter, 2.0f, -1.0f));
+
+    half3 tangent = normalize(jitter - axis * dot(jitter, axis));
+    half3 bitangent = normalize(cross(axis, tangent));
+
+    return half3x3(tangent, bitangent, axis);
+}
+
+// view-space ray tracing
+inline half RayTraceLoop(inout ray ray)
+{
+    half4 vpos = mul(_WorldToViewMatrix, ray.pos);
+    half4 vdir = mul(_WorldToViewMatrix, ray.dir);
+
+    ray.len = mad(vdir.z, ray.len, vpos.z) > _ProjectionParams.y ?
+        -(vpos.z + _ProjectionParams.z) / vdir.z : ray.len;
 
     [unroll]
-    for (uint iter = 0; iter < 64; iter ++)
+    for (uint iter = 0; iter < _SSCSNumStride && ray.hit == false; iter ++)
     {
-        half step = (64.0f - iter) / 64.0f;
+        half step = ((half)_SSCSNumStride - iter) * ray.len / _SSCSNumStride;
 
-        half4 vpos = V0 + VD * len * step;
-        half4 spos = mul(_MATRIX_P, vpos);
+        half4 vp = mad(vdir, step, vpos);//vpos + vdir * ray.len * step;
+        half4 sp = mul(unity_CameraProjection, vp);
 
-        half2 uv = spos.xy / spos.w * 0.5f + 0.5f;
+        ray.uv = sp.xy / sp.w * 0.5f + 0.5f;
 
-        half zDiff = -vpos.z - LinearEyeDepth(tex2D(_CameraDepthTexture, uv));
+        half zRay = -vp.z;
+        half zFace = LinearEyeDepth(tex2D(_CameraDepthTexture, ray.uv));
+        half zBack = max(tex2D(_BackFaceDepthBuffer, ray.uv), zFace + 0.1h);
 
-        if (zDiff > depthBias && zDiff < meanDepth)// && -vpos.z < (z + 0.5f))
+        if (zRay > zFace && zRay < zBack)
         {
+            ray.hit = true;
             return 0.0h;
         }
     }
@@ -83,45 +127,72 @@ half SampleShadowMap(v2f i)
     half depth = UNITY_SAMPLE_DEPTH(tex2D(_CameraDepthTexture, i.uv));
 	depth = Linear01Depth(depth);
 
-	half4 vpos = half4(i.ray * depth, 1.0f);
-	half4 wpos = mul(_MATRIX_IV, vpos);
+	half4 vpos = half4(i.ray * depth, 1.0h);
+	half4 wpos = mul(_ViewToWorldMatrix, vpos);
 
-    half4 wnrm = half4(tex2D(_CameraGBufferTexture2, i.uv).rgb * 2.0h - 1.0h, 0.0h);
-    half4 wdir = half4(normalize(_LightPosition - wpos.xyz), 0.0f);
+    half4 wnrm = half4(tex2D(_CameraGBufferTexture2, i.uv).rgb, 0.0h);
+    wnrm.xyz = normalize(mad(wnrm, 2.0h, -1.0h));
 
-    return RayTraceLoop(wpos + 0.001f * wnrm, wdir);
+    half3 ldir = normalize(_LightPosition - wpos.xyz);
+    half3x3 tbn = GramSchmidtMatrix(i.uv, ldir);
 
-    /*
-    half3 jitter = float3(
-        frac(sin(dot(i.uv + _Time.xx, 1.0f * float2(12.9898, 78.233))) * 43758.5453123),
-        frac(sin(dot(i.uv + _Time.yy, 2.0f * float2(12.9898, 78.233))) * 43758.5453123),
-        frac(sin(dot(i.uv + _Time.zz, 3.0f * float2(12.9898, 78.233))) * 43758.5453123)
-    );
+    half rayRadius = _SSCSRayRadius * 0.01h;
 
-    jitter = normalize(mad(jitter, 2.0f, -1.0f));
+    ray ray;
 
-    half3 tangent = normalize(jitter - wdir.xyz * dot(jitter, wdir.xyz));
-    half3 bitangent = normalize(cross(wdir.xyz, tangent));
+    half3 offset = mul(half3(0.25h, 0.0h, 0.0h), tbn);
+    ray.hit = false;
+    ray.pos = mad(wnrm, 0.001f, wpos);  
+    ray.len = _SSCSRayLength * 0.01h;
+    ray.dir = half4(normalize(mad(offset, rayRadius, ldir)), 0.0h);
+    half shadow = RayTraceLoop(ray);
 
-    half3x3 tbn = half3x3(tangent, bitangent, wdir.xyz);
+    offset = mul(half3(0.0h, 0.5h, 0.0h), tbn);
+    ray.hit = false;
+    ray.pos = mad(wnrm, 0.001f, wpos);  
+    ray.len = _SSCSRayLength * 0.01h;
+    ray.dir = half4(normalize(mad(offset, rayRadius, ldir)), 0.0h);
+    shadow += RayTraceLoop(ray);
 
-    half3 offset = mul(half3(1.0h, 0.0h, 0.0h), tbn);
-    wdir.xyz = normalize(mad(offset, 0.01h, wdir.xyz));
-    */
+    offset = mul(half3(-0.75h, 0.0h, 0.0h), tbn);
+    ray.hit = false;
+    ray.pos = mad(wnrm, 0.001f, wpos);  
+    ray.len = _SSCSRayLength * 0.01h;
+    ray.dir = half4(normalize(mad(offset, rayRadius, ldir)), 0.0h);
+    shadow += RayTraceLoop(ray);
+
+    offset = mul(half3(0.0h, -1.0h, 0.0h), tbn);
+    ray.hit = false;
+    ray.pos = mad(wnrm, 0.001f, wpos);  
+    ray.len = _SSCSRayLength * 0.01h;
+    ray.dir = half4(normalize(mad(offset, rayRadius, ldir)), 0.0h);
+    shadow += RayTraceLoop(ray);
+
+    return shadow / 4;
 }
 
-half BlurInDir(v2f i, float2 dir)
+half BlurInDir(half2 uv, half2 dir)
 {
-    half shadow = 0.0h;
-    
-    for (int iter = -2; iter < 3; iter ++)
-    {
-        float2 offset = dir * 0.0001f * iter;
+    half shadowM = tex2D(_MainTex, uv);
+    half depthM = LinearEyeDepth(tex2D(_CameraDepthTexture, uv));
 
-        shadow += tex2D(_MainTex, i.uv + offset).x;
+    half2 step = _MainTex_TexelSize.xy * dir * 1.0h;
+
+    half shadowB = shadowM * blurKernel[0].x;
+
+    [unroll]
+    for (int i = 1; i < NUM_TAPS; i ++)
+    {
+        half2 offsetUv = mad(step, blurKernel[i].y, uv);
+        half shadow = tex2D(_MainTex, offsetUv);
+
+        half depth = LinearEyeDepth(tex2D(_CameraDepthTexture, offsetUv));
+        half s = min(1.0h, 100.0h * abs(depth - depthM));
+
+        shadowB += lerp(shadow, shadowM, s) * blurKernel[i].x;
     }
 
-    return shadow / 5.0h;
+    return shadowB;
 }
 
 #endif

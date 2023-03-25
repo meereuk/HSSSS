@@ -31,9 +31,11 @@ sampler2D _SkinJitter;
 sampler2D _CameraDepthTexture;
 sampler2D _CameraGBufferTexture2;
 
-half2 _DeferredBlurredNormalsParams;
 half4 _MainTex_TexelSize;
 half4 _SkinJitter_TexelSize;
+
+half2 _DeferredBlurredNormalsParams;
+
 
 void SkipIfNonSkin(v2f_img IN)
 {

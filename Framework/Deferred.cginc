@@ -18,18 +18,10 @@
     #define _PCF_ON
 #endif
 
-#if defined(_RT_SHADOW_LQ) || defined(_RT_SHADOW_MQ) || defined(_RT_SHADOW_HQ)
-    #define _SSCS_ON
-#endif
-
 #if defined(_PCF_ON)
     #include "Assets/HSSSS/Unity/HSSSSDeferredLibrary.cginc"
 #else
     #include "UnityDeferredLibrary.cginc"
-#endif
-
-#if defined(_SSCS_ON)
-    #include "Assets/HSSSS/Unity/ScreenSpaceShadows.cginc"
 #endif
 
 sampler2D _CameraGBufferTexture0;
@@ -96,10 +88,6 @@ ADirect aDeferredDirect(ASurface s)
             d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv);
         #endif
 
-        #if defined(_SSCS_ON)
-            SampleScreenSpaceShadow(s.positionWorld, s.screenUv, d.shadow);
-        #endif
-
         lightVector = -_LightDir.xyz;
         
         #if !defined(ALLOY_SUPPORT_REDLIGHTS) && defined(DIRECTIONAL_COOKIE)
@@ -121,10 +109,6 @@ ADirect aDeferredDirect(ASurface s)
                 d.shadow = UnityDeferredComputeShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);//saturate(dot(s.normalWorld, d.direction)));
             #else
                 d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv);
-            #endif
-
-            #if defined(_SSCS_ON)
-                SampleScreenSpaceShadow(s.positionWorld, s.screenUv, d.shadow);
             #endif
             
             // light cookie
@@ -148,10 +132,6 @@ ADirect aDeferredDirect(ASurface s)
                 d.shadow = UnityDeferredComputeShadow(-lightVector, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
             #else
                 d.shadow = UnityDeferredComputeShadow(-lightVector, fadeDist, s.screenUv);
-            #endif
-
-            #if defined(_SSCS_ON)
-                SampleScreenSpaceShadow(s.positionWorld, s.screenUv, d.shadow);
             #endif
 
             // light cookie
