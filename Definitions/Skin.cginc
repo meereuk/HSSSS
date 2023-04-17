@@ -2,6 +2,8 @@
 #define HSSSS_DEFINITIONS_SKIN
 
 #define _SKINSPECULAR_ON
+#define _MICRODETAILS_ON
+#define A_CLEARCOAT_ON
 
 #include "Assets/HSSSS/Lighting/StandardSkin.cginc"
 #include "Assets/HSSSS/Framework/Definition.cginc"

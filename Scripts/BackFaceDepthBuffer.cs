@@ -14,6 +14,12 @@ public class BackFaceDepthBuffer : MonoBehaviour
 	{
         this.SetUpDepthCamera();
         this.mShader = Shader.Find("Hidden/BackFaceDepth");
+
+        this.mTexture = new RenderTexture(
+            Screen.currentResolution.width, Screen.currentResolution.height,
+            0, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear);
+
+        this.mTexture.Create();
     }
 
 	public void OnDisable()
@@ -30,8 +36,13 @@ public class BackFaceDepthBuffer : MonoBehaviour
         if (this.mCamera && this.mainCamera)
         {
             this.UpdateDepthCamera();
-            this.CaptureDepth();
+            
         }
+    }
+
+    void LateUpdate()
+    {
+        this.CaptureDepth();
     }
 
 	private void SetUpDepthCamera()
@@ -59,12 +70,14 @@ public class BackFaceDepthBuffer : MonoBehaviour
 
     private void CaptureDepth()
     {
+        /*
         this.mTexture = RenderTexture.GetTemporary(
             Screen.currentResolution.width, Screen.currentResolution.height,
             24, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
+            */
         this.mCamera.targetTexture = this.mTexture;
         this.mCamera.RenderWithShader(this.mShader, "");
         Shader.SetGlobalTexture("_BackFaceDepthBuffer", this.mTexture);
-        RenderTexture.ReleaseTemporary(this.mTexture);
+        //RenderTexture.ReleaseTemporary(this.mTexture);
     }
 }

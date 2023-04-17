@@ -139,8 +139,6 @@ Shader "HSSSS/Human/Skin"
             #pragma multi_compile DIRLIGHTMAP_OFF DIRLIGHTMAP_COMBINED DIRLIGHTMAP_SEPARATE
             #pragma multi_compile DYNAMICLIGHTMAP_OFF DYNAMICLIGHTMAP_ON
 
-            #pragma multi_compile ___ _MICRODETAILS_ON
-
             #pragma vertex aVertexShader
             #pragma fragment aFragmentShader
 

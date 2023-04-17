@@ -296,10 +296,18 @@ void aUpdateBrdfData(inout ASurface s)
     
         #ifdef A_CLEARCOAT_ON
             // Specularity of 0.5 gives us a polyurethane like coating.
+            half FV = aFresnel(s.NdotV);
+            half clearCoatWeight = s.clearCoatWeight * lerp(0.04h, 1.0h, FV);
+            s.albedo *= lerp(1.0h, 0.0h, clearCoatWeight);
+            s.f0 = lerp(s.f0, 1.0h, clearCoatWeight);
+            s.roughness = lerp(s.roughness, s.clearCoatRoughness, clearCoatWeight);
+
+            /*
             half clearCoatWeight = 0.5h * s.clearCoatWeight;
             s.f0 += aSpecularityToF0(clearCoatWeight);
             s.f0 = saturate(s.f0);
             s.roughness = lerp(s.roughness, s.clearCoatRoughness, clearCoatWeight);
+            */
         #endif
 
         #ifdef _ALPHAPREMULTIPLY_ON

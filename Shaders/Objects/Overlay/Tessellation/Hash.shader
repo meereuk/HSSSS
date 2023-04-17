@@ -1,9 +1,9 @@
-Shader "HSSSS/Human/Tessellation/Skin"
+Shader "HSSSS/Overlay/Tessellation/Hash"
 {
     Properties
     {
-        [HideInInspector][Enum(Standard, 0, Null, 1, Cloth, 2, Skin, 3)]
-        _MaterialType("Material Type",Float) = 3
+        [Enum(Standard, 0, Null, 1, Cloth, 2, Skin, 3)]
+        _MaterialType("Material Type",Float) = 0
 
         [Space(8)][Header(Albedo)]
         _MainTex ("Main Texture", 2D) = "white" {}
@@ -27,29 +27,16 @@ Shader "HSSSS/Human/Tessellation/Skin"
         _BumpMap ("BumpMap", 2D) = "bump" {}
         _BumpScale ("BumpScale", Float) = 1
 
-        [Space(8)][Header(BlendNormal)]
-        _BlendNormalMap ("BlendNormalMap", 2D) = "bump" {}
-        _BlendNormalMapScale("BlendNormalMapScale", Float) = 1
-
-        [Space(8)][Header(DetailNormal)]
-        _DetailNormalMap ("DetailNormalMap", 2D) = "bump" {}
-        _DetailNormalMapScale ("DetailNormalMapScale", Float) = 1
-
-        [Space(8)][Header(MicroDetails)]
-        _DetailNormalMap_2 ("DetailNormalMap_2", 2D) = "bump" {}
-        _DetailNormalMapScale_2 ("DetailNormalMapScale_2", Float) = 1
-        _DetailNormalMap_3 ("DetailNormalMap_2", 2D) = "bump" {}
-        _DetailNormalMapScale_3 ("DetailNormalMapScale_2", Float) = 1
-        _DetailSkinPoreMap ("DetailSkinPoreMap", 2D) = "white" {}
-
-        [Space(8)][Header(Transmission)]
-        _Thickness ("ThicknessMap", 2D) = "white" {}
-
         [Space(8)][Header(Tessellation)]
         _DispTex ("HeightMap", 2D) = "black" {}
         _Displacement ("Displacement", Range(0, 30)) = 0.1
         _Phong ("PhongStrength", Range(0, 1)) = 0.5
         _EdgeLength ("EdgeLength", Range(2, 50)) = 2
+
+        [Space(8)][Header(Transparency)]
+        _FuzzBias ("FuzzBias", Range(0, 1)) = 0.0
+        _BlueNoise ("Blue Noise", 2D) = "black" {}
+        _FresnelAlpha ("Fresnel Alpha", Range(0, 1)) = 0
     }
 
     CGINCLUDE
@@ -61,8 +48,8 @@ Shader "HSSSS/Human/Tessellation/Skin"
     {
         Tags
         {
-            "Queue" = "Geometry" 
-            "RenderType" = "Opaque"
+            "Queue" = "AlphaTest" 
+            "RenderType" = "TransparentCutout"
         }
         LOD 400
 
@@ -84,8 +71,9 @@ Shader "HSSSS/Human/Tessellation/Skin"
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_FORWARDBASE
+            #define _ALPHAHASHED_ON
         
-            #include "Assets/HSSSS/Definitions/Skin.cginc"
+            #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
             ENDCG
         }
@@ -111,8 +99,9 @@ Shader "HSSSS/Human/Tessellation/Skin"
             #pragma fragment aFragmentShader
 
             #define UNITY_PASS_FORWARDADD
+            #define _ALPHAHASHED_ON
 
-            #include "Assets/HSSSS/Definitions/Skin.cginc"
+            #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
             ENDCG
         }
@@ -135,7 +124,7 @@ Shader "HSSSS/Human/Tessellation/Skin"
         
             #define UNITY_PASS_SHADOWCASTER
         
-            #include "Assets/HSSSS/Definitions/Skin.cginc"
+            #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/Shadow.cginc"
             ENDCG
         }
@@ -160,8 +149,9 @@ Shader "HSSSS/Human/Tessellation/Skin"
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_DEFERRED
+            #define _ALPHAHASHED_ON
         
-            #include "Assets/HSSSS/Definitions/Skin.cginc"
+            #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/Deferred.cginc"
             ENDCG
         }

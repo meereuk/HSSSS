@@ -18,6 +18,7 @@ public class ScreenSpaceScattering : MonoBehaviour
 	public Texture2D skinJitter;
 	public Texture2D shadowJitter;
 	public Texture2D deepScatterLut;
+	public Texture2D iblSpecularLUT;
 
 	public float rayLength;
 	public float rayRadius;
@@ -46,6 +47,8 @@ public class ScreenSpaceScattering : MonoBehaviour
 		this.SetMaterials();
 		this.SetGlobalParams();
 		this.InitializeBuffers();
+		
+		Shader.SetGlobalTexture("_SpecularLUT", this.iblSpecularLUT);
 	}
 
 	public void Update ()
@@ -113,7 +116,7 @@ public class ScreenSpaceScattering : MonoBehaviour
 		this.blitMaterial = new Material(this.blitShader);
 		this.blurMaterial = new Material(this.blurShader);
 		this.blurMaterial.SetTexture("_SkinJitter", skinJitter);
-		this.blurMaterial.SetVector("_DeferredBlurredNormalsParams", new Vector2(16.0f, 0.0f));
+		this.blurMaterial.SetVector("_DeferredBlurredNormalsParams", new Vector2(4.0f, 0.0f));
 	}
 
 	private void SetGlobalParams()
@@ -131,12 +134,8 @@ public class ScreenSpaceScattering : MonoBehaviour
 		Shader.SetGlobalVector("_DeferredSkinParams", new Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 		Shader.SetGlobalVector("_DeferredTransmissionParams", new Vector4(0.0f, 1.0f, 1.0f, 1.0f));
 
-		Shader.SetGlobalVector("_PointLightPenumbra", new Vector3(1.0f, 1.0f, 0.0f));
+		Shader.SetGlobalVector("_PointLightPenumbra", new Vector3(2.0f, 2.0f, 0.0f));
 		Shader.SetGlobalVector("_SpotLightPenumbra", new Vector3(1.0f, 1.0f, 0.0f));
-		Shader.SetGlobalVector("_DirLightPenumbra", new Vector3(0.0f, 0.0f, 0.0f));
-
-		Shader.SetGlobalFloat("_SSShadowRayLength", 0.04f);
-        Shader.SetGlobalFloat("_SSShadowRayRadius", 0.08f);
-		Shader.SetGlobalFloat("_SSShadowDepthBias", 0.00f);
+		Shader.SetGlobalVector("_DirLightPenumbra", new Vector3(4.0f, 4.0f, 0.0f));
 	}
 }

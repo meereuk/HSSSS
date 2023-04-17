@@ -22,7 +22,6 @@ Shader "Hidden/HSSSS/Deferred Shading"
             CGPROGRAM
             #pragma target 5.0
             #pragma exclude_renderers gles
-            #pragma only_renderers d3d11
             #pragma vertex vert_deferred
             #pragma fragment frag
 
@@ -35,11 +34,7 @@ Shader "Hidden/HSSSS/Deferred Shading"
             #pragma multi_compile ___ _BAKED_THICKNESS
             // soft shadows options
             #pragma multi_compile ___ _PCF_TAPS_8 _PCF_TAPS_16 _PCF_TAPS_32 _PCF_TAPS_64
-            #pragma multi_compile ___ _DIR_PCF_ON
             #pragma multi_compile ___ _PCSS_ON
-            // contact shadow options
-            //#define _RT_SHADOW_HQ
-            
 
             #include "Assets/HSSSS/Lighting/StandardSkin.cginc"
             #include "Assets/HSSSS/Framework/Deferred.cginc"
@@ -109,7 +104,7 @@ Shader "Hidden/HSSSS/Deferred Shading"
 
             CGPROGRAM
             #pragma target 5.0
-            #pragma only_renderers d3d11
+            #pragma exclude_renderers gles
             #pragma vertex vert
             #pragma fragment frag
 

@@ -10,7 +10,7 @@
 
 void aSurface(inout ASurface s)
 {
-    aSampleAlbedo(s);
+    aSampleTwoColorAlbedo(s);
     aSampleDetailAlbedo(s);
     aSampleEmission(s);
     aSampleAlphaClip(s);

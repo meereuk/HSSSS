@@ -76,8 +76,11 @@ half2 UnityDeferredComputeShadow(float3 vec, float viewDepth, float fadeDist, fl
 	// Directional
 	#if defined(DIRECTIONAL) || defined(DIRECTIONAL_COOKIE)
 	#if defined(SHADOWS_SCREEN)
-		float shadow = tex2D(_ShadowMapTexture, uv);
-		return saturate(shadow + fade);
+		half2 shadow = SamplePCFShadowMap(vec, uv, viewDepth, NdotL);
+		shadow.x = saturate(shadow.x + fade);
+		return shadow;
+		//float shadow = tex2D(_ShadowMapTexture, uv);
+		//return saturate(shadow + fade);
 	#endif
 	#endif
 

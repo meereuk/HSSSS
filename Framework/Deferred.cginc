@@ -79,11 +79,7 @@ ADirect aDeferredDirect(ASurface s)
     #if defined(DIRECTIONAL) || defined(DIRECTIONAL_COOKIE)
         // directional shadow
         #if defined(_PCF_ON)
-            #if defined(_DIR_PCF_ON)
-                d.shadow = CustomDirectionalShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);// saturate(dot(s.normalWorld, d.direction)));
-            #else
-                d.shadow = UnityDeferredComputeShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);//saturate(dot(s.normalWorld, d.direction)));
-            #endif
+            d.shadow = UnityDeferredComputeShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
         #else
             d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv);
         #endif
@@ -106,7 +102,7 @@ ADirect aDeferredDirect(ASurface s)
         #if defined (SPOT)
             // spot shadow
             #if defined(_PCF_ON)
-                d.shadow = UnityDeferredComputeShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);//saturate(dot(s.normalWorld, d.direction)));
+                d.shadow = UnityDeferredComputeShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
             #else
                 d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv);
             #endif

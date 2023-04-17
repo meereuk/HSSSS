@@ -46,6 +46,7 @@ half _Cutoff;
 half _Metallic;
 half _Smoothness;
 half _OcclusionStrength;
+half _FresnelAlpha;
 
 half _BumpScale;
 half _BlendNormalMapScale;
@@ -57,16 +58,40 @@ half _DetailNormalMapScale;
     float _FuzzBias;
 #endif
 
+inline float HashFunction2D(float2 uv)
+{
+    return frac(1e4f * sin(dot(float2(17.0f, 0.1f), uv)) * (0.1f +abs(sin(dot(float2(1.0f, 13.0f), uv)))));
+}
+
+inline float HashFunction3D(float3 pos)
+{
+    return HashFunction2D(float2(HashFunction2D(pos.xy), pos.z));
+}
+
+inline float GradientNoise(float uv)
+{
+    return frac(sin(dot(uv, float2(12.9898, 78.2333))) * 43758.5453123);
+}
+
 inline void aSampleAlbedo(inout ASurface s)
 {
     half4 tex = tex2D(_MainTex, s.baseUv);
     s.baseColor = tex.rgb * _Color.rgb;
     s.opacity = tex.a * _Color.a;
-    /*
-    half cm = tex2D(_ColorMask, A_TRANSFORM_UV_SCROLL(s, _ColorMask)).g;
-    s.baseColor = lerp(_Color.rgb, _Color_3.rgb, cm) * tex.rgb;
-    s.opacity = lerp(_Color.a, _Color_3.a, cm) * tex.a;
-    */
+}
+
+inline void aSampleTwoColorAlbedo(inout ASurface s)
+{
+    half4 tex = tex2D(_MainTex, s.baseUv);
+    half mask = tex2D(_ColorMask, A_TRANSFORM_UV_SCROLL(s, _ColorMask)).g;
+    s.baseColor = lerp(_Color.rgb, _Color_3.rgb, mask) * tex.rgb;
+    s.opacity = lerp(_Color.a, _Color_3.a, mask) * tex.a;
+}
+
+inline void aSampleFresnelAlpha(inout ASurface s)
+{
+    half NdotV = saturate(dot(s.normalWorld, s.viewDirWorld));
+    s.opacity = lerp(s.opacity, 1.0h, _FresnelAlpha * pow(1.0h - NdotV, 2));
 }
 
 inline void aSampleDetailAlbedo(inout ASurface s)
@@ -92,9 +117,8 @@ inline void aSampleAlphaClip(inout ASurface s)
 
     // alpha hashed
     #if defined(_ALPHAHASHED_ON)
-        half hash = tex2Dlod(_BlueNoise, 
-        float4(s.screenUv * _ScreenParams.xy * _BlueNoise_TexelSize.xy + _FuzzBias * _Time.yy, 0.0f, 2.0f * s.viewDepth));
-        clip(s.opacity - hash - _Cutoff);
+        half hash = tex2D(_BlueNoise, s.screenUv.xy * _ScreenParams.xy * _BlueNoise_TexelSize.xy + _FuzzBias * _Time.yy + mad(frac(s.viewDepth), 0.5h, 0.5h));
+        clip(s.opacity - hash);
     #endif
 }
 
@@ -108,12 +132,15 @@ inline void aSampleSpecGloss(inout ASurface s)
         s.specularColor = _SpecColor.rgb * tex.rgb * _Metallic;
         s.roughness = 1.0h - tex.a * _Smoothness;
     #elif defined(_SKINSPECULAR_ON)
+        half gloss = aLuminance(tex.rgb);
         s.metallic = 0.0h;
-        s.specularity = aLuminance(_SpecColor.rgb * tex.rgb);
-        s.roughness = 1.0h - lerp(_Metallic, 1.0h, aLuminance(tex.rgb * _Smoothness));
+        s.specularity = gloss * _SpecColor.r;
+        s.roughness = 1.0h - lerp(_Metallic, _Smoothness, gloss);
+        s.clearCoatWeight = gloss * _SpecColor.g;
+        s.baseColor = s.baseColor * lerp(1.0h, saturate(_SpecColor.b + 0.6h), gloss); 
     #else
-        s.metallic = _Metallic;
-        s.specularity = aLuminance(_SpecColor.rgb * tex.rgb);
+        s.metallic = _Metallic * aLuminance(tex.rgb);
+        s.specularity = aLuminance(_SpecColor.rgb);
         s.roughness = 1.0h - tex.a * _Smoothness;
     #endif
 }

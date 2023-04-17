@@ -9,7 +9,10 @@ public class ScreenSpaceRaytracing : MonoBehaviour
     public Camera mCamera;
     public Shader mShader;
 
+    public Texture2D CheckerBoard;
+
     private Material mMaterial;
+
     private Matrix4x4 WorldToViewMatrix;
     private Matrix4x4 ViewToWorldMatrix;
     private Matrix4x4 ViewToClipMatrix;
@@ -22,22 +25,24 @@ public class ScreenSpaceRaytracing : MonoBehaviour
 
 
 
-    private CommandBuffer mBuffer;
+    private CommandBuffer aoBuffer;
+    private CommandBuffer giBuffer;
 
-    private RenderTexture giBuffer;
-    private RenderTexture aoBuffer;
+    private RenderTexture giRenderTexture;
+    private RenderTexture aoRenderTexture;
 
     public void OnEnable()
     {
         this.mCamera = GetComponent<Camera>();
-        this.mShader = Shader.Find("Hidden/HSSSS/ScreenSpacePathTracing");
+        this.mShader = Shader.Find("Hidden/HSSSS/AmbientOcclusion");
         this.mMaterial = new Material(this.mShader);
+        this.mMaterial.SetTexture("_ShadowJitterTexture", this.CheckerBoard);
 
-        this.giBuffer = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
-        this.aoBuffer = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.giRenderTexture = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.aoRenderTexture = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.RHalf, RenderTextureReadWrite.Linear);
 
-        giBuffer.Create();
-        aoBuffer.Create();
+        giRenderTexture.Create();
+        aoRenderTexture.Create();
     }
     
     public void OnDisable()
@@ -75,16 +80,15 @@ public class ScreenSpaceRaytracing : MonoBehaviour
         this.mMaterial.SetMatrix("_PrevViewToClipMatrix", this.PrevViewToClipMatrix);
         this.mMaterial.SetMatrix("_PrevClipToViewMatrix", this.PrevClipToViewMatrix);
 
-        this.mMaterial.SetFloat("_SSAODepthFade", 10.0f);
-        this.mMaterial.SetFloat("_SSAODepthBias", 0.1f);
-        this.mMaterial.SetFloat("_SSAOMixFactor", 0.5f);
+        this.mMaterial.SetFloat("_SSAOFadeDepth", 100.0f);
+        this.mMaterial.SetFloat("_SSAOMeanDepth", 0.2f);
+        this.mMaterial.SetFloat("_SSAOBiasAngle", 0.0f);
+        this.mMaterial.SetFloat("_SSAOMixFactor", 0.0f);
         this.mMaterial.SetFloat("_SSAORayLength", 4.0f);
-        this.mMaterial.SetFloat("_SSAOIndirectP", 1.0f);
+        this.mMaterial.SetFloat("_SSAOIntensity", 1.0f); 
+        this.mMaterial.SetInt("_SSAOStepPower", 1);
 
-        this.mMaterial.SetTexture("_SSGITemporalGIBuffer", this.giBuffer);
-        this.mMaterial.SetTexture("_SSGITemporalAOBuffer", this.aoBuffer);
-
-        Shader.SetGlobalTexture("_SSGITemporalAOBuffer", this.aoBuffer);
+        this.mMaterial.SetTexture("_SSGITemporalAOBuffer", this.aoRenderTexture);
     }
 
     private void SetupCommandBuffer()
@@ -93,45 +97,61 @@ public class ScreenSpaceRaytracing : MonoBehaviour
 
         int flipRT = Shader.PropertyToID("_SSAOTemporalFlipTexture");
         int flopRT = Shader.PropertyToID("_SSAOTemporalFlopTexture");
-        RenderTargetIdentifier tempAO = new RenderTargetIdentifier(this.aoBuffer);
-        RenderTargetIdentifier tempGI = new RenderTargetIdentifier(this.giBuffer);
+        RenderTargetIdentifier tempAO = new RenderTargetIdentifier(this.aoRenderTexture);
 
-        this.mBuffer = new CommandBuffer() { name = "HSSSS.SSAO" };
-        this.mBuffer.GetTemporaryRT(flipRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
-        this.mBuffer.GetTemporaryRT(flopRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.aoBuffer = new CommandBuffer() { name = "HSSSS.SSAO" };
+        this.aoBuffer.GetTemporaryRT(flipRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(flopRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
 
-        this.mBuffer.Blit(BuiltinRenderTextureType.CurrentActive, flipRT, this.mMaterial, 2);
-        // temporal filter
-        this.mBuffer.Blit(flipRT, flopRT, this.mMaterial, 4);
-        this.mBuffer.Blit(flopRT, tempAO);
-        this.mBuffer.Blit(flopRT, flipRT, this.mMaterial, 6);
-        this.mBuffer.Blit(flipRT, BuiltinRenderTextureType.CameraTarget);
-        // apply
+        this.aoBuffer.Blit(BuiltinRenderTextureType.CurrentActive, flipRT, this.mMaterial, 7);
+        // spatio filtering
         /*
-        this.mBuffer.Blit(flopRT, flipRT, this.mMaterial, 2);
-        this.mBuffer.Blit(flipRT, BuiltinRenderTextureType.GBuffer0);
-        this.mBuffer.Blit(flopRT, flipRT, this.mMaterial, 3);
-        this.mBuffer.Blit(flipRT, BuiltinRenderTextureType.CameraTarget);
+        this.aoBuffer.Blit(flipRT, flopRT, this.mMaterial, 10);
+        this.aoBuffer.Blit(flopRT, flipRT, this.mMaterial, 11);
+        this.aoBuffer.Blit(flipRT, flopRT, this.mMaterial, 10);
+        this.aoBuffer.Blit(flopRT, flipRT, this.mMaterial, 11);
         */
+        // temporal filtering
+        this.aoBuffer.Blit(flipRT, tempAO);
+        // apply
+        this.aoBuffer.Blit(tempAO, flopRT, this.mMaterial, 8);
+        this.aoBuffer.Blit(flopRT, BuiltinRenderTextureType.GBuffer0);
 
-        this.mBuffer.ReleaseTemporaryRT(flipRT);
-        this.mBuffer.ReleaseTemporaryRT(flopRT);
+        this.aoBuffer.Blit(tempAO, flopRT, this.mMaterial, 9);
+        this.aoBuffer.Blit(flopRT, BuiltinRenderTextureType.CameraTarget);
+        // apply
 
-        this.mCamera.AddCommandBuffer(CameraEvent.BeforeImageEffects, this.mBuffer);
+        this.aoBuffer.ReleaseTemporaryRT(flipRT);
+        this.aoBuffer.ReleaseTemporaryRT(flopRT);
+
+        this.mCamera.AddCommandBuffer(CameraEvent.BeforeReflections, this.aoBuffer);
+
+        this.giBuffer = new CommandBuffer() { name = "HSSSS.SSGI" };
+
+        int fuckRT = Shader.PropertyToID("_IdOnTgIvEaFuCk");
+
+        this.giBuffer.GetTemporaryRT(fuckRT, -1, -1, 24, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+
+        this.giBuffer.Blit(BuiltinRenderTextureType.CurrentActive, fuckRT, this.mMaterial, 12);
+        this.giBuffer.Blit(fuckRT, BuiltinRenderTextureType.CameraTarget);
+
+        this.mCamera.AddCommandBuffer(CameraEvent.AfterEverything, this.giBuffer);
     }
 
     private void RemoveCommandBuffer()
     {
-        this.mCamera.RemoveCommandBuffer(CameraEvent.BeforeImageEffects, this.mBuffer);
-        this.mBuffer = null;
+        this.mCamera.RemoveCommandBuffer(CameraEvent.BeforeReflections, this.aoBuffer);
+        this.mCamera.RemoveCommandBuffer(CameraEvent.AfterEverything, this.giBuffer);
+        this.aoBuffer = null;
+        this.giBuffer = null;
     }
 
     private void ClearTemporalTexture()
     {
         RenderTexture rt = RenderTexture.active;
-        RenderTexture.active = this.aoBuffer;
+        RenderTexture.active = this.aoRenderTexture;
         GL.Clear(true, true, Color.clear);
-        RenderTexture.active = this.giBuffer;
+        RenderTexture.active = this.giRenderTexture;
         GL.Clear(true, true, Color.clear);
         RenderTexture.active = rt;
     }

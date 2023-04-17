@@ -29,6 +29,9 @@ Shader "HSSSS/Overlay/Tessellation/Forward"
         _Displacement ("Displacement", Range(0, 30)) = 0.1
         _Phong ("PhongStrength", Range(0, 1)) = 0.5
         _EdgeLength ("EdgeLength", Range(2, 50)) = 2
+
+        [Space(8)][Header(Transparency)]
+        _FresnelAlpha ("Fresnel Alpha", Range(0, 1)) = 0
     }
 
     CGINCLUDE

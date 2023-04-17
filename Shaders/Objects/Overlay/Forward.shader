@@ -23,6 +23,9 @@ Shader "HSSSS/Overlay/Forward"
         [Space(8)][Header(Normal)]
         _BumpMap ("BumpMap", 2D) = "bump" {}
         _BumpScale ("BumpScale", Float) = 1
+
+        [Space(8)][Header(Transparency)]
+        _FresnelAlpha ("Fresnel Alpha", Range(0, 1)) = 0
     }
 
     CGINCLUDE
