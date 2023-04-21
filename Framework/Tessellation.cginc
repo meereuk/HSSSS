@@ -48,6 +48,7 @@
 
     #if defined(_VERTEXWRAP_ON)
         sampler2D _CameraDepthTexture;
+        float _VertexWrapOffset;
     #endif
 
     // NOTE: Forward-declared here so we can share Domain shader.
@@ -192,9 +193,9 @@
 
         float offset = 0.0f;
 
-        for (int iter = 1; iter < 32; iter ++)
+        for (int iter = 1; iter < 16; iter ++)
         {
-            float rayDist = 0.0002f * iter;
+            float rayDist = 0.0004f * iter;
 
             objCoord.z = v.vertex.z - rayDist;
             camCoord = mul(UNITY_MATRIX_MVP, objCoord);
@@ -207,7 +208,7 @@
             offset = refDepth > vtxDepth ? rayDist : offset;
         }
 
-        v.vertex.z -= offset * 0.9f;
+        v.vertex.z -= offset * saturate(1.0h - _VertexWrapOffset);
     #endif
     
     // NOTE: This has to come second, since the Phong mode references the 

@@ -93,12 +93,7 @@ Shader "Hidden/HSSSS/Deferred Reflections"
 
             half4 frag (v2f i) : SV_Target
             {
-			    half4 c = tex2D (_CameraReflectionsTexture, i.uv);
-			    #ifdef UNITY_HDR_ON
-			        return float4(c.rgb, 0.0f);
-			    #else
-			        return float4(exp2(-c.rgb), 0.0f);
-			    #endif
+                return 0.0h;
             }
             ENDCG
         }

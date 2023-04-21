@@ -19,6 +19,9 @@
 	uniform float4 _ShadowMapTexture_TexelSize;
 #endif
 
+uniform sampler2D _SSGITemporalAOBuffer;
+uniform int _SSGIDirectOcclusion;
+
 // random number generator
 inline float GradientNoise(float2 uv)
 {
@@ -87,15 +90,6 @@ inline float3 GetShadowCoordinate(float3 vec, uint cascade)
 #if defined(SHADOWS_CUBE) || defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
 inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half NdotL)
 {
-	// world space light direction
-	#if defined(SHADOWS_CUBE)
-		float3 lightDir = -vec;
-	#elif defined(SHADOWS_DEPTH)
-		float3 lightDir = normalize(_WorldSpaceLightPos0.xyz - vec);
-	#elif defined(SHADOWS_SCREEN)
-		float3 lightDir = -normalize(_WorldSpaceLightPos0.xyz);
-	#endif
-
 	// initialize shadow coordinate and depth
 	#if defined(SHADOWS_CUBE)
 		float pixelDepth = length(vec) * _LightPositionRange.w;
@@ -125,14 +119,14 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 	#elif defined(SHADOWS_DEPTH)
 		float depthScale = 1.0f;// / _LightPositionRange.w;
 	#elif defined(SHADOWS_SCREEN)
-		float depthScale = 1.0f / abs(pixelDepth.x - GetShadowCoordinate(vec + lightDir, cascade.x).z);
+		float depthScale = 1.0f / abs(pixelDepth.x - GetShadowCoordinate(vec - _LightDir.xyz, cascade.x).z);
 	#endif
 
 	// slope-based bias
 	#if defined(SHADOWS_CUBE)
 		pixelDepth = pixelDepth * lerp(0.990f, 1.0f, NdotL) - lerp(0.001f, 0.0f, NdotL) / depthScale;
 	#elif defined(SHADOWS_DEPTH)
-		pixelDepth = GetShadowCoordinate(vec + lerp(0.002f * lightDir, 0.0f, NdotL), cascade.x).z;
+		pixelDepth = GetShadowCoordinate(vec + lerp(-0.001f * _LightDir.xyz, 0.0f, NdotL), cascade.x).z;
 	#elif defined(SHADOWS_SCREEN)
 		pixelDepth = pixelDepth - lerp(0.001f, 0.0f, NdotL) / depthScale;
 	#endif
@@ -144,7 +138,13 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 	float3 disk[PCF_NUM_TAPS];
 
 	// gram-schmidt process
-	float3x3 tbn = GramSchmidtMatrix(uv, lightDir);
+	#if defined(SHADOWS_CUBE)
+		float3x3 tbn = GramSchmidtMatrix(uv, normalize(vec));
+	#elif defined(SHADOWS_DEPTH)
+		float3x3 tbn = GramSchmidtMatrix(uv, _LightDir.xyz);
+	#elif defined(SHADOWS_SCREEN)
+		float3x3 tbn = GramSchmidtMatrix(uv, _LightDir.xyz);
+	#endif
 
 	///////////////////////////////////
 	// percentage-closer soft shadow //
@@ -219,21 +219,46 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 		#endif
 	}
 
-	shadow.r = lerp(shadow.r / PCF_NUM_TAPS, 1.0f, _LightShadowData.r);
+	shadow.r = shadow.r / PCF_NUM_TAPS;
 
-	// screen space contact shadow
-	//SampleScreenSpaceShadow(uv, shadow);
+	/*
+	if (_SSGIDirectOcclusion == 1)
+	{
+		// Screen Space Direct Occlusion
+		half4 ao = tex2D(_SSGITemporalAOBuffer, uv);
+		ao.xyz = normalize(mad(ao.xyz, 2.0h, -1.0h));
 
-	/* Screen Space Direct Occlusion
-	half4 bentNormal = tex2D(_SSGITemporalAOBuffer, uv);
-	bentNormal.rgb = normalize(mad(bentNormal.rgb, 2.0h, - 1.0h));
-	half threshold = cos(bentNormal.a * 0.5h * UNITY_PI);
-	half bentNdotL = saturate(dot(lightDir, bentNormal.rgb));
-	half contactShadow = smoothstep(max(threshold - 0.4h, 0.0h), min(threshold + 0.4h, 1.0h), bentNdotL);
-	contactShadow = lerp(contactShadow, 1.0f, _LightShadowData.r);
-	shadow.r = min(shadow.r, contactShadow);
+		half4 angle;
+
+		// incident light appature
+		#if defined(SHADOWS_CUBE)
+			angle.x = atan(_PointLightPenumbra.y * sqrt(_LightPos.w));
+		#elif defined(SHADOWS_DEPTH)
+			angle.x = atan(_SpotLightPenumbra.y * sqrt(_LightPos.w));
+		#elif defined(SHADOWS_SCREEN)
+			angle.x = atan(0.1h * _DirLightPenumbra.y);
+		#endif
+		// occlusion apature
+		angle.y = acos(sqrt(1.0h - ao.w));
+		// absolute angle difference
+		angle.z = abs(angle.x - angle.y);
+		// angle between bentnormal and light vector
+		#if defined(SHADOWS_CUBE)
+			angle.w = acos(dot(ao.xyz, normalize(-vec)));
+		#elif defined(SHADOWS_DEPTH)
+			angle.w = acos(dot(ao.xyz, -_LightDir.xyz));
+		#elif defined(SHADOWS_SCREEN)
+			angle.w = acos(dot(ao.xyz, -_LightDir.xyz));
+		#endif
+
+		half intersection = smoothstep(0.0h, 1.0h, 1.0h - saturate((angle.w - angle.z) / (angle.x + angle.y - angle.z)));
+		half occlusion = lerp(0.0h, intersection, saturate((angle.y - 0.1h) * 5.0h));
+
+		shadow.r = min(shadow.r, occlusion);
+	}
 	*/
 
+	shadow.r = lerp(shadow.r, 1.0h, _LightShadowData.r);
 	return shadow;
 }
 #endif

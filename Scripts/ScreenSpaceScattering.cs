@@ -18,15 +18,6 @@ public class ScreenSpaceScattering : MonoBehaviour
 	public Texture2D skinJitter;
 	public Texture2D shadowJitter;
 	public Texture2D deepScatterLut;
-	public Texture2D iblSpecularLUT;
-
-	public float rayLength;
-	public float rayRadius;
-	public float depthBias;
-
-	public void Awake()
-	{
-	}
 
 	public void OnEnable()
     {
@@ -47,16 +38,7 @@ public class ScreenSpaceScattering : MonoBehaviour
 		this.SetMaterials();
 		this.SetGlobalParams();
 		this.InitializeBuffers();
-		
-		Shader.SetGlobalTexture("_SpecularLUT", this.iblSpecularLUT);
 	}
-
-	public void Update ()
-	{
-        Shader.SetGlobalFloat("_SSShadowRayLength", this.rayLength);
-        Shader.SetGlobalFloat("_SSShadowRayRadius", this.rayRadius);
-        Shader.SetGlobalFloat("_SSShadowDepthBias", this.depthBias);
-    }
 
 	private void InitializeBuffers()
     {
@@ -75,17 +57,16 @@ public class ScreenSpaceScattering : MonoBehaviour
 		this.nBuffer.Blit(ambiRT, BuiltinRenderTextureType.CameraTarget);
 		this.nBuffer.ReleaseTemporaryRT(flipRT);
 		this.nBuffer.ReleaseTemporaryRT(flopRT);
-		this.mCamera.AddCommandBuffer(CameraEvent.AfterGBuffer, this.nBuffer);
+		this.mCamera.AddCommandBuffer(CameraEvent.BeforeLighting, this.nBuffer);
 
 		// separable blur buffer
-
 		this.mBuffer = new CommandBuffer() { name = "SeparableBlur" };
 
 		this.mBuffer.GetTemporaryRT(flipRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
 		this.mBuffer.GetTemporaryRT(flopRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
 
 		// subtract ambient specular
-		this.mBuffer.Blit(null, flipRT, this.blurMaterial, 0);
+		this.mBuffer.Blit(BuiltinRenderTextureType.CurrentActive, flipRT);
 
 		// separable blur
 		for (int iter = 0; iter < 2; iter ++)
@@ -135,7 +116,7 @@ public class ScreenSpaceScattering : MonoBehaviour
 		Shader.SetGlobalVector("_DeferredTransmissionParams", new Vector4(0.0f, 1.0f, 1.0f, 1.0f));
 
 		Shader.SetGlobalVector("_PointLightPenumbra", new Vector3(2.0f, 2.0f, 0.0f));
-		Shader.SetGlobalVector("_SpotLightPenumbra", new Vector3(1.0f, 1.0f, 0.0f));
-		Shader.SetGlobalVector("_DirLightPenumbra", new Vector3(4.0f, 4.0f, 0.0f));
+		Shader.SetGlobalVector("_SpotLightPenumbra", new Vector3(4.0f, 4.0f, 0.0f));
+		Shader.SetGlobalVector("_DirLightPenumbra", new Vector3(8.0f, 8.0f, 0.0f));
 	}
 }

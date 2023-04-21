@@ -73,6 +73,23 @@ Shader "Hidden/HSSSS/TemporalBlend"
             #pragma target 3.0
             #pragma vertex vert_img
             #pragma fragment frag_img
+
+            float2 frag_img(v2f_img IN) : SV_TARGET
+            {
+                float2 zHist = tex2D(_CameraDepthHistory, IN.uv);
+                zHist.x = zHist.y;
+                zHist.y = Linear01Depth(tex2D(_CameraDepthTexture, IN.uv));
+                return zHist;
+            }
+            ENDCG
+        }
+
+        Pass
+        {
+            CGPROGRAM
+            #pragma target 3.0
+            #pragma vertex vert_img
+            #pragma fragment frag_img
             
             half4 frag_img(v2f_img IN) : SV_TARGET
             {

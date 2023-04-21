@@ -40,7 +40,7 @@ Shader "Hidden/HSSSS/Deferred Shading"
             #include "Assets/HSSSS/Framework/Deferred.cginc"
 
             half4 CalculateLight (unity_v2f_deferred i)
-            {    
+            {
                 ASurface s = aDeferredSurface(i);
                 ADirect d = aDeferredDirect(s);
 

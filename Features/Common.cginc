@@ -58,6 +58,7 @@ half _DetailNormalMapScale;
     float _FuzzBias;
 #endif
 
+/*
 inline float HashFunction2D(float2 uv)
 {
     return frac(1e4f * sin(dot(float2(17.0f, 0.1f), uv)) * (0.1f +abs(sin(dot(float2(1.0f, 13.0f), uv)))));
@@ -71,6 +72,14 @@ inline float HashFunction3D(float3 pos)
 inline float GradientNoise(float uv)
 {
     return frac(sin(dot(uv, float2(12.9898, 78.2333))) * 43758.5453123);
+}
+*/
+
+inline float HashNoise(float3 pos)
+{
+    float3 hash = frac(pos * 0.1031f);
+    hash += dot(hash, hash.zyx + 31.32f);
+    return frac((hash.x + hash.y) * hash.z);
 }
 
 inline void aSampleAlbedo(inout ASurface s)
@@ -118,7 +127,8 @@ inline void aSampleAlphaClip(inout ASurface s)
     // alpha hashed
     #if defined(_ALPHAHASHED_ON)
         half hash = tex2D(_BlueNoise, s.screenUv.xy * _ScreenParams.xy * _BlueNoise_TexelSize.xy + _FuzzBias * _Time.yy + mad(frac(s.viewDepth), 0.5h, 0.5h));
-        clip(s.opacity - hash);
+        //float hash = HashNoise(s.positionWorld * 100.0f + _Time.xxx);
+        clip(s.opacity - hash - _Cutoff);
     #endif
 }
 

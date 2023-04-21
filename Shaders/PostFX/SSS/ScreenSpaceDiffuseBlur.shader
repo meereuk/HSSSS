@@ -107,7 +107,7 @@
                 if (gbuffer2.a == 0.0h)
                 {
                     half4 result = tex2D(_MainTex, IN.uv);
-                    half3 lightColor = max(0.0h, (gbuffer3.rgb - ambientDiffuse.rgb - ambientSpecular.rgb + 0.0001h) / (gbuffer0.rgb + 0.0001h));
+                    half3 lightColor = max(0.0h, (gbuffer3.rgb - ambientDiffuse.rgb + 0.0001h) / (gbuffer0.rgb + 0.0001h));
                     half luminance = aLuminance(lightColor);
 
                     lightColor = luminance > 0.0h ? lightColor / luminance : 1.0h;
@@ -118,7 +118,7 @@
 
                 else
                 {
-                    return gbuffer3;
+                    return gbuffer3 + ambientSpecular;
                 }
             }
             ENDCG

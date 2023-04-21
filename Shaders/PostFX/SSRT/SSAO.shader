@@ -6,7 +6,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
     }
 
     CGINCLUDE
-    #pragma target 3.0
+    #pragma target 5.0
     #pragma exclude_renderers gles
     #pragma vertex vert_img
     ENDCG
@@ -22,7 +22,6 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
         {
             CGPROGRAM
             #pragma fragment IndirectOcclusion
-            #define _SSAONumSample 4
             #define _SSAONumStride 4
             #include "SSAO.cginc"
             ENDCG
@@ -33,7 +32,6 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
         {
             CGPROGRAM
             #pragma fragment IndirectOcclusion
-            #define _SSAONumSample 4
             #define _SSAONumStride 8
             #include "SSAO.cginc"
             ENDCG
@@ -44,7 +42,6 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
         {
             CGPROGRAM
             #pragma fragment IndirectOcclusion
-            #define _SSAONumSample 4
             #define _SSAONumStride 12
             #include "SSAO.cginc"
             ENDCG
@@ -55,7 +52,6 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
         {
             CGPROGRAM
             #pragma fragment IndirectOcclusion
-            #define _SSAONumSample 4
             #define _SSAONumStride 16
             #include "SSAO.cginc"
             ENDCG
@@ -67,7 +63,6 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             CGPROGRAM
             #pragma fragment IndirectOcclusion
             #define _VISBILITY_GTAO
-            #define _SSAONumSample 4
             #define _SSAONumStride 4
             #include "SSAO.cginc"
             ENDCG
@@ -79,7 +74,6 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             CGPROGRAM
             #pragma fragment IndirectOcclusion
             #define _VISIBILITY_GTAO
-            #define _SSAONumSample 4
             #define _SSAONumStride 8
             #include "SSAO.cginc"
             ENDCG
@@ -91,7 +85,6 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             CGPROGRAM
             #pragma fragment IndirectOcclusion
             #define _VISIBILITY_GTAO
-            #define _SSAONumSample 4
             #define _SSAONumStride 12
             #include "SSAO.cginc"
             ENDCG
@@ -103,13 +96,41 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             CGPROGRAM
             #pragma fragment IndirectOcclusion
             #define _VISIBILITY_GTAO
-            #define _SSAONumSample 4
             #define _SSAONumStride 16
             #include "SSAO.cginc"
             ENDCG
         }
 
-        // pass 8 : ao to GBuffer 0 (for specular)
+        // pass 8 : temporal filtering
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment DeinterleaveAO
+            #include "SSAO.cginc"
+            ENDCG
+        }
+
+        // pass 9 : bilateral blur in x
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment BilateralBlur
+            #define KERNEL_STEP 1
+            #include "SSAO.cginc"
+            ENDCG
+        }
+
+        // pass 10 : bilateral blur in y
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment BilateralBlur
+            #define KERNEL_STEP 2
+            #include "SSAO.cginc"
+            ENDCG
+        }
+
+        // pass 11 : ao to GBuffer 0
         Pass
         {
             CGPROGRAM
@@ -118,7 +139,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 9 : ao to GBuffer 3 (for ambient diffuse)
+        // pass 12 : ao to GBuffer 3
         Pass
         {
             CGPROGRAM
@@ -127,36 +148,30 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 10 : bilateral blur in x
+        // pass 13 : specular occlusion
         Pass
         {
             CGPROGRAM
-            #pragma fragment BilateralBlur
-            #define _BLUR_DIR_X
+            #pragma fragment ApplySpecularOcclusion
             #include "SSAO.cginc"
             ENDCG
         }
 
-        // pass 11 : bilateral blur in y
+        // pass 14 : debug
         Pass
         {
             CGPROGRAM
-            #pragma fragment BilateralBlur
-            #define _BLUR_DIR_Y
+            #pragma fragment DebugAO
             #include "SSAO.cginc"
             ENDCG
         }
 
-        // pass 12 : debug
+        // pass 15 : blit depth
         Pass
         {
             CGPROGRAM
-            #pragma fragment frag
+            #pragma fragment BlitDepth
             #include "SSAO.cginc"
-            half4 frag(v2f_img IN) : SV_TARGET
-            {
-                return tex2D(_SSGITemporalAOBuffer, IN.uv).r;
-            }
             ENDCG
         }
     }

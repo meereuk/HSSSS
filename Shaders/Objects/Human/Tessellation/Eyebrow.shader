@@ -29,6 +29,7 @@ Shader "HSSSS/Human/Tessellation/Eyebrow"
         _Displacement ("Displacement", Range(0, 30)) = 0.1
         _Phong ("PhongStrength", Range(0, 1)) = 0.5
         _EdgeLength ("EdgeLength", Range(2, 50)) = 2
+        _VertexWrapOffset ("VertexWrapOffset", Range(0, 1)) = 0.1
     }
 
     CGINCLUDE

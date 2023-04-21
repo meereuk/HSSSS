@@ -77,6 +77,7 @@
         }
         ENDCG
         
+        // blur #1
         Pass
         {
             CGPROGRAM
@@ -91,6 +92,7 @@
             ENDCG
         }
         
+        // blur #2
         Pass{
             CGPROGRAM
             #pragma vertex vert_img
