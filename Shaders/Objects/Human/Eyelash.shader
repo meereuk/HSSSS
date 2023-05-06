@@ -16,7 +16,7 @@ Shader "HSSSS/Human/Eyelash"
         Tags
         {
             "Queue" = "AlphaTest"
-            "RenderType" = "Opaque"
+            "RenderType" = "Transparent"
             "IgnoreProjector" = "True"
             "ForceNoShadowCasting" = "True"
         }

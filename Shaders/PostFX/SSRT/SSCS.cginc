@@ -7,6 +7,16 @@
     #define _SSCSNumStride 16
 #endif
 
+struct ray
+{
+    float2 org;
+    float2 fwd;
+    float2 bwd;
+    float len;
+    float z;
+    float r;
+};
+
 half3 _LightPosition;
 half _SSCSRayLength;
 half _SSCSRayRadius;

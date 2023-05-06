@@ -12,21 +12,37 @@ uniform half _SSAOMixFactor;
 uniform uint _SSAOStepPower;
 uniform uint _SSAOBlockSize;
 
-#define _SSAONumSample 6
+#define _SSAONumSample 4
 
 #ifndef _SSAONumStride
     #define _SSAONumStride 4
 #endif
 
+#ifndef KERNEL_STEP
+    #define KERNEL_STEP 1
+#endif
+
+struct ray
+{
+    float2 org;
+    float2 fwd;
+    float2 bwd;
+    float len;
+    float z;
+    float r;
+};
+
 inline float2 HorizonTrace(ray ray)
 {
     uint power = max(1, _SSAOStepPower);
-    float2 theta = -10.0f;
+    float minStr = length(_ScreenParams.zw - 1.0f) / length(ray.fwd - ray.org);
+    float2 theta = -1.0f;
 
     [unroll]
-    for (uint iter = 1; iter <= _SSAONumStride; iter ++)
+    for (float iter = 1.0f; iter <= _SSAONumStride && iter * minStr <= 1.0f; iter += 1.0f)
     {
-        float str = pow((float) iter / _SSAONumStride, power);
+        float str = iter / _SSAONumStride;
+        str = max(iter * minStr, pow(str, power));
 
         float4 uv = {
             lerp(ray.org, ray.fwd, str),
@@ -38,17 +54,21 @@ inline float2 HorizonTrace(ray ray)
             LinearEyeDepth(SampleZBuffer(uv.zw))
         };
 
-        float threshold = ray.len * FastSqrt(1.0f - str * str);
-        float2 dz = ray.z - z.xy;
-        //dz = min(threshold, dz) * step(dz, ray.r * _SSAOMeanDepth);
+        float2 threshold = ray.len * FastSqrt(1.0f - str * str);
+        float2 dz = (ray.z - z.xy);
 
-        dz = min(threshold, dz) * step(dz, ray.r * _SSAOMeanDepth);
+        dz = min(threshold, dz) * step(dz, _SSAOMeanDepth * ray.r);
         dz /= abs(str * ray.len);
 
         theta = max(theta, dz);
     }
 
     return FastArcTan(theta);
+}
+
+inline float ZBufferPrePass(v2f_img IN) : SV_TARGET
+{
+    return LinearEyeDepth(SampleZBuffer(IN.uv));
 }
 
 inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
@@ -72,34 +92,43 @@ inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
 
     if (depth < _SSAOFadeDepth)
     {
-        // ao
-        float slice = FULL_PI / _SSAONumSample;
-        float angle = FastArcCos(dot(vnrm, vdir));
-
         ray ray;
 
-        uint block = max(1, _SSAOBlockSize);
-        
-        float2 suv = trunc(IN.uv * _MainTex_TexelSize.zw / block) * _MainTex_TexelSize.xy * block;
+        half mask = SampleAO(IN.uv).w;
+        uint split = 1;
+
+        split = mask > 0.500h ? 2 : split;
+        split = mask > 0.750h ? 4 : split;
+        split = mask > 0.875h ? 8 : split;
+
+        float2 uv = GetStochasticUV(IN.uv, _MainTex_TexelSize, split);
 
         ray.z = depth;
         ray.org = IN.uv;
-        ray.len = mad(GradientNoise(suv * 1.1f), 0.4f, 0.8f) * _SSAORayLength;
-        ray.r = mad(GradientNoise(suv * 1.6f), 0.4h, 0.8h);
+        ray.len = _SSAORayLength * mad(GradientNoise(uv * 1.6f), 0.8f, 0.6f);
+        ray.r = mad(GradientNoise(uv * 1.6f), 0.4f, 0.8f);
 
-        float offset = GradientNoise(suv * 2.1f);
+        float slice = FULL_PI / _SSAONumSample;
+        float angle = FastArcCos(dot(vnrm, vdir));
+
+        float offset = GradientNoise(uv * 2.1f);
 
         for (float iter = 0.5f; iter < _SSAONumSample; iter += 1.0f)
         {
             float4 dir = 0.0h;
-            sincos((iter + offset) * slice, dir.y, dir.x);
+            sincos((iter - offset) * slice, dir.y, dir.x);
             dir.xyz = normalize(dir.xyz - vdir * dot(dir.xyz, vdir));
             
             float4 spos = mul(unity_CameraProjection, mad(dir, ray.len, vpos));
-
             ray.fwd = spos.xy / spos.w * 0.5h + 0.5h;
             ray.bwd = mad(ray.org, 2.0f, -ray.fwd);
+/*
+            ray.len.x *= distance(clamp(ray.fwd, 0.0f, 1.0f), ray.org) / distance(ray.fwd, ray.org);
+            ray.len.y *= distance(clamp(ray.bwd, 0.0f, 1.0f), ray.org) / distance(ray.bwd, ray.org);
 
+            ray.fwd = clamp(ray.fwd, 0.0f, 1.0f);
+            ray.bwd = clamp(ray.bwd, 0.0f, 1.0f);
+*/
             float gamma = sign(dot(vnrm, dir.xyz)) * angle;
             float2 theta = HorizonTrace(ray);
 
@@ -108,6 +137,7 @@ inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
                 float3 njp = vnrm - nsp * dot(vnrm, nsp);
 
                 theta = HALF_PI - theta;
+                
                 theta.x = gamma + max(theta.x - gamma, -HALF_PI);
                 theta.y = gamma + min(-theta.y - gamma, HALF_PI);
 
@@ -148,16 +178,7 @@ inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
         ao.w = 1.0h;
     }
 
-    if (_SSAOMixFactor > 0.0h)
-    {
-        float2 uvOld = GetAccumulationUv(wpos);
-        half4 aoOld = SampleAO(uvOld);
-        aoOld.xyz = mad(aoOld.xyz, 2.0h, -1.0h);
-        ao = lerp(ao, aoOld, min(_SSAOMixFactor, 0.99h));
-
-        ao.xyz = normalize(ao.xyz);
-    }
-
+    ao.xyz = normalize(ao.xyz);
     ao.xyz = mad(ao.xyz, 0.5h, 0.5h);
     return saturate(ao);
 }
@@ -218,11 +239,7 @@ inline half4 ApplySpecularOcclusion(v2f_img IN) : SV_TARGET
     return intersection * SampleTexel(IN.uv);
 }
 
-#ifndef KERNEL_STEP
-    #define KERNEL_STEP 1
-#endif
-
-inline half4 BilateralBlur(v2f_img IN) : SV_TARGET
+inline half4 SpatialDenoiser(v2f_img IN) : SV_TARGET
 {
     half4 sum = 0.0h;
     half norm = 0.0h;
@@ -243,43 +260,49 @@ inline half4 BilateralBlur(v2f_img IN) : SV_TARGET
             half3 nSample = mad(SampleGBuffer2(IN.uv, offset), 2.0h, -1.0h);
 
             half correction = torusKernel[x + KERNEL_TAPS] * torusKernel[y + KERNEL_TAPS];
-            correction = correction * exp(-abs(zSample - zRef) * 2.0h);
-            correction = correction * pow(max(0, dot(nSample, nRef)), 32);
+            correction = correction * exp(-abs(zSample - zRef) * 4.0h);
+            correction = correction * pow(max(0, dot(nSample, nRef)), 128);
             
             sum += ao * correction;
             norm += correction;
         }
     }
 
-    /*
-    for(int iter = -KERNEL_TAPS; iter <= KERNEL_TAPS; iter ++)
-    {
-        #ifdef _BLUR_DIR_X
-            int2 offset = int2(1, 0) * iter;
-        #else
-            int2 offset = int2(0, 1) * iter;
-        #endif
-
-        half4 ao = SampleTexel(IN.uv, offset);
-        ao.xyz = mad(ao.xyz, 2.0h, -1.0h);
-
-        half zSample = LinearEyeDepth(SampleZBuffer(IN.uv, offset));
-        half3 nSample = mad(SampleGBuffer2(IN.uv, offset), 2.0h, -1.0h);
-
-        half correction = torusKernel[iter + KERNEL_TAPS];
-        correction = correction * exp(-abs(zSample - zRef) * 8.0h);
-        correction = correction * exp(-distance(nSample, nRef) * 8.0h);
-
-        sum += ao * correction;
-        norm += correction;
-    }
-    */
-
     sum.xyz = normalize(sum.xyz / norm);
     sum.xyz = mad(sum.xyz, 0.5h, 0.5h);
     sum.w = sum.w / norm;
 
     return saturate(sum);
+}
+
+inline half4 TemporalDenoiser(v2f_img IN) : SV_TARGET
+{
+    // coordinate
+    float4 vpos, wpos;
+    half depth;
+
+    SampleCoordinates(IN.uv, vpos, wpos, depth);
+
+    // ambient occlusion history
+    float2 uvOld = GetAccumulationUv(wpos);
+    float4 wpOld = GetAccumulationPos(uvOld);
+
+    half4 aoOld = SampleAO(uvOld);
+    half4 ao = SampleTexel(IN.uv);
+
+    aoOld.xyz = mad(aoOld.xyz, 2.0h, -1.0h);
+    ao.xyz = mad(ao, 2.0h, -1.0h);
+
+    if (_SSAOMixFactor > 0.0h)
+    {
+        float weight = exp(-distance(wpOld, wpos) * 16.0h);
+        weight = min(weight * _SSAOMixFactor, 0.96h);
+
+        ao = lerp(ao, aoOld, weight);
+    }
+
+    ao.xyz = mad(normalize(ao.xyz), 0.5h, 0.5h);
+    return saturate(ao);
 }
 
 inline float BlitDepth(v2f_img IN) : SV_TARGET

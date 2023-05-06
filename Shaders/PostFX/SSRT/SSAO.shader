@@ -16,8 +16,21 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
         Cull Off
         ZWrite Off
         ZTest Always
-        
-        // pass 0 : hbao low
+
+        // pass 0 : zbuffer prepass
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment ZBufferPrePass
+            #include "SSAO.cginc"
+            ENDCG
+        }
+
+        //
+        // HBAO MAIN PASS
+        //
+
+        // pass 1 : hbao low
         Pass
         {
             CGPROGRAM
@@ -27,7 +40,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 1 : hbao medium
+        // pass 2 : hbao medium
         Pass
         {
             CGPROGRAM
@@ -37,7 +50,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 2 : hbao high
+        // pass 3 : hbao high
         Pass
         {
             CGPROGRAM
@@ -47,7 +60,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 3 : hbao ultra
+        // pass 4 : hbao ultra
         Pass
         {
             CGPROGRAM
@@ -57,7 +70,11 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 4 : gtao low
+        //
+        // GTAO MAIN PASS
+        //
+
+        // pass 5 : gtao low
         Pass
         {
             CGPROGRAM
@@ -68,7 +85,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 5 : gtao medium
+        // pass 6 : gtao medium
         Pass
         {
             CGPROGRAM
@@ -79,7 +96,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 6 : gtao high
+        // pass 7 : gtao high
         Pass
         {
             CGPROGRAM
@@ -90,7 +107,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 7 : gtao ultra
+        // pass 8 : gtao ultra
         Pass
         {
             CGPROGRAM
@@ -101,36 +118,40 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 8 : temporal filtering
-        Pass
-        {
-            CGPROGRAM
-            #pragma fragment DeinterleaveAO
-            #include "SSAO.cginc"
-            ENDCG
-        }
+        //
+        // 
+        //
 
-        // pass 9 : bilateral blur in x
+        // pass 9 : spatio denoiser 1
         Pass
         {
             CGPROGRAM
-            #pragma fragment BilateralBlur
+            #pragma fragment SpatialDenoiser
             #define KERNEL_STEP 1
             #include "SSAO.cginc"
             ENDCG
         }
 
-        // pass 10 : bilateral blur in y
+        // pass 10 : spatio denoiser 2
         Pass
         {
             CGPROGRAM
-            #pragma fragment BilateralBlur
+            #pragma fragment SpatialDenoiser
             #define KERNEL_STEP 2
             #include "SSAO.cginc"
             ENDCG
         }
 
-        // pass 11 : ao to GBuffer 0
+        // pass 11 : temporal denoiser
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment TemporalDenoiser
+            #include "SSAO.cginc"
+            ENDCG
+        }
+
+        // pass 12 : ao to GBuffer 0
         Pass
         {
             CGPROGRAM
@@ -139,7 +160,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 12 : ao to GBuffer 3
+        // pass 13 : ao to GBuffer 3
         Pass
         {
             CGPROGRAM
@@ -148,7 +169,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 13 : specular occlusion
+        // pass 14 : specular occlusion
         Pass
         {
             CGPROGRAM
@@ -157,20 +178,11 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 14 : debug
+        // pass 15 : debug
         Pass
         {
             CGPROGRAM
             #pragma fragment DebugAO
-            #include "SSAO.cginc"
-            ENDCG
-        }
-
-        // pass 15 : blit depth
-        Pass
-        {
-            CGPROGRAM
-            #pragma fragment BlitDepth
             #include "SSAO.cginc"
             ENDCG
         }

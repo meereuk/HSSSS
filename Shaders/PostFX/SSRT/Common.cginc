@@ -25,6 +25,9 @@ uniform SamplerState sampler_CameraGBufferTexture3;
 uniform Texture2D _SSGITemporalAOBuffer;
 uniform SamplerState sampler_SSGITemporalAOBuffer;
 
+uniform Texture2D _SSGITemporalGIBuffer;
+uniform SamplerState sampler_SSGITemporalGIBuffer;
+
 uniform float4x4 _WorldToViewMatrix;
 uniform float4x4 _ViewToWorldMatrix;
 
@@ -40,6 +43,7 @@ uniform float4x4 _PrevClipToViewMatrix;
 #define FULL_PI 3.14159265359f
 #define HALF_PI 1.57079632679f
 
+#define UV_SPLIT 2
 #define KERNEL_TAPS 2
 
 static const half torusKernel[5] =
@@ -49,16 +53,6 @@ static const half torusKernel[5] =
     0.3750h,
     0.2500h,
     0.0625h
-};
-
-struct ray
-{
-    float2 org;
-    float2 fwd;
-    float2 bwd;
-    float len;
-    float z;
-    float r;
 };
 
 //
@@ -150,6 +144,17 @@ inline half4 SampleAO(float2 uv)
 inline half4 SampleAO(float2 uv, int2 offset)
 {
     return _SSGITemporalAOBuffer.Sample(sampler_SSGITemporalAOBuffer, uv, offset);
+}
+
+// gi buffer
+inline half4 SampleGI(float2 uv)
+{
+    return _SSGITemporalGIBuffer.Sample(sampler_SSGITemporalGIBuffer, uv);
+}
+
+inline half4 SampleGI(float2 uv, int2 offset)
+{
+    return _SSGITemporalGIBuffer.Sample(sampler_SSGITemporalGIBuffer, uv, offset);
 }
 
 inline void SampleCoordinates(float2 uv, out float4 vpos, out float4 wpos, out float depth)
@@ -322,31 +327,22 @@ float4 FastArcTan(float4 x)
     return (x < 0.0f) ? -t0 : t0;
 }
 
-
-/*
-inline float2 EncodeInterleavedUV(float2 uv, float4 res)
+inline float2 EncodeInterleavedUV(float2 uv, float4 res, uint2 split)
 {
     uint4 pixel = uint4(uv * res.zw, res.zw);
-    uint2 split = UV_SPLIT;
-
     return ((pixel.xy * split) % pixel.zw + (pixel.xy * split) / pixel.zw + 0.5f) * res.xy;
 }
 
-inline float2 DecodeInterleavedUV(float2 uv, float4 res)
+inline float2 DecodeInterleavedUV(float2 uv, float4 res, uint2 split)
 {
     uint4 pixel = uint4(uv * res.zw, res.zw);
-    uint2 split = res.zw / UV_SPLIT;
-
     return ((pixel.xy * split) % pixel.zw + (pixel.xy * split) / pixel.zw + 0.5f) * res.xy;
 }
 
-inline float2 GetStochasticUV(float2 uv, float4 res)
+inline float2 GetStochasticUV(float2 uv, float4 res, uint2 split)
 {
     uint4 pixel = uint4(uv * res.zw, res.zw);
-    uint2 split = UV_SPLIT;
-
-    return ((pixel * split) / pixel.zw + 0.5f) * res.xy;
+    return (pixel / split + 0.5f) * res.xy * split;
 }
-*/
 
 #endif

@@ -1,197 +1,245 @@
-#ifndef HSSSS_SSAO_CGINC
-#define HSSSS_SSAO_CGINC
+#ifndef HSSSS_SSGI_CGINC
+#define HSSSS_SSGI_CGINC
 
 #include "Common.cginc"
 
-uniform half _SSGIRayLength;
 uniform half _SSGIIntensity;
-uniform half _SSGIDepthFade;
+uniform half _SSGIRayLength;
+uniform half _SSGIMeanDepth;
+uniform half _SSGIFadeDepth;
 uniform half _SSGIMixFactor;
-uniform half _SSGIThreshold;
+uniform uint _SSGIStepPower;
 
 #ifndef _SSGINumSample
-    #define _SSGINumSample 8
+    #define _SSGINumSample 2
 #endif
 
 #ifndef _SSGINumStride
-    #define _SSGINumStride 16
+    #define _SSGINumStride 4
 #endif
 
-#ifndef _SSGIKernelStride
-    #define _SSGIKernelStride 1
+#ifndef KERNEL_STEP
+    #define KERNEL_STEP 1
 #endif
 
-inline void RayTraceIteration(inout ray ray)
+struct ray
 {
-    // ray position and direction in view space
-    half4 vpos = mul(_WorldToViewMatrix, ray.pos);
-    half4 vdir = mul(_WorldToViewMatrix, ray.dir);
+    // uv
+    float2 uv0;
+    float2 uv1;
+    float2 uv2;
 
-    // length rescaling
-    ray.len = mad(vdir.z, ray.len, vpos.z) > _ProjectionParams.y ?
-        -(vpos.z + _ProjectionParams.z) / vdir.z : ray.len;
+    // view space position
+    float4 vp0;
+    float4 vp1;
+    float4 vp2;
+
+    // view space normal
+    half3 nrm;
+
+    // length
+    float len;
+};
+
+inline half3 HorizonTrace(ray ray)
+{
+    uint power = max(1, _SSGIStepPower);
+    float minStr = length(_ScreenParams.zw - 1.0h) / length(ray.uv1 - ray.uv0);
+
+    float2 theta = -1.0f;
+    half3 gi = 0.0h;
+    float count = 0.0f;
 
     [unroll]
-    for (uint iter = 1; iter <= _SSGINumStride && ray.hit == false; iter ++)
+    for (float iter = 1.0f; iter <= _SSGINumStride && iter * minStr <= 1.0f; iter += 1.0f)
     {
-        ray.step = (half) iter / _SSGINumStride;
+        float str = iter / _SSGINumStride;
+        str = max(iter * minStr, pow(str, power));
 
-        half4 vp = vpos + vdir * ray.len * ray.step;
-        half4 sp = mul(unity_CameraProjection, vp);
+        // uv
+        float2 uv1 = lerp(ray.uv0, ray.uv1, str);
+        float2 uv2 = lerp(ray.uv0, ray.uv2, str);
 
-        ray.uv = sp.xy / sp.w * 0.5h + 0.5h;
+        // view space position
+        float4 vp1 = lerp(ray.vp0, ray.vp1, str);
+        float4 vp2 = lerp(ray.vp0, ray.vp2, str);
 
-        half zRay = -vp.z;
-        half zFace = LinearEyeDepth(tex2D(_CameraDepthTexture, ray.uv));
-        half zBack = max(tex2D(_BackFaceDepthBuffer, ray.uv), zFace + 0.1h);
+        // sample illumination
+        half4 illum1 = SampleTexel(uv1);
+        half4 illum2 = SampleTexel(uv2);
 
-        if (zRay > (zFace - 0.2h * ray.step)  && zRay < (zBack + 0.2h * ray.step))
-        {
-            ray.hit = true;
-        }
+        vp1.z = -illum1.w;
+        vp2.z = -illum2.w;
+
+        // horizon calculation
+        float2 threshold = ray.len * FastSqrt(1.0f - str * str);
+
+        float2 dz = {
+            vp1.z - ray.vp0.z,
+            vp2.z - ray.vp0.z
+        };
+
+        dz /= abs(str * ray.len);
+
+        // n dot l
+        half2 ndotl = {
+            saturate(dot(normalize(vp1.xyz - ray.vp0.xyz), ray.nrm)),
+            saturate(dot(normalize(vp2.xyz - ray.vp0.xyz), ray.nrm))
+        };
+
+        // attenuation
+        half2 atten = {
+            1.0h / pow(max(distance(vp1.xyz, ray.vp0.xyz), 1.0h), 2),
+            1.0h / pow(max(distance(vp2.xyz, ray.vp0.xyz), 1.0h), 2)
+        };
+
+        atten.x *= smoothstep(-0.1h, 0.0h, dz.x - theta.x);
+        atten.y *= smoothstep(-0.1h, 0.0h, dz.y - theta.y);
+
+        gi += illum1.xyz * atten.x * ndotl.x;
+        gi += illum2.xyz * atten.y * ndotl.y;
+
+        theta = max(theta, dz);
+        count += 1.0f;
     }
+
+    return gi / max(count, 1.0f);
 }
 
-inline half3 DiffuseBRDF(ray ray, half3 normal)
+inline half4 PrePass(v2f_img IN) : SV_TARGET
 {
-    // first occlusion
-    half3 first = tex2D(_CameraGBufferTexture3, ray.uv);
-    // secondary and more
-    half3 second = tex2D(_SSGITemporalGIBuffer, ray.uv) * tex2D(_CameraGBufferTexture0, ray.uv);
-    // n dot l
-    half ndotl = saturate(dot(ray.dir.xyz, normal));
-    // reverse square
-    half atten = 1.0h / pow(ray.len * ray.step + 1.0h, 2.0h);
-
-    return (first + second) * atten * ndotl;
+    half3 ambient = SampleTexel(IN.uv);
+    half3 direct = SampleGBuffer3(IN.uv);
+    half depth = LinearEyeDepth(SampleZBuffer(IN.uv));
+    return half4(ambient * _SSGIIntensity + direct, depth);
 }
 
 inline half4 IndirectDiffuse(v2f_img IN) : SV_TARGET
 {
+    // coordinate
+    float4 vpos, wpos;
     half depth;
-    half4 vpos;
-    half4 wpos;
 
-    SampleCoordinates(IN, vpos, wpos, depth);
+    SampleCoordinates(IN.uv, vpos, wpos, depth);
 
+    // normal
+    half3 wnrm = SampleGBuffer2(IN.uv);
+    wnrm = normalize(mad(wnrm, 2.0f, -1.0f));
+    half3 vnrm = mul(_WorldToViewMatrix, wnrm);
+
+    // view direction
+    half3 vdir = normalize(-vpos.xyz);
     half3 gi = 0.0h;
 
-    if (depth < _SSGIDepthFade)
+    if (depth < _SSGIFadeDepth)
     {
-        half4 wnrm = tex2D(_CameraGBufferTexture2, IN.uv);
-        wnrm.xyz = normalize(mad(wnrm.xyz, 2.0h, -1.0h));
-
-        half4 bnrm = tex2D(_SSGITemporalAOBuffer, IN.uv);
-        bnrm.xyz = normalize(mad(bnrm.xyz, 2.0h, -1.0h));
-
-        half3x3 tbn = GramSchmidtMatrix(IN.uv, bnrm.xyz);
-
-        uint idx = (uint) 16.0h * GradientNoiseAlt(IN.uv + _Time.yz);
-        half3 dir = hemiSphere[idx];
-        dir = normalize(half3(dir.xy * bnrm.a, dir.z));
-        dir = mul(dir, tbn);
-
-        //offset = mul(offset, tbn);
+        float slice = FULL_PI / _SSGINumSample;
 
         ray ray;
-        ray.hit = false;
-        ray.len = _SSGIRayLength;
-        ray.pos = wpos + half4(wnrm.xyz * 0.01h, 0.0h);
-        ray.dir = half4(dir, 0.0h);//half4(normalize(bnrm.xyz + offset), 0.0h);
 
-        RayTraceIteration(ray);
+        ray.uv0 = IN.uv;
+        ray.vp0 = vpos;
+        ray.nrm = vnrm;
+        ray.len = _SSGIRayLength * mad(GradientNoise(IN.uv * 1.6f), 0.8f, 0.6f);
 
-        gi += ray.hit ? DiffuseBRDF(ray, wnrm) : 0.0h;
-        gi *= bnrm.a;
-    }
+        float offset = GradientNoise(IN.uv * 2.1f);
 
-
-    /*
-    half3 gi = 0.0h;
-    half len = _SSGIRayLength * mad(GradientNoiseAlt(IN.uv + _Time.yz), 0.5f, 0.5f);
-
-    ray ray;
-    ray.pos = wpos + half4(wnrm.xyz * 0.01f, 0.0f);
-
-    if (depth < _SSGIDepthFade)
-    {
-        for (uint iter = 0; iter < _SSGINumSample; iter ++)
+        [unroll]
+        for (float iter = 0.5f; iter < _SSGINumSample; iter += 1.0f)
         {
-            half3 dir = hemiSphere[iter];
-            dir = normalize(half3(dir.xy * bnrm.a, dir.z));
-            dir = mul(dir, tbn);
+            float4 dir = 0.0h;
+            sincos((iter - offset) * slice, dir.y, dir.x);
+            dir.xyz = normalize(dir.xyz - vdir * dot(dir.xyz, vdir));
 
-            ray.len = len;
-            ray.dir = half4(dir, 0.0h);
-            ray.hit = false;
+            ray.vp1 = mad( dir, ray.len, vpos);
+            ray.vp2 = mad(-dir, ray.len, vpos);
 
-            RayTraceIteration(ray);
+            float4 sp1 = mul(unity_CameraProjection, ray.vp1);
+            float4 sp2 = mul(unity_CameraProjection, ray.vp2);
 
-            gi += ray.hit ? DiffuseBRDF(ray, wnrm) : 0.0h;
+            sp1.xy /= sp1.w;
+            sp2.xy /= sp2.w;
+
+            ray.uv1 = mad(sp1.xy, 0.5f, 0.5f);
+            ray.uv2 = mad(sp2.xy, 0.5f, 0.5f);
+
+            gi += HorizonTrace(ray);
         }
-
-        gi = gi * bnrm.a / _SSGINumSample;
     }
 
-    else
+    gi /= _SSGINumSample;
+    gi = clamp(gi, 0.0h, 4.0h);
+
+    return half4(gi, 1.0h);
+}
+
+inline half4 BilateralBlur(v2f_img IN) : SV_TARGET
+{
+    half3 sum = 0.0h;
+    half norm = 0.0h;
+
+    half zRef = LinearEyeDepth(SampleZBuffer(IN.uv));
+    half3 nRef = mad(SampleGBuffer2(IN.uv), 2.0h, -1.0h);
+
+    for(int x = -KERNEL_TAPS; x <= KERNEL_TAPS; x ++)
     {
-        gi = 0.0h;
+        for(int y = -KERNEL_TAPS; y <+ KERNEL_TAPS; y ++)
+        {
+            float2 offset = _MainTex_TexelSize.xy * float2(x, y) * KERNEL_STEP;
+            //int2 offset = int2(x, y) * KERNEL_STEP;
+
+            half3 gi = SampleTexel(IN.uv + offset);//SampleTexel(IN.uv, offset);
+
+            half zSample = LinearEyeDepth(SampleZBuffer(IN.uv + offset));
+            half3 nSample = mad(SampleGBuffer2(IN.uv + offset), 2.0h, -1.0h);
+
+            half correction = torusKernel[x + KERNEL_TAPS] * torusKernel[y + KERNEL_TAPS];
+            correction = correction * exp(-abs(zSample - zRef) * 8.0h);
+            correction = correction * pow(max(0, dot(nSample, nRef)), 128);
+            
+            sum += gi * correction;
+            norm += correction;
+        }
     }
-    */
 
-    half2 uvOld = GetAccumulationUv(wpos);
-    half4 giOld = tex2D(_SSGITemporalGIBuffer, uvOld);
+    sum /= norm;
+    sum = clamp(sum, 0.0h, 4.0h);
 
-    gi = lerp(gi, giOld, _SSGIMixFactor);
+    return half4(sum, 1.0f);
+}
+
+inline half4 TemporalFilter(v2f_img IN) : SV_TARGET
+{
+    // coordinate
+    float4 vpos, wpos;
+    half depth;
+
+    SampleCoordinates(IN.uv, vpos, wpos, depth);
+
+    // ambient occlusion history
+    float2 uvOld = GetAccumulationUv(wpos);
+    float4 wpOld = GetAccumulationPos(uvOld);
+    half3 giOld = SampleGI(uvOld);
+    half3 gi = SampleTexel(IN.uv);
+
+    gi *= SampleGBuffer0(IN.uv);
+    //gi *= _SSGIIntensity;
+
+    if (_SSGIMixFactor > 0.0h)
+    {
+        float factor = exp(-distance(wpOld, wpos) * 16.0h);
+        factor = min(factor * _SSGIMixFactor, 0.96h);
+        gi = lerp(gi, giOld, factor);
+    }
 
     return half4(gi, 1.0h);
 }
 
 inline half4 CollectGI(v2f_img IN) : SV_TARGET
 {
-    half3 ambient = tex2D(_MainTex, IN.uv) * tex2D(_CameraGBufferTexture0, IN.uv);
-    half3 direct = tex2D(_CameraGBufferTexture3, IN.uv).rgb;
-    return half4(mad(ambient, _SSGIIntensity, direct), 1.0h);
-}
-
-inline half4 BilaterlTorusFilter(v2f_img IN) : SV_TARGET
-{
-    half3 gB = 0.0h;
-    half gN = 0.0h;
-
-    half3 gM = tex2D(_MainTex, IN.uv);
-    half zM = LinearEyeDepth(tex2D(_CameraDepthTexture, IN.uv));
-    half3 nM = mad(tex2D(_CameraGBufferTexture2, IN.uv), 2.0h, -1.0h);
-
-    if (zM < _SSGIDepthFade)
-    {
-        for(uint i = 0; i < KERNEL_TAPS; i ++)
-        {
-            for(uint j = 0; j < KERNEL_TAPS; j ++)
-            {
-                half torus = aTorusKernel[i].y * aTorusKernel[j].y;
-                half2 offsetUv = IN.uv + _MainTex_TexelSize.xy * half2(aTorusKernel[i].x, aTorusKernel[j].x) * _SSGIKernelStride;
-                
-                half3 gS = tex2D(_MainTex, offsetUv);
-
-                half zS = LinearEyeDepth(tex2D(_CameraDepthTexture, offsetUv));
-                half3 nS = mad(tex2D(_CameraGBufferTexture2, offsetUv), 2.0h, -1.0h);
-                half s = exp(-abs(zS - zM) * 8.0h) * exp(-distance(nS, nM) * 8.0h) * exp(-distance(gS, gM) * 8.0h);
-
-                gB += gS * torus * s;
-                gN += torus * s;
-            }
-        }
-
-        gB /= gN;
-
-        return half4(gB, 1.0h);
-    }
-
-    else
-    {
-        return tex2D(_MainTex, IN.uv);
-    }
+    half3 ambient = SampleTexel(IN.uv);
+    half3 direct = SampleGBuffer3(IN.uv);
+    return half4(ambient * _SSGIIntensity + direct, 1.0h);
 }
 
 #endif
