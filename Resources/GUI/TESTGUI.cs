@@ -11,7 +11,7 @@ public class TESTGUI : MonoBehaviour {
 	private static Vector2 windowPosition = new Vector2(64.0f, 64.0f);
 	private static Vector2 windowSize = new Vector2 (768.0f, 512.0f);
 	private static int toolBarState = 0;
-	private string[] toolBarStrings = new string[] { "Option1", "Option2"};
+	private string[] toolBarStrings = new string[] { "Option 0", "Option 1", "Option 2", "Option 3"};
 
 	private Rect configWindow;
 
@@ -32,19 +32,27 @@ public class TESTGUI : MonoBehaviour {
 	private void WindowFunction(int windowID)
 	{
 		GUILayout.Space(32.0f);
+		GUILayout.BeginHorizontal();
+		{
+			GUILayout.BeginVertical(GUILayout.Width(128.0f));
+			{
+				GUILayout.BeginHorizontal(GUILayout.Height(128.0f));
+				toolBarState = GUILayout.SelectionGrid(toolBarState, this.toolBarStrings, 1);
+				GUILayout.EndHorizontal();
+			}
+			GUILayout.EndVertical();
+			GUILayout.Space(16.0f);
 
-		toolBarState = GUILayout.Toolbar(toolBarState, this.toolBarStrings);
-
-		/*
-		GUILayout.BeginHorizontal(GUILayout.Height(32.0f));
-		//
-		GUILayout.Button("Scattering", GUILayout.Width(178.0f));
-		GUILayout.Button("Transmission", GUILayout.Width(178.0f));
-		GUILayout.Button("Lights & Shadows", GUILayout.Width(178.0f));
-		GUILayout.Button("Preset", GUILayout.Width(178.0f));
-
+			GUILayout.BeginVertical(GUILayout.ExpandWidth(true));
+			GUILayout.Label("TEST Slider 1");
+			GUILayout.Box("", GUILayout.Height(1));
+			GUILayout.Label("TEST Slider 2");
+			GUILayout.Label("TEST Slider 3");
+			GUILayout.Label("TEST Slider 4");
+			GUILayout.EndVertical();
+		}
 		GUILayout.EndHorizontal();
-		*/
+
 		GUILayout.Space(16.0f);
 		//
 		GUILayout.Label("TEST Slider 1");

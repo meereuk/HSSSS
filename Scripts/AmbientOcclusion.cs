@@ -10,13 +10,12 @@ public class AmbientOcclusion : MonoBehaviour
     private Material mMaterial;
 
     public float SSAOIntensity;
-    public float SSAOMixFactor;
     public float SSAORayLength;
     public float SSAOMeanDepth;
     public float SSAOFadeDepth;
-    public int   SSAOStepPower;
-    public int   SSAOBlockSize;
-    public int   SSAONumStride; 
+    public int   SSAORayStride;
+    public int   SSAOScreenDiv;
+    public Texture2D BlueNoise;
 
     private Matrix4x4 WorldToViewMatrix;
     private Matrix4x4 ViewToWorldMatrix;
@@ -29,21 +28,25 @@ public class AmbientOcclusion : MonoBehaviour
 
     private CommandBuffer aoBuffer;
     private RenderTexture aoHistory;
+    private RenderTexture zbHistory;
 
     public void OnEnable()
     {
         this.mCamera = GetComponent<Camera>();
         this.mMaterial = new Material(Shader.Find("Hidden/HSSSS/AmbientOcclusion"));
+        this.mMaterial.SetTexture("_BlueNoise", this.BlueNoise);
     }
     
     public void OnDisable()
     {
         this.RemoveCommandBuffer();
+        this.RemoveHistoryBuffer();
         this.mCamera = null;
     }
 
     public void Start()
     {
+        this.SetUpHistoryBuffer();
         this.SetupCommandBuffer();
     }
 
@@ -72,44 +75,41 @@ public class AmbientOcclusion : MonoBehaviour
 
         this.mMaterial.SetFloat("_SSAOFadeDepth", SSAOFadeDepth);
         this.mMaterial.SetFloat("_SSAOMeanDepth", SSAOMeanDepth);
-        this.mMaterial.SetFloat("_SSAOMixFactor", SSAOMixFactor);
         this.mMaterial.SetFloat("_SSAORayLength", SSAORayLength);
         this.mMaterial.SetFloat("_SSAOIntensity", SSAOIntensity);
-        this.mMaterial.SetInt(  "_SSAOStepPower", SSAOStepPower);
-        this.mMaterial.SetInt(  "_SSAOBlockSize", SSAOBlockSize);
-        this.mMaterial.SetInt(  "_SSAONumStride", SSAONumStride);
+        this.mMaterial.SetInt(  "_SSAORayStride", SSAORayStride);
+        this.mMaterial.SetInt(  "_SSAOScreenDiv", SSAOScreenDiv);
+        this.mMaterial.SetInt(  "_FrameCount", Time.frameCount);
 
-        this.mMaterial.SetTexture("_SSGITemporalAOBuffer", this.aoHistory);
+        this.mMaterial.SetTexture("_BlueNoise", this.BlueNoise);
     }
 
     private void SetupCommandBuffer()
     {
-        this.aoHistory = RenderTexture.GetTemporary(Screen.width, Screen.height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
-
-        RenderTargetIdentifier temp = new RenderTargetIdentifier(this.aoHistory);
-
-        int depth = Shader.PropertyToID("_SSAOTemporalDepthTexture");
-        int flip = Shader.PropertyToID("_SSAOTemporalFlipTexture");
-        int flop = Shader.PropertyToID("_SSAOTemporalFlopTexture");
+        int flip = Shader.PropertyToID("_SSAOFlipRenderTexture");
+        int flop = Shader.PropertyToID("_SSAOFlopRenderTexture");
+        int zbuf = Shader.PropertyToID("_FuckingMoronsUnityDev");
 
         this.aoBuffer = new CommandBuffer() { name = "HSSSS.SSAO" };
 
-        this.aoBuffer.GetTemporaryRT(depth, Screen.width, Screen.height, 0, FilterMode.Bilinear, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
-        this.aoBuffer.GetTemporaryRT(flip, Screen.width, Screen.height, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
-        this.aoBuffer.GetTemporaryRT(flop, Screen.width, Screen.height, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(flip, Screen.width, Screen.height, 0, FilterMode.Point, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(flop, Screen.width, Screen.height, 0, FilterMode.Point, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(zbuf, Screen.width, Screen.height, 0, FilterMode.Bilinear, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
 
-        this.aoBuffer.Blit(temp, depth, this.mMaterial, 0);
-        this.aoBuffer.Blit(depth, flip, this.mMaterial, 8);
+        this.aoBuffer.Blit(BuiltinRenderTextureType.CurrentActive, zbuf, this.mMaterial, 0);
 
+        this.aoBuffer.Blit(zbuf, flip, this.mMaterial, 8);
         this.aoBuffer.Blit(flip, flop, this.mMaterial, 9);
+
         this.aoBuffer.Blit(flop, flip, this.mMaterial, 10);
-
         this.aoBuffer.Blit(flip, flop, this.mMaterial, 11);
+        this.aoBuffer.Blit(flop, flip, this.mMaterial, 12);
+        this.aoBuffer.Blit(flip, flop);
 
-        this.aoBuffer.Blit(flop, temp);
-
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 15);
+        this.aoBuffer.Blit(flop, flip, this.mMaterial, 17);
         this.aoBuffer.Blit(flip, BuiltinRenderTextureType.CameraTarget);
+
+        //this.aoBuffer.Blit(flop, depth, this.mMaterial, 17);
 
         this.mCamera.AddCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, this.aoBuffer);
     }
@@ -118,5 +118,30 @@ public class AmbientOcclusion : MonoBehaviour
     {
         this.mCamera.RemoveCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, this.aoBuffer);
         this.aoBuffer = null;
+    }
+
+        private void SetUpHistoryBuffer()
+    {
+        this.aoHistory = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.aoHistory.filterMode = FilterMode.Bilinear;
+        this.aoHistory.Create();
+
+        this.zbHistory = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
+        this.zbHistory.Create();
+
+        RenderTexture rt = RenderTexture.active;
+        RenderTexture.active = this.aoHistory;
+        GL.Clear(true, true, Color.clear);
+        RenderTexture.active = this.zbHistory;
+        GL.Clear(true, true, Color.clear);
+        RenderTexture.active = rt;
+    }
+
+    private void RemoveHistoryBuffer()
+    {
+        this.aoHistory.Release();
+        this.zbHistory.Release();
+        this.aoHistory = null;
+        this.zbHistory = null;
     }
 }

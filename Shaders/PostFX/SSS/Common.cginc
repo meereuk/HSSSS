@@ -3,6 +3,7 @@
 
 #include "UnityCG.cginc"
 
+/*
 #define NUM_TAPS 17
 
 const static half4 blurKernel[NUM_TAPS] = {
@@ -24,6 +25,23 @@ const static half4 blurKernel[NUM_TAPS] = {
     half4(0.01003860, 0.000914679, 0.000275702,  1.53125),
     half4(0.00317394, 0.000134823, 3.77269e-05,  2.00000),
 };
+*/
+
+#define NUM_TAPS 11
+
+const static float4 blurKernel[NUM_TAPS] = {
+    float4(0.560479, 0.669086, 0.784728, 0),
+    float4(0.00471691, 0.000184771, 5.07566e-005, -2),
+    float4(0.0192831, 0.00282018, 0.00084214, -1.28),
+    float4(0.03639, 0.0130999, 0.00643685, -0.72),
+    float4(0.0821904, 0.0358608, 0.0209261, -0.32),
+    float4(0.0771802, 0.113491, 0.0793803, -0.08),
+    float4(0.0771802, 0.113491, 0.0793803, 0.08),
+    float4(0.0821904, 0.0358608, 0.0209261, 0.32),
+    float4(0.03639, 0.0130999, 0.00643685, 0.72),
+    float4(0.0192831, 0.00282018, 0.00084214, 1.28),
+    float4(0.00471691, 0.000184771, 5.07565e-005, 2),
+};
 
 sampler2D _MainTex;
 sampler2D _SkinJitter;
@@ -31,8 +49,8 @@ sampler2D _SkinJitter;
 sampler2D _CameraDepthTexture;
 sampler2D _CameraGBufferTexture2;
 
-half4 _MainTex_TexelSize;
-half4 _SkinJitter_TexelSize;
+float4 _MainTex_TexelSize;
+float4 _SkinJitter_TexelSize;
 
 half2 _DeferredBlurredNormalsParams;
 
@@ -45,13 +63,13 @@ void SkipIfNonSkin(v2f_img IN)
 
 half4 BlurInDir(v2f_img IN, half2 direction)
 {
-	half2 uv = IN.uv;
+	float2 uv = IN.uv;
 
 	half3 colorM = tex2D(_MainTex, uv).rgb;
 	half depthM = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));
 	
-	half scale = _DeferredBlurredNormalsParams.x * unity_CameraProjection._m11 / depthM;
-	half2 finalStep = scale * direction * dot(direction, _MainTex_TexelSize.xy);
+	float scale = _DeferredBlurredNormalsParams.x * unity_CameraProjection._m11 / depthM;
+	float2 finalStep = scale * direction * dot(direction, _MainTex_TexelSize.xy);
 
     half3 colorB = colorM * blurKernel[0].rgb;
 	
@@ -59,7 +77,7 @@ half4 BlurInDir(v2f_img IN, half2 direction)
 	for (uint i = 1; i < NUM_TAPS; i++)
 	{
         // sample color
-		half2 offsetUv = uv + finalStep * blurKernel[i].a;
+		float2 offsetUv = uv + finalStep * blurKernel[i].a;
 		half3 color = tex2D(_MainTex, offsetUv);
         // depth-aware
 		half depth = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, offsetUv));

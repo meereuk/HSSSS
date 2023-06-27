@@ -15,6 +15,9 @@ public class GlobalIllumination : MonoBehaviour
     public float SSGIMeanDepth;
     public float SSGIFadeDepth;
     public int   SSGIStepPower;
+    public int   SSGIScreenDiv;
+
+    public Texture2D BlueNoise;
 
     private Matrix4x4 WorldToViewMatrix;
     private Matrix4x4 ViewToWorldMatrix;
@@ -29,11 +32,13 @@ public class GlobalIllumination : MonoBehaviour
     private CommandBuffer giBuffer;
 
     private RenderTexture giHistory;
+    private RenderTexture zbHistory;
 
     public void OnEnable()
     {
         this.mCamera = GetComponent<Camera>();
         this.mMaterial = new Material(Shader.Find("Hidden/HSSSS/GlobalIllumination"));
+        this.mMaterial.SetTexture("_BlueNoise", this.BlueNoise);
     }
     
     public void OnDisable()
@@ -78,39 +83,52 @@ public class GlobalIllumination : MonoBehaviour
         this.mMaterial.SetFloat("_SSGIRayLength", SSGIRayLength);
         this.mMaterial.SetFloat("_SSGIIntensity", SSGIIntensity);
         this.mMaterial.SetInt(  "_SSGIStepPower", SSGIStepPower);
+        this.mMaterial.SetInt(  "_SSGIScreenDiv", SSGIScreenDiv);
+
+        this.mMaterial.SetInt(  "_FrameCount", Time.frameCount);
 
         this.mMaterial.SetTexture("_SSGITemporalGIBuffer", this.giHistory);
+        this.mMaterial.SetTexture("_CameraDepthHistory", this.zbHistory);
+        this.mMaterial.SetTexture("_BlueNoise", this.BlueNoise);
     }
 
     private void SetupCommandBuffer()
     {
-        //this.aoRenderTexture = RenderTexture.GetTemporary(Screen.width, Screen.height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
         RenderTargetIdentifier temp = new RenderTargetIdentifier(this.giHistory);
+        RenderTargetIdentifier zbuf = new RenderTargetIdentifier(this.zbHistory);
 
-        int ilum = Shader.PropertyToID("_SSGITemporalIlumTexture");
-        int flip = Shader.PropertyToID("_SSGITemporalFlipTexture");
-        int flop = Shader.PropertyToID("_SSGITemporalFlopTexture");
+        int ilum = Shader.PropertyToID("_SSGIIrradianceTexture");
+        int flip = Shader.PropertyToID("_SSGIFlipRenderTexture");
+        int flop = Shader.PropertyToID("_SSGIFlopRenderTexture");
 
         this.aoBuffer = new CommandBuffer() { name = "HSSSS.SSGI" };
         
-        this.aoBuffer.GetTemporaryRT(ilum, Screen.width / 4, Screen.height / 4, 0, FilterMode.Bilinear, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(ilum, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
         this.aoBuffer.GetTemporaryRT(flip, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
         this.aoBuffer.GetTemporaryRT(flop, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
 
         this.aoBuffer.Blit(temp, ilum, this.mMaterial, 0);
+        this.aoBuffer.Blit(ilum, flip, this.mMaterial, 4);
 
-        this.aoBuffer.Blit(ilum, flip, this.mMaterial, 8);
+        // temporal denoiser
+        this.aoBuffer.Blit(flip, flop, this.mMaterial, 5);
 
-        this.aoBuffer.Blit(flip, flop, this.mMaterial, 9);
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 10);
-        this.aoBuffer.Blit(flip, flop, this.mMaterial, 11);
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 12);
-
-        this.aoBuffer.Blit(flip, flop, this.mMaterial, 13);
-
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 14);
+        // store
         this.aoBuffer.Blit(flop, temp);
+        this.aoBuffer.Blit(temp, zbuf, this.mMaterial, 12);
 
+        // median filter
+        this.aoBuffer.Blit(flop, flip, this.mMaterial, 10);
+        this.aoBuffer.Blit(flip, flop);
+
+        // spatio denoiser
+        this.aoBuffer.Blit(flop, flip, this.mMaterial, 6);
+        this.aoBuffer.Blit(flip, flop, this.mMaterial, 7);
+        this.aoBuffer.Blit(flop, flip, this.mMaterial, 8);
+        this.aoBuffer.Blit(flip, flop, this.mMaterial, 9);
+
+        //
+        this.aoBuffer.Blit(flop, flip, this.mMaterial, 11);
         this.aoBuffer.Blit(flip, BuiltinRenderTextureType.CameraTarget);
 
         this.aoBuffer.ReleaseTemporaryRT(ilum);
@@ -132,8 +150,13 @@ public class GlobalIllumination : MonoBehaviour
         this.giHistory.filterMode = FilterMode.Bilinear;
         this.giHistory.Create();
 
+        this.zbHistory = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
+        this.zbHistory.Create();
+
         RenderTexture rt = RenderTexture.active;
         RenderTexture.active = this.giHistory;
+        GL.Clear(true, true, Color.clear);
+        RenderTexture.active = this.zbHistory;
         GL.Clear(true, true, Color.clear);
         RenderTexture.active = rt;
     }
@@ -141,6 +164,8 @@ public class GlobalIllumination : MonoBehaviour
     private void RemoveHistoryBuffer()
     {
         this.giHistory.Release();
+        this.zbHistory.Release();
         this.giHistory = null;
+        this.zbHistory = null;
     }
 }

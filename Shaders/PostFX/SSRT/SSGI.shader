@@ -17,11 +17,11 @@ Shader "Hidden/HSSSS/GlobalIllumination"
         ZWrite Off
         ZTest Always
 
-        // pass 0 : prepass
+        // pass 0 : g-buffer prepass
         Pass
         {
             CGPROGRAM
-            #pragma fragment PrePass
+            #pragma fragment GBufferPrePass
             #include "SSGI.cginc"
             ENDCG
         }
@@ -31,7 +31,6 @@ Shader "Hidden/HSSSS/GlobalIllumination"
         {
             CGPROGRAM
             #pragma fragment IndirectDiffuse
-            #define _SSGINumSample 2
             #define _SSGINumStride 4
             #include "SSGI.cginc"
             ENDCG
@@ -42,8 +41,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
         {
             CGPROGRAM
             #pragma fragment IndirectDiffuse
-            #define _SSGINumSample 2
-            #define _SSGINumStride 6
+            #define _SSGINumStride 8
             #include "SSGI.cginc"
             ENDCG
         }
@@ -53,8 +51,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
         {
             CGPROGRAM
             #pragma fragment IndirectDiffuse
-            #define _SSGINumSample 2
-            #define _SSGINumStride 8
+            #define _SSGINumStride 12
             #include "SSGI.cginc"
             ENDCG
         }
@@ -64,57 +61,21 @@ Shader "Hidden/HSSSS/GlobalIllumination"
         {
             CGPROGRAM
             #pragma fragment IndirectDiffuse
-            #define _SSGINumSample 2
-            #define _SSGINumStride 10
+            #define _SSGINumStride 16
             #include "SSGI.cginc"
             ENDCG
         }
 
-        // pass 5 : low
+        // pass 5 : temporal filter
         Pass
         {
             CGPROGRAM
-            #pragma fragment IndirectDiffuse
-            #define _SSGINumSample 4
-            #define _SSGINumStride 4
+            #pragma fragment TemporalFilter
             #include "SSGI.cginc"
             ENDCG
         }
 
-        // pass 6 : medium
-        Pass
-        {
-            CGPROGRAM
-            #pragma fragment IndirectDiffuse
-            #define _SSGINumSample 4
-            #define _SSGINumStride 6
-            #include "SSGI.cginc"
-            ENDCG
-        }
-
-        // pass 7 : high
-        Pass
-        {
-            CGPROGRAM
-            #pragma fragment IndirectDiffuse
-            #define _SSGINumSample 4
-            #define _SSGINumStride 8
-            #include "SSGI.cginc"
-            ENDCG
-        }
-
-        // pass 8 : ultra
-        Pass
-        {
-            CGPROGRAM
-            #pragma fragment IndirectDiffuse
-            #define _SSGINumSample 4
-            #define _SSGINumStride 10
-            #include "SSGI.cginc"
-            ENDCG
-        }
-
-        // pass 9 : denoising step 1
+        // pass 6 : denoising step 1
         Pass
         {
             CGPROGRAM
@@ -124,7 +85,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             ENDCG
         }
 
-        // pass 10 : denoising step 2
+        // pass 7 : denoising step 2
         Pass
         {
             CGPROGRAM
@@ -134,17 +95,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             ENDCG
         }
 
-        // pass 11 : denoising step 3
-        Pass
-        {
-            CGPROGRAM
-            #pragma fragment BilateralBlur
-            #define KERNEL_STEP 3
-            #include "SSGI.cginc"
-            ENDCG
-        }
-
-        // pass 12 : denoising step 4
+        // pass 8 : denoising step 3
         Pass
         {
             CGPROGRAM
@@ -154,20 +105,39 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             ENDCG
         }
 
-        // pass 13 : temporal filter
+        // pass 9 : denoising step 4
         Pass
         {
             CGPROGRAM
-            #pragma fragment TemporalFilter
+            #pragma fragment BilateralBlur
+            #define KERNEL_STEP 8
             #include "SSGI.cginc"
             ENDCG
         }
 
-        // pass 14 : collect gi
+        // pass 10 : median filter
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment MedianFilter
+            #include "SSGI.cginc"
+            ENDCG
+        }
+
+        // pass 11 : collect gi
         Pass
         {
             CGPROGRAM
             #pragma fragment CollectGI
+            #include "SSGI.cginc"
+            ENDCG
+        }
+
+        // pass 12 : store zbuffer
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment BlitZBuffer
             #include "SSGI.cginc"
             ENDCG
         }
