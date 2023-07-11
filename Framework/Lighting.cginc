@@ -34,6 +34,22 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
     sheen *= specularLight;
     specular *= specularLight;
     diffuse *= diffuseLight;
+
+    /*
+    float scale = 0.0f;
+
+    #if defined(DIRECTIONAL)
+        scale = 0.001f * _DirLightPenumbra.y;
+    #elif defined(SPOT)
+        float3 diff = _WorldSpaceLightPos0.xyz - s.positionWorld;
+        scale = 0.001f * _SpotLightPenumbra.y * rsqrt(dot(diff, diff));
+    #elif defined(POINT)
+        float3 diff = _WorldSpaceLightPos0.xyz - s.positionWorld;
+        scale = 0.001f * _PointLightPenumbra.y * rsqrt(dot(diff, diff));
+    #endif
+
+    float NdotLa = tex2D(_AreaLightLUT, float2(mad(d.NdotLm, 0.5f, 0.5f), scale));
+    */
     
     if (s.scatteringMask < 0.4h)
     {
@@ -45,7 +61,7 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
         // energy conserved wrap diffuse
         diffuse *= saturate((d.NdotLm + 0.5h) / 2.25h);
         diffuse *= saturate(normalize(s.albedo + 1.0h) + d.NdotL);
-        specular += sheen;
+        specular = sheen;
     }
 
     else if (s.scatteringMask == 1.0h)
@@ -53,67 +69,7 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
         diffuse *= d.NdotL;
         specular += sheen;
     }
-
-    /*
-    half3 direct = d.color * d.shadow.r * d.NdotL;
-    diffuse = direct * aDiffuseBrdf(s.albedo, s.roughness, d.LdotH, d.NdotL, s.NdotV);
-    specular = direct * s.specularOcclusion * d.specularIntensity * aSpecularBrdf(s.f0, s.beckmannRoughness, d.LdotH, d.NdotH, d.NdotL, s.NdotV);
-    */
 }
-
-/*
-inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
-{
-    #if defined(_PCF_TAPS_8) || defined(_PCF_TAPS_16) || defined(_PCF_TAPS_32) || defined(_PCF_TAPS_64)
-        half3 rotationX = normalize(cross(d.direction, d.direction.zxy));
-	    half3 rotationY = normalize(cross(d.direction, rotationX));
-
-        float2 jitter = mad(tex2D(_ShadowJitterTexture, s.screenUv * _ScreenParams.xy * _ShadowJitterTexture_TexelSize.xy + _Time.yy).rg, 2.0f, -1.0f);
-	    float2x2 rotationMatrix = float2x2(float2(jitter.x, -jitter.y), float2(jitter.y, jitter.x));
-
-        #if defined(DIRECTIONAL)
-            half radius = _DirLightPenumbra.y;
-        #elif defined(SPOT)
-            half radius = _SpotLightPenumbra.y;
-        #elif defined(POINT)
-            half radius = _PointLightPenumbra.y;
-        #else
-            half radius = 0.0h;
-        #endif
-
-        diffuse = 0.0h;
-        specular = 0.0h;
-
-        for(uint i = 0; i < PCF_NUM_TAPS; i ++)
-        {
-            float2 disk = mul(poissonDisk[i], rotationMatrix);
-
-            #if defined(DIRECTIONAL)
-                half3 lightVector = normalize(mad(rotationX * disk.x + rotationY * disk.y, radius, d.direction));
-            #else
-                half3 lightVector = normalize(mad(rotationX * disk.x + rotationY * disk.y, radius, d.direction / _LightPositionRange.w));
-            #endif
-            half3 halfVector = normalize(lightVector + s.viewDirWorld);
-
-            half LdotH = aDotClamp(halfVector, lightVector);
-            half NdotH = aDotClamp(s.normalWorld, halfVector);
-            half NdotL = aDotClamp(s.normalWorld, lightVector);
-
-            half3 direct = d.color * d.shadow.r * NdotL;
-
-            diffuse += direct * aDiffuseBrdf(s.albedo, s.roughness, LdotH, NdotL, s.NdotV);
-            specular += direct * s.specularOcclusion * d.specularIntensity * aSpecularBrdf(s.f0, s.beckmannRoughness, LdotH, NdotH, NdotL, s.NdotV);
-        }
-
-        diffuse /= PCF_NUM_TAPS;
-        specular /= PCF_NUM_TAPS;
-    #else
-        half3 direct = d.color * d.shadow.r * d.NdotL;
-        diffuse = direct * aDiffuseBrdf(s.albedo, s.roughness, d.LdotH, d.NdotL, s.NdotV);
-        specular = direct * s.specularOcclusion * d.specularIntensity * aSpecularBrdf(s.f0, s.beckmannRoughness, d.LdotH, d.NdotH, d.NdotL, s.NdotV);
-    #endif
-}
-*/
 
 half3 aStandardIndirect(AIndirect i, ASurface s)
 {
@@ -205,7 +161,7 @@ inline half3 aStandardTransmission
 }
 
 // thin layer transmittance for clothes
-inline half3 aThinTransmission(ADirect d, ASurface s, sampler2D lut, half weight, half falloff, half bias)
+inline half3 aThinTransmission(ADirect d, ASurface s, half weight)
 {
     half attenuation = 0.25h * weight * saturate(0.3h - dot(s.ambientNormalWorld, d.direction));
     return d.color * s.albedo * attenuation * d.shadow.r;

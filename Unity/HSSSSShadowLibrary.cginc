@@ -19,32 +19,6 @@
 	uniform float4 _ShadowMapTexture_TexelSize;
 #endif
 
-uniform sampler2D _SSGITemporalAOBuffer;
-uniform int _SSGIDirectOcclusion;
-
-// random number generator
-inline float GradientNoise(float2 uv)
-{
-    return frac(sin(dot(uv, float2(12.9898, 78.2333))) * 43758.5453123);
-}
-
-// gram-schmidt process
-inline float3x3 GramSchmidtMatrix(float2 uv, float3 axis)
-{
-    float3 jitter = float3(
-        GradientNoise(mad(uv, 1.3f, _Time.xx)),
-        GradientNoise(mad(uv, 1.6f, _Time.xx)),
-        GradientNoise(mad(uv, 1.9f, _Time.xx))
-    );
-
-    jitter = normalize(mad(jitter, 2.0f, -1.0f));
-
-    float3 tangent = normalize(jitter - axis * dot(jitter, axis));
-    float3 bitangent = normalize(cross(axis, tangent));
-
-    return float3x3(tangent, bitangent, axis);
-}
-
 // cascade weights
 inline uint2 GetCascadeIndex(float viewDepth)
 {
@@ -87,9 +61,18 @@ inline float3 GetShadowCoordinate(float3 vec, uint cascade)
 	#endif
 }
 
+inline float2 PoissonDisk(uint i, uint n)
+{
+	float t = 2.4 * i;
+	float r = sqrt((i + 0.5f) / n);
+	return float2(r * cos(t), r * sin(t));
+}
+
 #if defined(SHADOWS_CUBE) || defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
 inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half NdotL)
 {
+	uint kernelSize = pow(2, min(max(_SoftShadowNumIter, 3), 6));
+
 	// initialize shadow coordinate and depth
 	#if defined(SHADOWS_CUBE)
 		float pixelDepth = length(vec) * _LightPositionRange.w;
@@ -134,9 +117,6 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 	// r: shadow, g: mean z-diff.
 	float2 shadow = float2(0.0f, 0.0f);
 
-	// rotated disk
-	float3 disk[PCF_NUM_TAPS];
-
 	// gram-schmidt process
 	#if defined(SHADOWS_CUBE)
 		float3x3 tbn = GramSchmidtMatrix(uv, normalize(vec));
@@ -156,10 +136,10 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 
 		// blocker search loop
 		[unroll]
-		for (uint i = 0; i < PCF_NUM_TAPS; i ++)
+		for (uint i = 0; i < kernelSize; i ++)
 		{
-			disk[i] = mul(poissonDisk[i], tbn);
-			float3 sampleCoord = mad(disk[i], radius.x, vec);
+			float3 disk = mul(PoissonDisk(i, kernelSize), tbn);
+			float3 sampleCoord = mad(disk, radius.x, vec);
 
 			#if defined(SHADOWS_CUBE)
 				float sampleDepth = texCUBE(_ShadowMapTexture, sampleCoord);
@@ -201,12 +181,10 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 	#endif
 
 	[unroll]
-	for (uint j = 0; j < PCF_NUM_TAPS; j ++)
+	for (uint j = 0; j < kernelSize; j ++)
 	{
-		#if !defined(_PCSS_ON)
-			disk[j] = mul(poissonDisk[j], tbn);
-		#endif
-		float3 sampleCoord = mad(disk[j], penumbra, vec);
+		float3 disk = mul(PoissonDisk(j, kernelSize), tbn);
+		float3 sampleCoord = mad(disk, penumbra, vec);
 
 		#if defined(SHADOWS_CUBE)
 			shadow.r += texCUBE(_ShadowMapTexture, sampleCoord) > pixelDepth ? 1.0f : 0.0f;
@@ -219,45 +197,7 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 		#endif
 	}
 
-	shadow.r = shadow.r / PCF_NUM_TAPS;
-
-	/*
-	if (_SSGIDirectOcclusion == 1)
-	{
-		// Screen Space Direct Occlusion
-		half4 ao = tex2D(_SSGITemporalAOBuffer, uv);
-		ao.xyz = normalize(mad(ao.xyz, 2.0h, -1.0h));
-
-		half4 angle;
-
-		// incident light appature
-		#if defined(SHADOWS_CUBE)
-			angle.x = atan(_PointLightPenumbra.y * sqrt(_LightPos.w));
-		#elif defined(SHADOWS_DEPTH)
-			angle.x = atan(_SpotLightPenumbra.y * sqrt(_LightPos.w));
-		#elif defined(SHADOWS_SCREEN)
-			angle.x = atan(0.1h * _DirLightPenumbra.y);
-		#endif
-		// occlusion apature
-		angle.y = acos(sqrt(1.0h - ao.w));
-		// absolute angle difference
-		angle.z = abs(angle.x - angle.y);
-		// angle between bentnormal and light vector
-		#if defined(SHADOWS_CUBE)
-			angle.w = acos(dot(ao.xyz, normalize(-vec)));
-		#elif defined(SHADOWS_DEPTH)
-			angle.w = acos(dot(ao.xyz, -_LightDir.xyz));
-		#elif defined(SHADOWS_SCREEN)
-			angle.w = acos(dot(ao.xyz, -_LightDir.xyz));
-		#endif
-
-		half intersection = smoothstep(0.0h, 1.0h, 1.0h - saturate((angle.w - angle.z) / (angle.x + angle.y - angle.z)));
-		half occlusion = lerp(0.0h, intersection, saturate((angle.y - 0.1h) * 5.0h));
-
-		shadow.r = min(shadow.r, occlusion);
-	}
-	*/
-
+	shadow.r = shadow.r / kernelSize;
 	shadow.r = lerp(shadow.r, 1.0h, _LightShadowData.r);
 	return shadow;
 }

@@ -14,6 +14,7 @@
 #include "Assets/HSSSS/Framework/Brdf.cginc"
 #include "Assets/HSSSS/Framework/Surface.cginc"
 #include "Assets/HSSSS/Framework/Utility.cginc"
+#include "Assets/HSSSS/Framework/AreaLight.cginc"
 
 #include "HLSLSupport.cginc"
 #include "UnityCG.cginc"
@@ -303,30 +304,43 @@ void aAreaLight(
     // +/- llll.rrrr: l=length, r=radius, and sign as specular toggle.
     // Radius externally clamped to .999 max to simplify math.
     half lightParams = abs(color.a);
+    /*
+    #if defined(DIRECTIONAL)
+        half lightParams = _DirLightPenumbra.y * 0.01h;
+    #elif defined(SPOT)
+        half lightParams = _SpotLightPenumbra.y * 0.01h;
+    #elif defined(POINT)
+        half lightParams = _PointLightPenumbra.y * 0.01h;
+    #else
+        half lightParams = abs(color.a);
+    #endif
+    */
 
     // Specular highlight toggle.
     d.specularIntensity = color.a > 0.0h ? 1.0h : 0.0h;
 
-#if defined(USING_DIRECTIONAL_LIGHT) || defined(DIRECTIONAL) || defined(DIRECTIONAL_COOKIE)
-    // 0.1 needed to make material inspector look okay.
-    aDirectionalDiscLight(d, s, L, lightParams * 0.01h); 
-#else
-    #if !defined(SPOT) && A_USE_TUBE_LIGHTS
-        // Enable when length is non-zero, and specular is enabled.
-        if (color.a >= 1) {
-            half radius = frac(lightParams) * range;
-            half halfLength = floor(lightParams) * 0.001f * range;
+    #if defined(USING_DIRECTIONAL_LIGHT) || defined(DIRECTIONAL) || defined(DIRECTIONAL_COOKIE)
+        // 0.1 needed to make material inspector look okay.
+        aDirectionalDiscLight(d, s, L, lightParams * 0.01h);
+    #else
+        #if !defined(SPOT) && A_USE_TUBE_LIGHTS
+            // Enable when length is non-zero, and specular is enabled.
+            if (color.a >= 1)
+            {
+                half radius = frac(lightParams) * range;
+                half halfLength = floor(lightParams) * 0.001f * range;
 
-            aTubeLight(d, s, L, axis, radius, halfLength);
+                aTubeLight(d, s, L, axis, radius, halfLength);
+            }
+
+            else
+        #endif
+        {
+            aSphereLight(d, s, L, lightParams * range * 0.001h);
         }
-        else
-    #endif
-    {
-        aSphereLight(d, s, L, lightParams * range * 0.001h);
-    }
 
-    aSetLightRangeLimit(d, d.centerDistInverse, range);
-#endif
+        aSetLightRangeLimit(d, d.centerDistInverse, range);
+    #endif
 }
 
 #endif // A_FRAMEWORK_DIRECT_CGINC

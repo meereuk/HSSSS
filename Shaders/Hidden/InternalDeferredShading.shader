@@ -33,8 +33,9 @@ Shader "Hidden/HSSSS/Deferred Shading"
             // transmission options
             #pragma multi_compile ___ _BAKED_THICKNESS
             // soft shadows options
-            #pragma multi_compile ___ _PCF_TAPS_8 _PCF_TAPS_16 _PCF_TAPS_32 _PCF_TAPS_64
-            #pragma multi_compile ___ _PCSS_ON
+            #pragma multi_compile ___ _PCF_ON _PCSS_ON
+            // contact shadow
+            #pragma multi_compile ___ _SSCS_ON
 
             #include "Assets/HSSSS/Lighting/StandardSkin.cginc"
             #include "Assets/HSSSS/Framework/Deferred.cginc"

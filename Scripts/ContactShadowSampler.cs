@@ -58,11 +58,6 @@ namespace HSSSS
             this.mBuffer.GetTemporaryRT(flopRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.R8, RenderTextureReadWrite.Linear);
             this.mBuffer.Blit(BuiltinRenderTextureType.CurrentActive, flipRT, this.mMaterial, 0);
 
-            this.mBuffer.Blit(flipRT, flopRT, this.mMaterial, 1);
-            this.mBuffer.Blit(flopRT, flipRT, this.mMaterial, 2);
-            this.mBuffer.Blit(flipRT, flopRT, this.mMaterial, 1);
-            this.mBuffer.Blit(flopRT, flipRT, this.mMaterial, 2);
-
             this.mBuffer.Blit(flipRT, shadowMap);
             this.mBuffer.ReleaseTemporaryRT(flipRT);
             this.mBuffer.ReleaseTemporaryRT(flopRT);

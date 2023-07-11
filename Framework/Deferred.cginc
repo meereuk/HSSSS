@@ -14,14 +14,13 @@
 #include "UnityStandardBRDF.cginc"
 #include "UnityStandardUtils.cginc"
 
-#if defined(_PCF_TAPS_8) || defined(_PCF_TAPS_16) || defined(_PCF_TAPS_32) || defined(_PCF_TAPS_64)
-    #define _PCF_ON
-#endif
-
-#if defined(_PCF_ON)
+#if defined(_PCF_ON) || defined(_PCSS_ON)
     #include "Assets/HSSSS/Unity/HSSSSDeferredLibrary.cginc"
 #else
     #include "UnityDeferredLibrary.cginc"
+#endif
+#if defined(_SSCS_ON)
+    #include "Assets/HSSSS/Unity/ScreenSpaceShadows.cginc"
 #endif
 
 sampler2D _CameraGBufferTexture0;
@@ -78,13 +77,18 @@ ADirect aDeferredDirect(ASurface s)
     // directional light
     #if defined(DIRECTIONAL) || defined(DIRECTIONAL_COOKIE)
         // directional shadow
-        #if defined(_PCF_ON)
+        #if defined(_PCF_ON) || defined(_PCSS_ON)
             d.shadow = UnityDeferredComputeShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
         #else
             d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv);
         #endif
 
         lightVector = -_LightDir.xyz;
+
+        // contact shadow
+        #if defined(_SSCS_ON)
+                ComputeScreenSpaceShadow(s.positionWorld, lightVector, s.screenUv, d.shadow);
+        #endif
         
         #if !defined(ALLOY_SUPPORT_REDLIGHTS) && defined(DIRECTIONAL_COOKIE)
             half4 cookie = tex2Dbias(_LightTexture0, float4(mul(_LightMatrix0, half4(s.positionWorld, 1)).xy, 0, -8));
@@ -101,10 +105,15 @@ ADirect aDeferredDirect(ASurface s)
         // spot light
         #if defined (SPOT)
             // spot shadow
-            #if defined(_PCF_ON)
+            #if defined(_PCF_ON) || defined(_PCSS_ON)
                 d.shadow = UnityDeferredComputeShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
             #else
                 d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv);
+            #endif
+
+            // contact shadow
+            #if defined(_SSCS_ON)
+                ComputeScreenSpaceShadow(s.positionWorld, lightVector, s.screenUv, d.shadow);
             #endif
             
             // light cookie
@@ -124,10 +133,15 @@ ADirect aDeferredDirect(ASurface s)
         // point light
         #if defined (POINT) || defined (POINT_COOKIE)
             // point shadow
-            #if defined(_PCF_ON)
+            #if defined(_PCF_ON) || defined(_PCSS_ON)
                 d.shadow = UnityDeferredComputeShadow(-lightVector, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
             #else
                 d.shadow = UnityDeferredComputeShadow(-lightVector, fadeDist, s.screenUv);
+            #endif
+
+            // contact shadow
+            #if defined(_SSCS_ON)
+                ComputeScreenSpaceShadow(s.positionWorld, lightVector, s.screenUv, d.shadow);
             #endif
 
             // light cookie

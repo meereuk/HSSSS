@@ -47,7 +47,6 @@ public class ScreenSpaceScattering : MonoBehaviour
 		int ambiRT = Shader.PropertyToID("_AmbientDiffuseBuffer");
 
 		// override gbuffers
-
 		this.nBuffer = new CommandBuffer() { name = "OverrideGBuffer3" };
 		this.nBuffer.GetTemporaryRT(flipRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
 		this.nBuffer.GetTemporaryRT(ambiRT, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
@@ -92,12 +91,10 @@ public class ScreenSpaceScattering : MonoBehaviour
 	
 	private void SetMaterials()
 	{
-		this.blitShader = Shader.Find("Hidden/HSSSS/TransmissionBlit");
-		this.blurShader = Shader.Find("Hidden/HSSSS/ScreenSpaceDiffuseBlur");
-		this.blitMaterial = new Material(this.blitShader);
-		this.blurMaterial = new Material(this.blurShader);
+		this.blitMaterial = new Material(Shader.Find("Hidden/HSSSS/TransmissionBlit"));
+		this.blurMaterial = new Material(Shader.Find("Hidden/HSSSS/ScreenSpaceDiffuseBlur"));
 		this.blurMaterial.SetTexture("_SkinJitter", skinJitter);
-		this.blurMaterial.SetVector("_DeferredBlurredNormalsParams", new Vector2(4.0f, 0.0f));
+		//this.blurMaterial.SetVector("_DeferredBlurredNormalsParams", new Vector2(4.0f, 0.0f));
 	}
 
 	private void SetGlobalParams()
@@ -115,8 +112,10 @@ public class ScreenSpaceScattering : MonoBehaviour
 		Shader.SetGlobalVector("_DeferredSkinParams", new Vector4(1.0f, 1.0f, 1.0f, 1.0f));
 		Shader.SetGlobalVector("_DeferredTransmissionParams", new Vector4(0.0f, 1.0f, 1.0f, 1.0f));
 
-		Shader.SetGlobalVector("_PointLightPenumbra", new Vector3(2.0f, 2.0f, 0.0f));
+/*
+		Shader.SetGlobalVector("_PointLightPenumbra", new Vector3(8.0f, 8.0f, 0.0f));
 		Shader.SetGlobalVector("_SpotLightPenumbra", new Vector3(4.0f, 4.0f, 0.0f));
 		Shader.SetGlobalVector("_DirLightPenumbra", new Vector3(8.0f, 8.0f, 0.0f));
+		*/
 	}
 }

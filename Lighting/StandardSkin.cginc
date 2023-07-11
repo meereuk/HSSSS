@@ -85,13 +85,7 @@ void aDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
     // non-skin sss + thin layer transmittance
     else if (s.scatteringMask < 0.7f)
     {
-        #if defined(_BAKED_THICKNESS)
-            half3 transmission = 0.0h;
-        #else
-            half3 transmission = aThinTransmission(d, s, _DeferredTransmissionLut,
-                _DeferredTransmissionParams.x, _DeferredTransmissionParams.y, _DeferredThicknessBias);
-        #endif
-
+        half3 transmission = aThinTransmission(d, s, _DeferredTransmissionParams.x);
         diffuse = diffuse + transmission;
     }
 

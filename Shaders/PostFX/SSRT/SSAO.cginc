@@ -65,7 +65,7 @@ inline float2 HorizonTrace(ray ray, float gamma, uint split)
     float minStr = length(_MainTex_TexelSize.xy / split) / length(ray.fwd - ray.org);
     float2 theta = -1.0f;
 
-    float s = -1.0f;
+    //float s = -1.0f;
 
     [unroll]
     for (float iter = 1.0f; iter <= _SSAONumStride && iter * minStr <= 1.0f; iter += 1.0f)
@@ -91,7 +91,7 @@ inline float2 HorizonTrace(ray ray, float gamma, uint split)
 
         theta = max(theta, dz);
 
-        s *= -1.0f;
+        //s *= -1.0f;
     }
 
     return FastArcTan(theta);

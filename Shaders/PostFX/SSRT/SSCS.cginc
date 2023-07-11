@@ -3,96 +3,85 @@
 
 #include "Common.cginc"
 
+float3 _LightPosition;
+
+uniform half _SSCSRayLength;
+uniform half _SSCSRayStride;
+uniform half _SSCSMeanDepth;
+
 #ifndef _SSCSNumStride
-    #define _SSCSNumStride 16
+    #define _SSCSNumStride 128
 #endif
 
 struct ray
 {
-    float2 org;
-    float2 fwd;
-    float2 bwd;
+    float4 org;
+    float4 dir;
     float len;
-    float z;
-    float r;
 };
-
-half3 _LightPosition;
-half _SSCSRayLength;
-half _SSCSRayRadius;
-//half _SSCSFadeDepth;
-//half _SSCSMeanDepth;
-//half _SSCSDepthBias;
-
-// view-space ray tracing
-inline void RayTraceIteration(inout ray ray)
-{
-    /*
-    half4 vpos = mul(_WorldToViewMatrix, ray.pos);
-    half4 vdir = mul(_WorldToViewMatrix, ray.dir);
-
-    ray.len = mad(vdir.z, ray.len, vpos.z) > _ProjectionParams.y ?
-        -(vpos.z + _ProjectionParams.z) / vdir.z : ray.len;
-
-    [unroll]
-    for (uint iter = 1; iter <= _SSCSNumStride && ray.hit == false; iter ++)
-    {
-        ray.step = (half) iter / _SSCSNumStride;
-
-        half4 vp = vpos + vdir * ray.len * ray.step;
-        half4 sp = mul(unity_CameraProjection, vp);
-
-        ray.uv = sp.xy / sp.w * 0.5f + 0.5f;
-
-        half zRay = -vp.z;
-        half zFace = LinearEyeDepth(tex2D(_CameraDepthTexture, ray.uv));
-        half zBack = max(tex2D(_BackFaceDepthBuffer, ray.uv), zFace + 0.1h);
-
-        if (zRay > zFace && zRay < zBack)
-        {
-            ray.hit = true;
-        }
-    }
-    */
-}
 
 half ContactShadow(v2f_img IN) : SV_TARGET
 {
-    return 1.0h;
-}
+    float4 vpos;
+    float4 wpos;
+    float depth;
 
-half BlurInDir(half2 uv, half2 dir)
-{
-    /*
-    half sM = tex2D(_MainTex, uv);
-    half zM = LinearEyeDepth(tex2D(_CameraDepthTexture, uv));
-    half nM = mad(tex2D(_CameraGBufferTexture2, uv), 2.0h, -1.0h);
+    SampleCoordinates(IN.uv, vpos, wpos, depth);
 
-    half2 step = _MainTex_TexelSize.xy * dir;
+    float4 lpos = mul(_WorldToViewMatrix, float4(_LightPosition, 1.0f));
+    float4 vdir = normalize(lpos - vpos);
 
-    half sB = 0.0h;
-    half sN = 0.0h;
+    float dist = distance(lpos, vpos);
+    float len = 1.0f / _SSCSNumStride;
+
+    half shadow = 1.0h;
 
     [unroll]
-    for(uint i = 0; i < KERNEL_TAPS; i ++)
+    for (float iter = 1.0f; iter <= _SSCSNumStride; iter += 1.0f)
     {
-        half2 offsetUv = mad(step, aTorusKernel[i].x, uv);
-        //half2 offsetUv = uv + _MainTex_TexelSize.xy * dir * aTorusKernel[i].x;
+        float4 vp = mad(mad(len, iter, 0.01f), vdir, vpos);
+        float4 sp = mul(unity_CameraProjection, vp);
+        float2 uv = sp.xy / sp.w * 0.5f + 0.5f;
+        float z = LinearEyeDepth(SampleZBuffer(uv));
+        float zz = -vp.z;
 
-        half sS = tex2D(_MainTex, offsetUv);
-        
-        half zS = LinearEyeDepth(tex2D(_CameraDepthTexture, offsetUv));
-        half nS = mad(tex2D(_CameraGBufferTexture2, offsetUv), 2.0h, -1.0h);
+        float radius = iter * len / dist * 0.1f;
 
-        half s = exp(-abs(zS - zM) * 32.0h) * exp(-distance(nS, nM) * 32.0h);
-
-        sB += sS * aTorusKernel[i].y * s;
-        sN += aTorusKernel[i].y * s;
+        shadow = min(shadow, smoothstep(zz - radius, zz + radius, z));
     }
 
-    return sB / sN;
+    return shadow;
+
+    /*
+    float4 dir = normalize(float4(lpos.xy - vpos.xy, 0.0f, 0.0f));
+
+    ray ray;
+
+    ray.z = depth;
+    ray.org = IN.uv;
+    ray.len = 0.5f;
+
+    float4 spos = mul(unity_CameraProjection, mad(dir, ray.len, vpos));
+    ray.fwd = spos.xy / spos.w * 0.5f + 0.5f;
+
+    float theta = -100.0f;
+
+    [unroll]
+    for (float iter = 1.0f; iter <= _SSCSNumStride; iter += 1.0f)
+    {
+        float str = iter / _SSCSNumStride;
+        float2 uv = lerp(ray.org, ray.fwd, str);
+
+        float dz = ray.z - LinearEyeDepth(SampleZBuffer(uv));
+        dz /= abs(str * ray.len);
+
+        theta = max(theta, dz);
+    }
+
+    float ref_theta = (depth + lpos.z) / length(lpos.xy - vpos.xy);
+
+    return smoothstep(theta - 0.01f, theta, ref_theta);
     */
-    return 1.0h;
 }
 
 #endif
