@@ -21,7 +21,7 @@ Shader "Hidden/HSSSS/Deferred Shading"
 
             CGPROGRAM
             #pragma target 5.0
-            #pragma exclude_renderers gles
+            #pragma only_renderers d3d11
             #pragma vertex vert_deferred
             #pragma fragment frag
 
@@ -105,7 +105,7 @@ Shader "Hidden/HSSSS/Deferred Shading"
 
             CGPROGRAM
             #pragma target 5.0
-            #pragma exclude_renderers gles
+            #pragma only_renderers d3d11
             #pragma vertex vert
             #pragma fragment frag
 

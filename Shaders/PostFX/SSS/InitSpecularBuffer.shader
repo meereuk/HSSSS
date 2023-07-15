@@ -11,7 +11,7 @@
 
         CGINCLUDE
         #pragma target 5.0
-        #pragma exclude_renderers gles
+        #pragma only_renderers d3d11
 
         #include "UnityCG.cginc"
         #include "UnityDeferredLibrary.cginc"

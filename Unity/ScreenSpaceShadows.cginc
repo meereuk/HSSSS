@@ -76,8 +76,8 @@ inline void ComputeScreenSpaceShadow(float3 wpos, float3 wdir, float2 uv, inout 
 		float b0 = z0 + _SSCSMeanDepth;
 		float b1 = z1 + _SSCSMeanDepth;
 
-		s.x = min(s.x, max(smoothstep(zz0 - bias, zz0, z0), smoothstep(b0, b0 + 0.0001f, zz0)));
-		s.y = min(s.y, max(smoothstep(zz1 - bias, zz1, z1), smoothstep(b0, b0 + 0.0001f, zz1)));
+		s.x = min(s.x, max(smoothstep(zz0 - bias, zz0, z0), smoothstep(b0 - bias, b0, zz0)));
+		s.y = min(s.y, max(smoothstep(zz1 - bias, zz1, z1), smoothstep(b0 - bias, b0, zz1)));
 	}
 
 	shadow.r = min(shadow.r, lerp(dot(s, 0.5h), 1.0h, _LightShadowData.r));

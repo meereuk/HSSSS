@@ -51,7 +51,7 @@ Shader "HSSSS/Human/Eyeball"
 
             CGPROGRAM
             #pragma target 5.0
-            #pragma exclude_renderers gles
+            #pragma only_renderers d3d11
         
             #pragma multi_compile_fwdbase
             #pragma multi_compile_fog
@@ -76,7 +76,7 @@ Shader "HSSSS/Human/Eyeball"
 
             CGPROGRAM
             #pragma target 5.0
-            #pragma exclude_renderers gles
+            #pragma only_renderers d3d11
         
             #pragma multi_compile_fwdadd_fullshadows
             #pragma multi_compile_fog
@@ -98,7 +98,7 @@ Shader "HSSSS/Human/Eyeball"
         
             CGPROGRAM
             #pragma target 5.0
-            #pragma exclude_renderers gles
+            #pragma only_renderers d3d11
         
             #pragma multi_compile_shadowcaster
 
@@ -119,7 +119,7 @@ Shader "HSSSS/Human/Eyeball"
 
             CGPROGRAM
             #pragma target 5.0
-            #pragma exclude_renderers nomrt gles
+            #pragma only_renderers d3d11
         
             #pragma multi_compile ___ UNITY_HDR_ON
             #pragma multi_compile LIGHTMAP_OFF LIGHTMAP_ON

@@ -63,8 +63,8 @@ Shader "HSSSS/Overlay/Tessellation/Forward"
             ZWrite Off
 
             CGPROGRAM
-            #pragma target gl4.1
-            #pragma exclude_renderers gles
+            #pragma target 5.0
+            #pragma only_renderers d3d11
 
             #pragma multi_compile_fwdbase
             #pragma multi_compile_fog
@@ -91,8 +91,8 @@ Shader "HSSSS/Overlay/Tessellation/Forward"
             ZWrite Off
 
             CGPROGRAM
-            #pragma target gl4.1
-            #pragma exclude_renderers gles
+            #pragma target 5.0
+            #pragma only_renderers d3d11
         
             #pragma multi_compile_fwdadd_fullshadows
             #pragma multi_compile_fog

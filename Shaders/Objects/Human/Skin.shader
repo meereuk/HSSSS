@@ -63,8 +63,8 @@ Shader "HSSSS/Human/Skin"
             Tags { "LightMode" = "ForwardBase" }
 
             CGPROGRAM
-            #pragma target 3.0
-            #pragma exclude_renderers gles
+            #pragma target 5.0
+            #pragma only_renderers d3d11
         
             #pragma multi_compile_fwdbase
             #pragma multi_compile_fog
@@ -88,8 +88,8 @@ Shader "HSSSS/Human/Skin"
             ZWrite Off
 
             CGPROGRAM
-            #pragma target 3.0
-            #pragma exclude_renderers gles
+            #pragma target 5.0
+            #pragma only_renderers d3d11
         
             #pragma multi_compile_fwdadd_fullshadows
             #pragma multi_compile_fog
@@ -110,8 +110,8 @@ Shader "HSSSS/Human/Skin"
             Tags { "LightMode" = "ShadowCaster" }
         
             CGPROGRAM
-            #pragma target 3.0
-            #pragma exclude_renderers gles
+            #pragma target 5.0
+            #pragma only_renderers d3d11
         
             #pragma multi_compile_shadowcaster
 
@@ -131,8 +131,8 @@ Shader "HSSSS/Human/Skin"
             Tags { "LightMode" = "Deferred" }
 
             CGPROGRAM
-            #pragma target 3.0
-            #pragma exclude_renderers nomrt gles
+            #pragma target 5.0
+            #pragma only_renderers d3d11
 
             #pragma multi_compile ___ UNITY_HDR_ON
             #pragma multi_compile LIGHTMAP_OFF LIGHTMAP_ON

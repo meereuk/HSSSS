@@ -7,7 +7,7 @@ Shader "Hidden/HSSSS/BlitDepthBuffer"
 
     CGINCLUDE
     #pragma target 5.0
-    #pragma exclude_renderers gles
+    #pragma only_renderers d3d11
     #pragma vertex vert_img
     ENDCG
 

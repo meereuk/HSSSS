@@ -62,8 +62,8 @@
             Cull Back
 
             CGPROGRAM
-            #pragma target 3.0
-            #pragma exclude_renderers nomrt gles
+            #pragma target 5.0
+            #pragma only_renderers d3d11
 
             #pragma multi_compile ___ UNITY_HDR_ON
             #pragma multi_compile LIGHTMAP_OFF LIGHTMAP_ON
@@ -93,8 +93,8 @@
             Cull Back
 
             CGPROGRAM
-            #pragma target 3.0
-            #pragma exclude_renderers nomrt gles
+            #pragma target 5.0
+            #pragma only_renderers d3d11
                 
             #pragma multi_compile ___ UNITY_HDR_ON
             #pragma multi_compile LIGHTMAP_OFF LIGHTMAP_ON

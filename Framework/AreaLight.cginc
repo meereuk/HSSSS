@@ -25,7 +25,6 @@ inline float GradientNoise(float2 uv)
 // gram-schmidt process
 inline float3x3 GramSchmidtMatrix(float2 uv, float3 axis)
 {
-	//float3 jitter = tex2D(_ShadowJitterTexture, uv * _ShadowJitterTexture_TexelSize.xy * _ScreenParams.xy);
     float3 jitter = float3(
         GradientNoise(mad(uv, 1.3f, _Time.xx)),
         GradientNoise(mad(uv, 1.6f, _Time.xx)),
