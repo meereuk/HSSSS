@@ -38,8 +38,8 @@ Shader "HSSSS/Human/Tessellation/Skin"
         [Space(8)][Header(MicroDetails)]
         _DetailNormalMap_2 ("DetailNormalMap_2", 2D) = "bump" {}
         _DetailNormalMapScale_2 ("DetailNormalMapScale_2", Float) = 1
-        _DetailNormalMap_3 ("DetailNormalMap_2", 2D) = "bump" {}
-        _DetailNormalMapScale_3 ("DetailNormalMapScale_2", Float) = 1
+        _DetailNormalMap_3 ("DetailNormalMap_3", 2D) = "bump" {}
+        _DetailNormalMapScale_3 ("DetailNormalMapScale_3", Float) = 1
         _DetailSkinPoreMap ("DetailSkinPoreMap", 2D) = "white" {}
 
         [Space(8)][Header(Transmission)]

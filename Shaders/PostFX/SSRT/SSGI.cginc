@@ -108,8 +108,9 @@ inline half3 HorizonTrace(ray ray)
 
         // attenuation
         half2 atten = {
-            1.0h / max(abs(dz.x), 1.0h),
-            1.0h / max(abs(dz.y), 1.0h)
+            1.0h, 1.0h
+            //1.0h / max(abs(dz.x), 1.0h),
+            //1.0h / max(abs(dz.y), 1.0h)
             //1.0h / max(distance(vp1.xyz, ray.vp0.xyz), 1.0h),
             //1.0h / max(distance(vp2.xyz, ray.vp0.xyz), 1.0h)
         };

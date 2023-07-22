@@ -16,6 +16,7 @@ Shader "HSSSS/Human/Hair/Deferred"
         [Space(8)][Header(Specular)]
         _SpecGlossMap ("Glossiness Map", 2D) = "white" {}
         _SpecColor ("Specular Color", Color) = (1,1,1,1)
+        _Metallic ("Specularity", Range(0, 1)) = 0
         _Smoothness ("Smoothness", Range(0, 1)) = 0
 
         [Space(8)][Header(Occlusion)]
@@ -26,8 +27,9 @@ Shader "HSSSS/Human/Hair/Deferred"
         _BumpMap ("BumpMap", 2D) = "bump" {}
         _BumpScale ("BumpScale", Float) = 1
 
+
         [Space(8)][Header(Transparency)]
-        _Metallic ("Hash", Range(0, 1)) = 0
+        _Hash ("Hash", Range(0, 1)) = 0
         _Cutoff ("Cutoff", Range(0, 1)) = 0.5
         _FuzzBias ("FuzzBias", Range(0, 1)) = 0.0
         _BlueNoise ("Blue Noise", 2D) = "black" {}

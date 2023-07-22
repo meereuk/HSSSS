@@ -60,7 +60,7 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
     {
         // energy conserved wrap diffuse
         diffuse *= saturate((d.NdotLm + 0.5h) / 2.25h);
-        diffuse *= saturate(normalize(s.albedo + 1.0h) + d.NdotL);
+        diffuse *= saturate(normalize(s.albedo + 0.5h) + d.NdotL);
         specular = sheen;
     }
 
@@ -163,7 +163,7 @@ inline half3 aStandardTransmission
 // thin layer transmittance for clothes
 inline half3 aThinTransmission(ADirect d, ASurface s, half weight)
 {
-    half attenuation = 0.25h * weight * saturate(0.3h - dot(s.ambientNormalWorld, d.direction));
+    half attenuation = 0.5h * weight * saturate(0.3h - dot(s.ambientNormalWorld, d.direction));
     return d.color * s.albedo * attenuation * d.shadow.r;
 }
 

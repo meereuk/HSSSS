@@ -28,6 +28,7 @@ Shader "HSSSS/Overlay/Hash"
         _BumpScale ("BumpScale", Float) = 1
 
         [Space(8)][Header(Transparency)]
+        _Hash ("Hash", Range(0, 1)) = 0
         _FuzzBias ("FuzzBias", Range(0, 1)) = 0.0
         _BlueNoise ("Blue Noise", 2D) = "black" {}
         _FresnelAlpha ("Fresnel Alpha", Range(0, 1)) = 0

@@ -72,9 +72,11 @@ float4 tex2DStochastic(sampler2D tex, float2 UV)
     A_SAMPLER2D(_DetailSkinPoreMap);
     half _DetailNormalMapScale_2;
     half _DetailNormalMapScale_3;
+#endif
 
-    inline void aSampleMicroTangent(inout ASurface s)
-    {
+inline void aSampleMicroTangent(inout ASurface s)
+{
+    #if defined(_MICRODETAILS_ON)
         half3 weight = abs(s.normalWorld) - 0.2h;
         weight = max(weight, 0.0h);
         weight = pow(weight, half3(3.0h, 3.0h, 3.0h));
@@ -131,7 +133,9 @@ float4 tex2DStochastic(sampler2D tex, float2 UV)
         s.ambientNormalWorld = s.normalWorld;
 
         aUpdateViewData(s);
-    }
-#endif
+    #else
+        aUpdateNormalData(s);
+    #endif
+}
 
 #endif

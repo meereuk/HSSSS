@@ -55,7 +55,8 @@ half _DetailNormalMapScale;
 #if defined(_ALPHAHASHED_ON)
     sampler2D _BlueNoise;
     float4 _BlueNoise_TexelSize;
-    float _FuzzBias;
+    half _FuzzBias;
+    half _Hash;
 #endif
 
 /*
@@ -128,7 +129,7 @@ inline void aSampleAlphaClip(inout ASurface s)
     #if defined(_ALPHAHASHED_ON)
         half hash = tex2D(_BlueNoise, s.screenUv.xy * _ScreenParams.xy * _BlueNoise_TexelSize.xy + _FuzzBias * _Time.yy + mad(frac(s.viewDepth), 0.5h, 0.5h));
         //float hash = HashNoise(s.positionWorld * 100.0f + _Time.xxx);
-        clip(s.opacity - hash - _Cutoff);
+        clip(s.opacity - mad(hash, _Hash, _Cutoff));
     #endif
 }
 
