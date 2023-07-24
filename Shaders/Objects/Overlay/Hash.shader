@@ -2,7 +2,7 @@ Shader "HSSSS/Overlay/Hash"
 {
     Properties
     {
-        [Enum(Standard, 0, Null, 1, Cloth, 2, Skin, 3)]
+        [Enum(Standard, 0, Anisotropic, 1, Sheen, 2, Skin, 3)]
         _MaterialType("Material Type",Float) = 0
 
         [Space(8)][Header(Albedo)]
@@ -26,6 +26,9 @@ Shader "HSSSS/Overlay/Hash"
         [Space(8)][Header(Normal)]
         _BumpMap ("BumpMap", 2D) = "bump" {}
         _BumpScale ("BumpScale", Float) = 1
+
+        [Space(8)][Header(Anisotropy)]
+        _Anisotropy ("Anisotropy", Range(-1, 1)) = 0
 
         [Space(8)][Header(Transparency)]
         _Hash ("Hash", Range(0, 1)) = 0

@@ -41,6 +41,7 @@ half4 _Color_3;
 half3 _EmissionColor;
 
 half _MaterialType;
+half _Anisotropy;
 
 half _Cutoff;
 half _Metallic;
@@ -196,7 +197,15 @@ inline void aSampleEmission(inout ASurface s)
 
 inline void aSampleTransmission(inout ASurface s)
 {
-    s.transmission = 1.0h - tex2D(_Thickness, A_TRANSFORM_UV_SCROLL(s, _Thickness)).r;
+    if (_MaterialType == 1.0h)
+    {
+        s.transmission = saturate(mad(_Anisotropy, 0.5h, 0.5h));
+    }
+
+    else
+    {
+        s.transmission = 1.0h - tex2D(_Thickness, A_TRANSFORM_UV_SCROLL(s, _Thickness)).r;
+    }
 }
 
 inline void aSampleScattering(inout ASurface s)

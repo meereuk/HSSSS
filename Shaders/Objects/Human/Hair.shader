@@ -2,6 +2,9 @@ Shader "HSSSS/Human/Hair/Deferred"
 {
     Properties
     {
+        [Enum(Standard, 0, Anisotropic, 1, Sheen, 2, Skin, 3)]
+        _MaterialType("Material Type",Float) = 0
+
         [Header(Albedo)]
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Primary Color", Color) = (1,1,1,1)
@@ -27,6 +30,8 @@ Shader "HSSSS/Human/Hair/Deferred"
         _BumpMap ("BumpMap", 2D) = "bump" {}
         _BumpScale ("BumpScale", Float) = 1
 
+        [Space(8)][Header(Anisotropy)]
+        _Anisotropy ("Anisotropy", Range(-1, 1)) = 0
 
         [Space(8)][Header(Transparency)]
         _Hash ("Hash", Range(0, 1)) = 0

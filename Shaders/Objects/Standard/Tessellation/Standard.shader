@@ -2,7 +2,7 @@ Shader "HSSSS/Standard/Tessellation/Standard"
 {
     Properties
     {
-        [Enum(Standard, 0, Null, 1, Cloth, 2, Skin, 3)]
+        [Enum(Standard, 0, Anisotropic, 1, Sheen, 2, Skin, 3)]
         _MaterialType("Material Type",Float) = 0
 
         [Space(8)][Header(Albedo)]
@@ -41,6 +41,9 @@ Shader "HSSSS/Standard/Tessellation/Standard"
         [Space(8)][Header(DetailNormal)]
         _DetailNormalMap ("DetailNormalMap", 2D) = "bump" {}
         _DetailNormalMapScale ("DetailNormalMapScale", Float) = 1
+
+        [Space(8)][Header(Anisotropy)]
+        _Anisotropy ("Anisotropy", Range(-1, 1)) = 0
 
         [Space(8)][Header(Transmission)]
         _Thickness ("ThicknessMap", 2D) = "white" {}

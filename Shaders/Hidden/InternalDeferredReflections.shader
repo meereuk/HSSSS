@@ -31,6 +31,17 @@ Shader "Hidden/HSSSS/Deferred Reflections"
             {
                 ASurface s = aDeferredSurface(i);
                 float blendDistance = unity_SpecCube1_ProbePosition.w; // will be set to blend distance for this probe
+
+                if (s.scatteringMask > 0.1h && s.scatteringMask < 0.4h)
+                {
+                    half3 bitangent = normalize(half3(0.0h, 1.0h, 0.0h) - s.normalWorld * s.normalWorld.y);
+                    half3 tangent = normalize(cross(s.normalWorld, bitangent));
+
+                    half3 anisoTangent = cross(bitangent, s.viewDirWorld);
+                    half3 anisoNormal = normalize(cross(anisoTangent, bitangent));
+
+                    s.reflectionVectorWorld = reflect(-s.viewDirWorld, anisoNormal);
+                }
     
                 #if UNITY_SPECCUBE_BOX_PROJECTION
                     // For box projection, use expanded bounds as they are rendered; otherwise

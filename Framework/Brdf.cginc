@@ -59,6 +59,15 @@ inline half DGGX(half a, half NdotH)
     return a2 / (denom * denom);
 }
 
+inline half DGGXAniso(half at, half ab, half TdotH, half BdotH, half NdotH)
+{
+    half a2 = at * ab;
+    half3 v = half3(ab * TdotH, at * BdotH, a2 * NdotH);
+    half v2 = dot(v, v);
+    half w2 = a2 / v2;
+    return a2 * w2 * w2;
+}
+
 // 'charlie' sheen distribution
 inline half DCharlie(half a, half NdotH)
 {
@@ -74,6 +83,13 @@ inline half VSmith(half a, half NdotV, half NdotL)
     half a2 = a * a;
     half lambdaV = NdotL * sqrt((NdotV - a2 * NdotV) * NdotV + a2);
     half lambdaL = NdotV * sqrt((NdotL - a2 * NdotL) * NdotL + a2);
+    return  saturate(0.5h / (lambdaV + lambdaL));
+}
+
+inline half VSmithAniso(half at, half ab, half TdotV, half BdotV, half TdotL, half BdotL, half NdotV, half NdotL)
+{
+    half lambdaV = NdotL * length(half3(at * TdotV, ab * BdotV, NdotV));
+    half lambdaL = NdotV * length(half3(at * TdotL, ab * BdotL, NdotL));
     return  saturate(0.5h / (lambdaV + lambdaL));
 }
 

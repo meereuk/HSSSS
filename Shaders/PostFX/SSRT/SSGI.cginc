@@ -31,16 +31,7 @@ uniform SamplerState sampler_SSGIIrradianceTexture;
 
 static const half torusKernel[3] =
 {
-    0.3h,
-    0.4h,
-    0.3h
-    /*
-    0.0625h,
-    0.2500h,
-    0.3750h,
-    0.2500h,
-    0.0625h
-    */
+    0.3h, 0.4h, 0.3h
 };
 
 struct ray
@@ -68,8 +59,9 @@ inline half3 HorizonTrace(ray ray)
     float minStr = length(_MainTex_TexelSize.xy) / length(ray.uv1 - ray.uv0);
 
     float2 theta = -1.0f;
-    float count = 0.0f;
     half3 gi = 0.0h;
+
+    float sss = 0.0f;
 
     [unroll]
     for (float iter = 1.0f; iter <= _SSGINumStride && iter * minStr <= 1.0f; iter += 1.0f)
@@ -106,28 +98,16 @@ inline half3 HorizonTrace(ray ray)
             saturate(dot(normalize(vp2.xyz - ray.vp0.xyz), ray.nrm))
         };
 
-        // attenuation
-        half2 atten = {
-            1.0h, 1.0h
-            //1.0h / max(abs(dz.x), 1.0h),
-            //1.0h / max(abs(dz.y), 1.0h)
-            //1.0h / max(distance(vp1.xyz, ray.vp0.xyz), 1.0h),
-            //1.0h / max(distance(vp2.xyz, ray.vp0.xyz), 1.0h)
-        };
-
         dz /= abs(str * ray.len);
 
-        atten.x *= smoothstep(-0.2h, 0.0h, dz.x - theta.x);
-        atten.y *= smoothstep(-0.2h, 0.0h, dz.y - theta.y);
-
-        gi += ir1.xyz * atten.x * ndotl.x;
-        gi += ir2.xyz * atten.y * ndotl.y;
+        gi += ir1.xyz * ndotl.x * step(theta.x, dz.x) * (str - sss);
+        gi += ir2.xyz * ndotl.y * step(theta.y, dz.y) * (str - sss);
 
         theta = max(theta, dz);
-        count += 1.0f;
+        sss = str;
     }
 
-    return gi / max(count, 1.0f);
+    return gi;
 }
 
 inline half4 GBufferPrePass(v2f_img IN) : SV_TARGET

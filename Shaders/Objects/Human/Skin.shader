@@ -3,7 +3,7 @@ Shader "HSSSS/Human/Skin"
 
     Properties
     {
-        [HideInInspector][Enum(Standard, 0, Null, 1, Cloth, 2, Skin, 3)]
+        [Enum(Standard, 0, Anisotropic, 1, Sheen, 2, Skin, 3)]
         _MaterialType("Material Type",Float) = 3
 
         [Space(8)][Header(Albedo)]

@@ -28,7 +28,7 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
 
     half sheen = FSchlick(s.f0, d.LdotH) * DCharlie(s.beckmannRoughness, d.NdotH) * VNeubelt(s.NdotV, d.NdotL);
 
-    specular = aSpecularBrdf(s.f0, s.beckmannRoughness, d.LdotH, d.NdotH, d.NdotL, s.NdotV);
+    specular = FSchlick(s.f0, d.LdotH);
     diffuse = aDiffuseBrdf(s.albedo, s.roughness, d.LdotH, d.NdotL, s.NdotV);
 
     sheen *= specularLight;
@@ -51,9 +51,39 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
     float NdotLa = tex2D(_AreaLightLUT, float2(mad(d.NdotLm, 0.5f, 0.5f), scale));
     */
     
-    if (s.scatteringMask < 0.4h)
+    if (s.scatteringMask < 0.1h)
     {
         diffuse *= d.NdotL;
+        specular *= DGGX(s.beckmannRoughness, d.NdotH);
+        specular *= VSmith(s.beckmannRoughness, s.NdotV, d.NdotL);
+    }
+
+    else if (s.scatteringMask < 0.4h)
+    {
+        half3 halfvector = normalize(d.direction + s.viewDirWorld);
+
+        //half3 bitangent = normalize(s.viewDirWorld - dot(s.viewDirWorld, s.normalWorld) * s.normalWorld);
+        half3 bitangent = normalize(half3(0.0h, 1.0h, 0.0h) - s.normalWorld * s.normalWorld.y);
+        half3 tangent = normalize(cross(s.normalWorld, bitangent));
+
+        half TdotH = dot(tangent, halfvector);
+        half BdotH = dot(bitangent, halfvector);
+
+        half TdotV = dot(tangent, s.viewDirWorld);
+        half BdotV = dot(bitangent, s.viewDirWorld);
+
+        half TdotL = dot(tangent, d.direction);
+        half BdotL = dot(bitangent, d.direction);
+
+        half anisotropy = mad(mad(s.transmission, 2.0h, -1.0h), -0.9h, 1.0h);
+
+        half at = s.beckmannRoughness * rsqrt(anisotropy);
+        half ab = s.beckmannRoughness *  sqrt(anisotropy);
+
+        diffuse *= saturate((d.NdotLm + 0.5h) / 2.25h);
+        diffuse *= saturate(normalize(s.albedo + 0.5h) + d.NdotL);
+        specular *= DGGXAniso(at, ab, TdotH, BdotH, d.NdotH);
+        specular *= VSmithAniso(at, ab, TdotV, BdotV, TdotL, BdotL, s.NdotV, d.NdotL);
     }
 
     else if (s.scatteringMask < 0.7h)
@@ -64,9 +94,11 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
         specular = sheen;
     }
 
-    else if (s.scatteringMask == 1.0h)
+    else
     {
         diffuse *= d.NdotL;
+        specular *= DGGX(s.beckmannRoughness, d.NdotH);
+        specular *= VSmith(s.beckmannRoughness, s.NdotV, d.NdotL);
         specular += sheen;
     }
 }

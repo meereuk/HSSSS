@@ -77,7 +77,7 @@ void aDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
     aStandardDirect(d, s, diffuse, specular);
 
     // default
-    if (s.scatteringMask < 0.4f)
+    if (s.scatteringMask < 0.1f)
     {
         return;   
     }
