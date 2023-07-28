@@ -71,7 +71,7 @@ inline float2 PoissonDisk(uint i, uint n)
 #if defined(SHADOWS_CUBE) || defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
 inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half NdotL)
 {
-	uint kernelSize = pow(2, min(max(_SoftShadowNumIter, 3), 6));
+	uint kernelSize = pow(2, clamp(_SoftShadowNumIter, 3, 6));
 
 	// initialize shadow coordinate and depth
 	#if defined(SHADOWS_CUBE)

@@ -122,10 +122,12 @@ public class GlobalIllumination : MonoBehaviour
         this.aoBuffer.Blit(flip, flop);
 
         // spatio denoiser
+        /*
         this.aoBuffer.Blit(flop, flip, this.mMaterial, 6);
         this.aoBuffer.Blit(flip, flop, this.mMaterial, 7);
         this.aoBuffer.Blit(flop, flip, this.mMaterial, 8);
         this.aoBuffer.Blit(flip, flop, this.mMaterial, 9);
+        */
 
         //
         this.aoBuffer.Blit(flop, flip, this.mMaterial, 11);

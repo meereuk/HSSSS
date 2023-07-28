@@ -88,28 +88,59 @@ public class AmbientOcclusion : MonoBehaviour
     {
         int flip = Shader.PropertyToID("_SSAOFlipRenderTexture");
         int flop = Shader.PropertyToID("_SSAOFlopRenderTexture");
-        int zbuf = Shader.PropertyToID("_FuckingMoronsUnityDev");
+        int zbuf = Shader.PropertyToID("_HierachicalZBuffer0");
+
+        int ZB1 = Shader.PropertyToID("_HierachicalZBuffer1");
+        int ZB2 = Shader.PropertyToID("_HierachicalZBuffer2");
+        int ZB3 = Shader.PropertyToID("_HierachicalZBuffer3");
 
         this.aoBuffer = new CommandBuffer() { name = "HSSSS.SSAO" };
 
-        this.aoBuffer.GetTemporaryRT(flip, Screen.width, Screen.height, 0, FilterMode.Point, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-        this.aoBuffer.GetTemporaryRT(flop, Screen.width, Screen.height, 0, FilterMode.Point, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
-        this.aoBuffer.GetTemporaryRT(zbuf, Screen.width, Screen.height, 0, FilterMode.Bilinear, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(flip, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(flop, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(zbuf, -1, -1, 0, FilterMode.Bilinear, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
+
+        this.aoBuffer.GetTemporaryRT(ZB1, Screen.width / 2, Screen.height / 2, 0, FilterMode.Bilinear, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(ZB2, Screen.width / 4, Screen.height / 4, 0, FilterMode.Bilinear, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(ZB3, Screen.width / 8, Screen.height / 8, 0, FilterMode.Bilinear, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
 
         this.aoBuffer.Blit(BuiltinRenderTextureType.CurrentActive, zbuf, this.mMaterial, 0);
+
+        this.aoBuffer.Blit(zbuf, ZB1);
+        this.aoBuffer.Blit(zbuf, ZB2);
+        this.aoBuffer.Blit(zbuf, ZB3);
 
         this.aoBuffer.Blit(zbuf, flip, this.mMaterial, 8);
         this.aoBuffer.Blit(flip, flop, this.mMaterial, 9);
 
+/*
         this.aoBuffer.Blit(flop, flip, this.mMaterial, 10);
         this.aoBuffer.Blit(flip, flop, this.mMaterial, 11);
         this.aoBuffer.Blit(flop, flip, this.mMaterial, 12);
-        this.aoBuffer.Blit(flip, flop);
+        this.aoBuffer.Blit(flip, flop);*/
+
+/*
+        // diffuse occlusion
+        this.aoBuffer.Blit(BuiltinRenderTextureType.CameraTarget, flip, this.mMaterial, 15);
+        this.aoBuffer.Blit(flip, BuiltinRenderTextureType.CameraTarget);
+        // specular occlusion
+        this.aoBuffer.Blit(BuiltinRenderTextureType.Reflections, flip, this.mMaterial, 16);
+        this.aoBuffer.Blit(flip, BuiltinRenderTextureType.Reflections);
+        //
+*/
+        this.aoBuffer.SetGlobalTexture("_SSAOBentNormalTexture", flop);
 
         this.aoBuffer.Blit(flop, flip, this.mMaterial, 17);
         this.aoBuffer.Blit(flip, BuiltinRenderTextureType.CameraTarget);
 
         //this.aoBuffer.Blit(flop, depth, this.mMaterial, 17);
+
+        this.aoBuffer.ReleaseTemporaryRT(flip);
+        this.aoBuffer.ReleaseTemporaryRT(flop);
+        this.aoBuffer.ReleaseTemporaryRT(zbuf);
+        this.aoBuffer.ReleaseTemporaryRT(ZB1);
+        this.aoBuffer.ReleaseTemporaryRT(ZB2);
+        this.aoBuffer.ReleaseTemporaryRT(ZB3);
 
         this.mCamera.AddCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, this.aoBuffer);
     }

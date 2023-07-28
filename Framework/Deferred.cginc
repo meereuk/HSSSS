@@ -23,6 +23,8 @@
     #include "Assets/HSSSS/Unity/ScreenSpaceShadows.cginc"
 #endif
 
+#include "Assets/HSSSS/Unity/DirectOcclusion.cginc"
+
 sampler2D _CameraGBufferTexture0;
 sampler2D _CameraGBufferTexture1;
 sampler2D _CameraGBufferTexture2;
@@ -87,8 +89,11 @@ ADirect aDeferredDirect(ASurface s)
 
         // contact shadow
         #if defined(_SSCS_ON)
-                ComputeScreenSpaceShadow(s.positionWorld, lightVector, s.screenUv, d.shadow);
+            ComputeScreenSpaceShadow(s.positionWorld, lightVector, s.screenUv, d.shadow);
         #endif
+
+        // direct occlusion
+        ComputeDirectOcclusion(s.positionWorld, lightVector, s.screenUv, d.shadow);
         
         #if !defined(ALLOY_SUPPORT_REDLIGHTS) && defined(DIRECTIONAL_COOKIE)
             half4 cookie = tex2Dbias(_LightTexture0, float4(mul(_LightMatrix0, half4(s.positionWorld, 1)).xy, 0, -8));
@@ -115,6 +120,9 @@ ADirect aDeferredDirect(ASurface s)
             #if defined(_SSCS_ON)
                 ComputeScreenSpaceShadow(s.positionWorld, lightVector, s.screenUv, d.shadow);
             #endif
+
+            // direct occlusion
+            ComputeDirectOcclusion(s.positionWorld, lightVector, s.screenUv, d.shadow);
             
             // light cookie
             float4 uvCookie = mul(_LightMatrix0, float4(s.positionWorld, 1.0f));
@@ -143,6 +151,9 @@ ADirect aDeferredDirect(ASurface s)
             #if defined(_SSCS_ON)
                 ComputeScreenSpaceShadow(s.positionWorld, lightVector, s.screenUv, d.shadow);
             #endif
+
+            // direct occlusion
+            ComputeDirectOcclusion(s.positionWorld, lightVector, s.screenUv, d.shadow);
 
             // light cookie
             #if defined (POINT_COOKIE)

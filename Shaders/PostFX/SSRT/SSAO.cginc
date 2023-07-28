@@ -13,8 +13,24 @@ uniform uint _SSAOScreenDiv;
 
 uniform Texture2D _SSAOFlipRenderTexture;
 uniform Texture2D _SSAOFlopRenderTexture;
+
 uniform SamplerState sampler_SSAOFlipRenderTexture;
 uniform SamplerState sampler_SSAOFlopRenderTexture;
+
+uniform Texture2D _HierachicalZBuffer0;
+uniform Texture2D _HierachicalZBuffer1;
+uniform Texture2D _HierachicalZBuffer2;
+uniform Texture2D _HierachicalZBuffer3;
+
+uniform SamplerState sampler_HierachicalZBuffer0;
+uniform SamplerState sampler_HierachicalZBuffer1;
+uniform SamplerState sampler_HierachicalZBuffer2;
+uniform SamplerState sampler_HierachicalZBuffer3;
+
+uniform float4 _HierachicalZBuffer0_TexelSize;
+uniform float4 _HierachicalZBuffer1_TexelSize;
+uniform float4 _HierachicalZBuffer2_TexelSize;
+uniform float4 _HierachicalZBuffer3_TexelSize;
 
 #define _SSAONumSample 4
 
@@ -59,29 +75,99 @@ inline half4 SampleFlop(float2 uv)
     return ao;
 }
 
+inline float SampleZBufferLOD0(float2 uv)
+{
+    return _HierachicalZBuffer0.Sample(sampler_HierachicalZBuffer0, uv).x;
+}
+
+inline float SampleZBufferLOD1(float2 uv)
+{
+    return _HierachicalZBuffer1.Sample(sampler_HierachicalZBuffer1, uv).x;
+}
+
+inline float SampleZBufferLOD2(float2 uv)
+{
+    return _HierachicalZBuffer2.Sample(sampler_HierachicalZBuffer2, uv).x;
+}
+
+inline float SampleZBufferLOD3(float2 uv)
+{
+    return _HierachicalZBuffer3.Sample(sampler_HierachicalZBuffer3, uv).x;
+}
+
 inline float2 HorizonTrace(ray ray, float gamma, uint split)
 {
-    uint power = max(1, _SSAORayStride);
-    float minStr = length(_MainTex_TexelSize.xy / split) / length(ray.fwd - ray.org);
-    float2 theta = -1.0f;
+    uint power = max(_SSAORayStride, 1);
+    float slope = ray.fwd.y / ray.fwd.x;
 
-    //float s = -1.0f;
+    float4 minStr = {
+        min(length(_HierachicalZBuffer0_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalZBuffer0_TexelSize.yy * float2(1.0f / slope, 1.0f))),
+        min(length(_HierachicalZBuffer1_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalZBuffer1_TexelSize.yy * float2(1.0f / slope, 1.0f))),
+        min(length(_HierachicalZBuffer2_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalZBuffer2_TexelSize.yy * float2(1.0f / slope, 1.0f))),
+        min(length(_HierachicalZBuffer3_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalZBuffer3_TexelSize.yy * float2(1.0f / slope, 1.0f)))
+    };
+
+    minStr /= length(ray.fwd);
+
+    float2 theta = -10.0h;
+    float str = 0.0f;
 
     [unroll]
-    for (float iter = 1.0f; iter <= _SSAONumStride && iter * minStr <= 1.0f; iter += 1.0f)
+    for (float iter = 1.0f; iter <= _SSAONumStride && str <= 1.0f; iter += 1.0f)
     {
-        float str = iter / _SSAONumStride;
-        str = max(iter * minStr, pow(str, power));
+        float2 z = 0.0h;
 
-        float4 uv = {
-            mad(ray.fwd, str, ray.org),
-            mad(ray.bwd, str, ray.org)
-        };
+        if (iter <= _SSAONumStride / 4)
+        {
+            str = max(str + minStr.x, pow(iter / _SSAONumStride, power));
 
-        float2 z = {
-            SampleTexel(uv.xy).r,
-            SampleTexel(uv.zw).r
-        };
+            float4 uv = {
+                mad(ray.fwd, str, ray.org),
+                mad(ray.bwd, str, ray.org)
+            };
+
+            z.x = SampleZBufferLOD0(uv.xy);
+            z.y = SampleZBufferLOD0(uv.zw);
+        }
+
+        else if (iter <= _SSAONumStride / 2)
+        {
+            str = max(str + minStr.y, pow(iter / _SSAONumStride, power));
+
+            float4 uv = {
+                mad(ray.fwd, str, ray.org),
+                mad(ray.bwd, str, ray.org)
+            };
+
+            z.x = SampleZBufferLOD1(uv.xy);
+            z.y = SampleZBufferLOD1(uv.zw);
+        }
+
+        else if (iter <= _SSAONumStride * 3 / 4)
+        {
+            str = max(str + minStr.z, pow(iter / _SSAONumStride, power));
+
+            float4 uv = {
+                mad(ray.fwd, str, ray.org),
+                mad(ray.bwd, str, ray.org)
+            };
+
+            z.x = SampleZBufferLOD2(uv.xy);
+            z.y = SampleZBufferLOD2(uv.zw);
+        }
+
+        else
+        {
+            str = max(str + minStr.w, pow(iter / _SSAONumStride, power));
+
+            float4 uv = {
+                mad(ray.fwd, str, ray.org),
+                mad(ray.bwd, str, ray.org)
+            };
+
+            z.x = SampleZBufferLOD3(uv.xy);
+            z.y = SampleZBufferLOD3(uv.zw);
+        }
 
         float2 threshold = ray.len * FastSqrt(1.0f - str * str);
         float2 dz = (ray.z - z.xy);
@@ -90,11 +176,14 @@ inline float2 HorizonTrace(ray ray, float gamma, uint split)
         dz /= abs(str * ray.len);
 
         theta = max(theta, dz);
-
-        //s *= -1.0f;
     }
 
-    return FastArcTan(theta);
+    theta =  FastArcTan(theta);
+
+    theta.x = min(HALF_PI - theta.x, HALF_PI + gamma);
+    theta.y = max(theta.y - HALF_PI, gamma - HALF_PI);
+
+    return theta;
 }
 
 inline float ZBufferPrePass(v2f_img IN) : SV_TARGET
@@ -151,8 +240,6 @@ inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
             float4 spos = mul(unity_CameraProjection, mad(dir, ray.len.x, vpos));
             float2 duv = spos.xy / spos.w * 0.5f + 0.5f;
             duv = (duv - uv) / split;
-            
-            //ClampInterleavedUV(ray.org, duv, ray.fwd, ray.bwd, ray.len, split);
 
             ray.fwd = +duv;
             ray.bwd = -duv;
@@ -160,35 +247,57 @@ inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
             float gamma = sign(dot(vnrm, dir.xyz)) * angle;
             float2 theta = HorizonTrace(ray, gamma, split);
 
+            float bentAngle = 0.5h * (theta.x + theta.y);
+            ao.xyz += vdir * cos(bentAngle) + dir.xyz * sin(bentAngle);
+
             #ifdef _VISIBILITY_GTAO
                 float3 nsp = normalize(cross(dir.xyz, vdir));
                 float3 njp = vnrm - nsp * dot(vnrm, nsp);
-
-                theta = HALF_PI - theta;
-                
-                theta.x = gamma + max(theta.x - gamma, -HALF_PI);
-                theta.y = gamma + min(-theta.y - gamma, HALF_PI);
-
-                float bentAngle = 0.5h * (theta.x + theta.y);
-
-                ao.xyz += vdir * cos(bentAngle) + dir.xyz * sin(bentAngle);
-
                 ao.w += length(njp) * dot((2.0h * theta * sin(gamma) + cos(gamma) - cos(2.0h * theta - gamma)), 0.5h);
             #else
-                ao.w += cos(theta.x + gamma) + cos(theta.y - gamma);
-
-                float3 nsp = normalize(cross(dir.xyz, vdir));
-                float3 njp = vnrm - nsp * dot(vnrm, nsp);
-
-                theta = HALF_PI - theta;
-                theta.x = gamma + max(theta.x - gamma, -HALF_PI);
-                theta.y = gamma + min(-theta.y - gamma, HALF_PI);
-
-                float bentAngle = 0.5h * (theta.x + theta.y);
-
-                ao.xyz += vdir * cos(bentAngle) + dir.xyz * sin(bentAngle);
+                ao.w += sin(theta.x - gamma) + sin(gamma - theta.y);
             #endif
         }
+
+        /*
+        if (ao.w <= 2.0f)
+        {
+            for (float iter = 1.5f; iter < _SSAONumSample; iter += 2.0f)
+            {
+                float4 dir = 0.0h;
+                sincos((iter - offset) * slice, dir.y, dir.x);
+                dir.xyz = normalize(dir.xyz - vdir * dot(dir.xyz, vdir));
+
+                float4 spos = mul(unity_CameraProjection, mad(dir, ray.len.x, vpos));
+                float2 duv = spos.xy / spos.w * 0.5f + 0.5f;
+                duv = (duv - uv) / split;
+
+                ray.fwd = +duv;
+                ray.bwd = -duv;
+
+                float gamma = sign(dot(vnrm, dir.xyz)) * angle;
+                float2 theta = HorizonTrace(ray, gamma, split);
+
+                float bentAngle = 0.5h * (theta.x + theta.y);
+                ao.xyz += vdir * cos(bentAngle) + dir.xyz * sin(bentAngle);
+
+                #ifdef _VISIBILITY_GTAO
+                    float3 nsp = normalize(cross(dir.xyz, vdir));
+                    float3 njp = vnrm - nsp * dot(vnrm, nsp);
+                    ao.w += length(njp) * dot((2.0h * theta * sin(gamma) + cos(gamma) - cos(2.0h * theta - gamma)), 0.5h);
+                #else
+                    ao.w += sin(theta.x - gamma) + sin(gamma - theta.y);
+                #endif
+            }
+
+            ao.w = 0.5h * ao.w / _SSAONumSample;
+        }
+
+        else
+        {
+            ao.w = ao.w / _SSAONumSample;
+        }
+        */
         
         ao.xyz = normalize(normalize(ao.xyz) - vdir * 0.5h);
         ao.xyz = mul(_ViewToWorldMatrix, ao.xyz);
@@ -248,8 +357,6 @@ inline half4 ApplySpecularOcclusion(v2f_img IN) : SV_TARGET
     wnrm = normalize(mad(wnrm, 2.0f, -1.0f));
 
     half4 ao = SampleFlop(IN.uv);
-    //half4 ao = SampleAO(IN.uv);
-    //ao.xyz = mad(ao.xyz, 2.0h, -1.0h);
 
     half roughness = saturate(1.0h - SampleGBuffer1(IN.uv).w);
     roughness *= roughness;
@@ -310,9 +417,12 @@ inline half4 SpatialDenoiser(v2f_img IN) : SV_TARGET
 
 inline half4 DebugAO(v2f_img IN) : SV_TARGET
 {
+    /*
+    half3 n1 = SampleGBuffer2(IN.uv).xyz;
+    half3 n2 = SampleTexel(IN.uv).xyz;
+    return dot(mad(n1, 2.0h, -1.0h), mad(n2, 2.0h, -1.0h));
+    */
     return SampleTexel(IN.uv).w;
-    //float2 uv = GetStochasticUV(IN.uv, _MainTex_TexelSize, 2);
-    //return SampleNoise(uv + frac(_Time.xx));
 }
 
 #endif

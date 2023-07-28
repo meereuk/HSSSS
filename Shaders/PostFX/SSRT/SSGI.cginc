@@ -56,18 +56,23 @@ struct ray
 inline half3 HorizonTrace(ray ray)
 {
     uint power = max(1, _SSGIStepPower);
-    float minStr = length(_MainTex_TexelSize.xy) / length(ray.uv1 - ray.uv0);
 
-    float2 theta = -1.0f;
+    float2 duv = ray.uv1 - ray.uv0;
+    float slope = duv.y / duv.x;
+    float minStr = min(length(_MainTex_TexelSize.xx * float2(1.0f, slope)), length(_MainTex_TexelSize.yy * float2(1.0f / slope, 1.0f)));
+
+    minStr /= length(duv);
+
+    float2 theta = -10.0f;
     half3 gi = 0.0h;
 
+    float str = 0.0f;
     float sss = 0.0f;
 
     [unroll]
-    for (float iter = 1.0f; iter <= _SSGINumStride && iter * minStr <= 1.0f; iter += 1.0f)
+    for (float iter = 1.0f; iter <= _SSGINumStride && str <= 1.0f; iter += 1.0f)
     {
-        float str = iter / _SSGINumStride;
-        str = max(iter * minStr, pow(str, power));
+        str = max(str + minStr, pow(iter / _SSGINumStride, power));
 
         // uv
         float2 uv1 = lerp(ray.uv0, ray.uv1, str);
@@ -83,9 +88,6 @@ inline half3 HorizonTrace(ray ray)
 
         vp1.z = -ir1.w;
         vp2.z = -ir2.w;
-
-        // horizon calculation
-        float2 threshold = ray.len * FastSqrt(1.0f - str * str);
 
         float2 dz = {
             vp1.z - ray.vp0.z,

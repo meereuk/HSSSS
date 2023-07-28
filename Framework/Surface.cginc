@@ -316,9 +316,6 @@ void aUpdateBrdfData(inout ASurface s)
             // Premultiply opacity with albedo for translucent shaders.
             s.albedo *= s.opacity;
         #endif
-
-        // Transmission can't happen through metal.
-        s.transmission *= metallicInv;
     #endif
 }
 

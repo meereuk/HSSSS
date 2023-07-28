@@ -1,4 +1,6 @@
 #ifndef HSSSS_FEATURES_MICRODETAILS
+// Upgrade NOTE: excluded shader from OpenGL ES 2.0 because it uses non-square matrices
+#pragma exclude_renderers gles
 #define HSSSS_FEATURES_MICRODETAILS
 
 #include "Assets/HSSSS/Framework/Surface.cginc"
@@ -105,14 +107,20 @@ inline void aSampleMicroTangent(inout ASurface s)
             tex2DStochastic(_DetailSkinPoreMap, uv[2], bw2, dx[2], dy[2]).r
         };
 
-        s.ambientOcclusion = s.ambientOcclusion * lerp(1.0h, mad(dot(pore, weight), 0.2h, 0.8h), _OcclusionStrength);
+        //half fresnel = s.NdotV;
+        half2 intensity = {
+            _DetailNormalMapScale_2 * s.NdotV,
+            _DetailNormalMapScale_3 * s.NdotV
+        };
+
+        s.ambientOcclusion = s.ambientOcclusion * lerp(1.0h, mad(dot(pore, weight), 0.2h, 0.8h), _OcclusionStrength * s.NdotV);
         s.normalWorld = A_NORMAL_WORLD(s, s.normalTangent);
 
         half3x3 tangent;
 
-        tangent[0] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_2, uv[0], bw0, dx[0], dy[0]), _DetailNormalMapScale_2);
-        tangent[1] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_2, uv[1], bw1, dx[1], dy[1]), _DetailNormalMapScale_2);
-        tangent[2] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_2, uv[2], bw2, dx[2], dy[2]), _DetailNormalMapScale_2);
+        tangent[0] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_2, uv[0], bw0, dx[0], dy[0]), intensity.x);
+        tangent[1] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_2, uv[1], bw1, dx[1], dy[1]), intensity.x);
+        tangent[2] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_2, uv[2], bw2, dx[2], dy[2]), intensity.x);
 
         tangent[0] = half3(0.0h, tangent[0].y, tangent[0].x);
         tangent[1] = half3(tangent[1].x, 0.0h, tangent[1].y);
@@ -120,9 +128,9 @@ inline void aSampleMicroTangent(inout ASurface s)
 
         s.normalWorld = s.normalWorld + mul(weight, tangent);
         
-        tangent[0] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_3, uv[0], bw0, dx[0], dy[0]), _DetailNormalMapScale_3);
-        tangent[1] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_3, uv[1], bw1, dx[1], dy[1]), _DetailNormalMapScale_3);
-        tangent[2] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_3, uv[2], bw2, dx[2], dy[2]), _DetailNormalMapScale_3);
+        tangent[0] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_3, uv[0], bw0, dx[0], dy[0]), intensity.y);
+        tangent[1] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_3, uv[1], bw1, dx[1], dy[1]), intensity.y);
+        tangent[2] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_3, uv[2], bw2, dx[2], dy[2]), intensity.y);
 
         tangent[0] = half3(0.0h, tangent[0].y, tangent[0].x);
         tangent[1] = half3(tangent[1].x, 0.0h, tangent[1].y);

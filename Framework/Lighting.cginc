@@ -26,7 +26,7 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
     half3 diffuseLight = d.color * d.shadow.r;
     half3 specularLight = diffuseLight * s.specularOcclusion * d.specularIntensity * d.NdotL;
 
-    half sheen = FSchlick(s.f0, d.LdotH) * DCharlie(s.beckmannRoughness, d.NdotH) * VNeubelt(s.NdotV, d.NdotL);
+    half3 sheen = DCharlie(s.beckmannRoughness, d.NdotH) * VNeubelt(s.NdotV, d.NdotL) * s.f0;
 
     specular = FSchlick(s.f0, d.LdotH);
     diffuse = aDiffuseBrdf(s.albedo, s.roughness, d.LdotH, d.NdotL, s.NdotV);
@@ -51,6 +51,7 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
     float NdotLa = tex2D(_AreaLightLUT, float2(mad(d.NdotLm, 0.5f, 0.5f), scale));
     */
     
+    // standard
     if (s.scatteringMask < 0.1h)
     {
         diffuse *= d.NdotL;
@@ -58,6 +59,7 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
         specular *= VSmith(s.beckmannRoughness, s.NdotV, d.NdotL);
     }
 
+    // anisotropic
     else if (s.scatteringMask < 0.4h)
     {
         half3 halfvector = normalize(d.direction + s.viewDirWorld);
@@ -75,10 +77,10 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
         half TdotL = dot(tangent, d.direction);
         half BdotL = dot(bitangent, d.direction);
 
-        half anisotropy = mad(mad(s.transmission, 2.0h, -1.0h), -0.9h, 1.0h);
+        half anisotropy = clamp(mad(s.transmission, 2.0h, -1.0h), -1.0h, 1.0h);
 
-        half at = s.beckmannRoughness * rsqrt(anisotropy);
-        half ab = s.beckmannRoughness *  sqrt(anisotropy);
+        half at = s.beckmannRoughness * (1.0h + anisotropy);
+        half ab = s.beckmannRoughness * (1.0h - anisotropy);
 
         diffuse *= saturate((d.NdotLm + 0.5h) / 2.25h);
         diffuse *= saturate(normalize(s.albedo + 0.5h) + d.NdotL);
@@ -86,6 +88,7 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
         specular *= VSmithAniso(at, ab, TdotV, BdotV, TdotL, BdotL, s.NdotV, d.NdotL);
     }
 
+    // sheen
     else if (s.scatteringMask < 0.7h)
     {
         // energy conserved wrap diffuse
@@ -94,6 +97,7 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
         specular = sheen;
     }
 
+    // skin
     else
     {
         diffuse *= d.NdotL;
