@@ -43,7 +43,6 @@ Shader "HSSSS/Overlay/Forward"
         }
 
         LOD 300
-        Offset -1, -1
 
         Pass
         {

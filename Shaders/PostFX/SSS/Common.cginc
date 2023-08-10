@@ -43,16 +43,16 @@ const static float4 blurKernel[NUM_TAPS] = {
     float4(0.00471691, 0.000184771, 5.07565e-005, 2),
 };
 
-sampler2D _MainTex;
-sampler2D _SkinJitter;
+uniform sampler2D _MainTex;
+uniform sampler2D _SkinJitter;
 
-sampler2D _CameraDepthTexture;
-sampler2D _CameraGBufferTexture2;
+uniform sampler2D _CameraDepthTexture;
+uniform sampler2D _CameraGBufferTexture2;
 
-float4 _MainTex_TexelSize;
-float4 _SkinJitter_TexelSize;
+uniform float4 _MainTex_TexelSize;
+uniform float4 _SkinJitter_TexelSize;
 
-half2 _DeferredBlurredNormalsParams;
+uniform half2 _DeferredBlurredNormalsParams;
 
 
 void SkipIfNonSkin(v2f_img IN)
@@ -61,7 +61,7 @@ void SkipIfNonSkin(v2f_img IN)
     clip(0.01h - mask);
 }
 
-half4 BlurInDir(v2f_img IN, half2 direction)
+half3 BlurInDir(v2f_img IN, half2 direction)
 {
 	float2 uv = IN.uv;
 
@@ -88,7 +88,7 @@ half4 BlurInDir(v2f_img IN, half2 direction)
         colorB += lerp(lerp(color, colorM, s), colorM, m) * blurKernel[i].rgb;
 	}
         
-	return half4(colorB, tex2D(_MainTex, uv).a);
+	return colorB;
 }
 
 inline half2 RandomAxis(v2f_img IN)

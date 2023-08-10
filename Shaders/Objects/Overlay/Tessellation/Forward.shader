@@ -52,7 +52,6 @@ Shader "HSSSS/Overlay/Tessellation/Forward"
         }
 
         LOD 400
-        Offset -1, -1
 
         Pass
         {

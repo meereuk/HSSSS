@@ -79,15 +79,13 @@ half2 UnityDeferredComputeShadow(float3 vec, float viewDepth, float fadeDist, fl
 		half2 shadow = SamplePCFShadowMap(vec, uv, viewDepth, NdotL);
 		shadow.x = saturate(shadow.x + fade);
 		return shadow;
-		//float shadow = tex2D(_ShadowMapTexture, uv);
-		//return saturate(shadow + fade);
 	#endif
 	#endif
 
 	// Spot
 	#if defined(SPOT)
 	#if defined(SHADOWS_DEPTH)
-		float2 shadow = SamplePCFShadowMap(vec, uv, viewDepth, NdotL);
+		half2 shadow = SamplePCFShadowMap(vec, uv, viewDepth, NdotL);
 		shadow.x = saturate(shadow.x + fade);
 		return shadow;
 	#endif
@@ -96,25 +94,6 @@ half2 UnityDeferredComputeShadow(float3 vec, float viewDepth, float fadeDist, fl
 	// Point
 	#if defined (POINT) || defined (POINT_COOKIE)
 	#if defined(SHADOWS_CUBE)
-		float2 shadow = SamplePCFShadowMap(vec, uv, viewDepth, NdotL);
-		shadow.x = saturate(shadow.x + fade);
-		return shadow;
-	#endif
-	#endif
-
-	return 1.0h;
-}
-
-half2 CustomDirectionalShadow(float3 vec, float viewDepth, float fadeDist, float2 uv, half NdotL)
-{
-	// Fade Distance;
-	#if defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN) || defined(SHADOWS_CUBE)
-		float fade = fadeDist * _LightShadowData.z + _LightShadowData.w;
-		fade = saturate(fade);
-	#endif
-
-	#if defined(DIRECTIONAL) || defined(DIRECTIONAL_COOKIE)
-	#if defined(SHADOWS_SCREEN)
 		half2 shadow = SamplePCFShadowMap(vec, uv, viewDepth, NdotL);
 		shadow.x = saturate(shadow.x + fade);
 		return shadow;

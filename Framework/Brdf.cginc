@@ -35,14 +35,14 @@ half aFresnel(half w)
 }
 
 // disney diffuse brdf
-inline half3 aDiffuseBrdf(half3 albedo, half roughness, half LdotH, half NdotL, half NdotV)
+inline half3 aDiffuseBrdf(half roughness, half LdotH, half NdotL, half NdotV)
 {
     half FL = aFresnel(NdotL);
     half FV = aFresnel(NdotV);
     half Fd90 = 0.5h + (2.0h * LdotH * LdotH * roughness);
     half Fd = aLerpOneTo(Fd90, FL) * aLerpOneTo(Fd90, FV);
 
-    return albedo * Fd;
+    return Fd;
 }
 
 // schlick fresnel

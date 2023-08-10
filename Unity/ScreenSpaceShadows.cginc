@@ -3,10 +3,54 @@
 
 #include "Assets/HSSSS/Framework/AreaLight.cginc"
 
+uniform float4 _CameraDepthTexture_TexelSize;
+
 uniform float _SSCSRayLength;
 uniform float _SSCSMeanDepth;
 uniform float _SSCSDepthBias;
 uniform uint  _SSCSRayStride;
+
+struct ray
+{
+	// surface uv
+	float2 uv0;
+	// delta uv
+	float2 uv1;
+	// surface z
+	float z0;
+	// delta z
+	float z1;
+	// bias
+	float bias;
+};
+
+inline half HorizonTrace(ray ray)
+{
+	float step = pow(2.0, clamp(_SSCSRayStride, 4, 7));
+
+	float2 duv = ray.uv1 - ray.uv0;
+	float slope = duv.y / duv.x;
+	float minStr = min(length(_CameraDepthTexture_TexelSize.xx * float2(1.0f, slope)), length(_CameraDepthTexture_TexelSize.yy * float2(1.0f / slope, 1.0f)));
+	minStr /= length(duv);
+
+	half shadow = 1.0h;
+	float str = 0.0f;
+
+	for (float iter = 1.0f; iter <= step; iter += 1.0f)
+	{
+		str = max(str + minStr, pow(iter / step, 2));
+
+		float2 uv = lerp(ray.uv0, ray.uv1, str);
+		float2 z = lerp(ray.z0, ray.z1, str);
+
+		float fz = LinearEyeDepth(tex2D(_CameraDepthTexture, uv));
+		float bz = fz + _SSCSMeanDepth;
+
+		shadow = min(shadow, max(smoothstep(z - ray.bias, z, fz), smoothstep(bz - ray.bias, bz, z)));
+	}
+
+	return shadow;
+}
 
 inline void ComputeScreenSpaceShadow(float3 wpos, float3 wdir, float2 uv, inout half2 shadow)
 {
@@ -34,53 +78,38 @@ inline void ComputeScreenSpaceShadow(float3 wpos, float3 wdir, float2 uv, inout 
 		rayrad *= 0.01f;
 	#endif
 
-	float3 jitter = tex2D(_ShadowJitterTexture, uv * _ShadowJitterTexture_TexelSize.xy * _ScreenParams.xy);
+	float3 jitter = SampleNoise(uv);
 
 	float4 vpos = mul(UNITY_MATRIX_V, float4(wpos, 1.0f));
 	float4 vdir = mul(UNITY_MATRIX_V, float4(wdir, 0.0f));
 	float4 ddir = mad(jitter.x, 2.0f, -1.0f) * normalize(float4(-vdir.y, vdir.x, 0.0f, 0.0f)) + mad(jitter.y, 2.0f, -1.0f) * float4(0.0f, 0.0f, 1.0f, 0.0f);
-
 	ddir *= rayrad;
-
-	float4 lp0 = mad(normalize(vdir + ddir), raylen, vpos);
-	float4 lp1 = mad(normalize(vdir - ddir), raylen, vpos);
-
-	float4 sp0 = ComputeScreenPos(mul(UNITY_MATRIX_P, lp0));
-	float4 sp1 = ComputeScreenPos(mul(UNITY_MATRIX_P, lp1));
-
-	float2 uv0 = sp0.xy / sp0.w;
-	float2 uv1 = sp1.xy / sp1.w;
 
 	float bias = _SSCSDepthBias * 0.01f;
 
-	float minStr = length(_ScreenParams.zw - 1.0f) / length(uv0 - uv);
+	half s = 0.0h;
 
-	half2 s = 1.0h;
-
-	float step = pow(2.0, min(max(_SSCSRayStride, 4), 7));
-
-	for (float iter = 1.0f; iter <= step && iter * minStr <= 1.0f; iter += 1.0f)
+	for (uint iter = 0; iter < 4; iter ++)
 	{
-		float str = iter / step;
-		str = max(iter * minStr, str * str);
+		float fuck = (float) iter / 1.5f - 1.0f;
 
-		float2 uv2 = lerp(uv, uv0, str);
-		float2 uv3 = lerp(uv, uv1, str);
+		float4 lp = mad(normalize(mad(ddir, fuck, vdir)), raylen, vpos);
+		float4 sp = ComputeScreenPos(mul(UNITY_MATRIX_P, lp));
 
-		float zz0 = lerp(-vpos.z, -lp0.z, str);
-		float zz1 = lerp(-vpos.z, -lp1.z, str);
+		ray ray;
 
-		float z0 = LinearEyeDepth(tex2D(_CameraDepthTexture, uv2));
-		float z1 = LinearEyeDepth(tex2D(_CameraDepthTexture, uv3));
+		ray.uv0 = uv;
+		ray.uv1 = sp.xy / sp.w;
+		ray.z0 = -vpos.z;
+		ray.z1 = -lp.z;
+		ray.bias = bias;
 
-		float b0 = z0 + _SSCSMeanDepth;
-		float b1 = z1 + _SSCSMeanDepth;
-
-		s.x = min(s.x, max(smoothstep(zz0 - bias, zz0, z0), smoothstep(b0 - bias, b0, zz0)));
-		s.y = min(s.y, max(smoothstep(zz1 - bias, zz1, z1), smoothstep(b0 - bias, b0, zz1)));
+		s += HorizonTrace(ray);
 	}
 
-	shadow.r = min(shadow.r, lerp(dot(s, 0.5h), 1.0h, _LightShadowData.r));
+	s /= 4.0h;
+
+	shadow.r = min(shadow.r, lerp(s, 1.0h, _LightShadowData.r));
 #endif
 }
 

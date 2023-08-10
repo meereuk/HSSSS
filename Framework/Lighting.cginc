@@ -29,27 +29,11 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
     half3 sheen = DCharlie(s.beckmannRoughness, d.NdotH) * VNeubelt(s.NdotV, d.NdotL) * s.f0;
 
     specular = FSchlick(s.f0, d.LdotH);
-    diffuse = aDiffuseBrdf(s.albedo, s.roughness, d.LdotH, d.NdotL, s.NdotV);
+    diffuse = aDiffuseBrdf(s.roughness, d.LdotH, d.NdotL, s.NdotV);
 
     sheen *= specularLight;
     specular *= specularLight;
     diffuse *= diffuseLight;
-
-    /*
-    float scale = 0.0f;
-
-    #if defined(DIRECTIONAL)
-        scale = 0.001f * _DirLightPenumbra.y;
-    #elif defined(SPOT)
-        float3 diff = _WorldSpaceLightPos0.xyz - s.positionWorld;
-        scale = 0.001f * _SpotLightPenumbra.y * rsqrt(dot(diff, diff));
-    #elif defined(POINT)
-        float3 diff = _WorldSpaceLightPos0.xyz - s.positionWorld;
-        scale = 0.001f * _PointLightPenumbra.y * rsqrt(dot(diff, diff));
-    #endif
-
-    float NdotLa = tex2D(_AreaLightLUT, float2(mad(d.NdotLm, 0.5f, 0.5f), scale));
-    */
     
     // standard
     if (s.scatteringMask < 0.1h)
@@ -168,7 +152,7 @@ inline half3 aStandardSkin
         half3 sss = tex2D(skinLut, sssLookupUv).rgb * s.scatteringMask * d.shadow.r;
     #endif
 
-    return d.color * s.albedo * sss;
+    return d.color * sss;
 }
 
 // skin transmittance
@@ -187,12 +171,12 @@ inline half3 aStandardTransmission
         half transLight = pow(aDotClamp(s.viewDirWorld, -transLightDir), falloff);
 
         transLight *= weight * aLerpOneTo(d.shadow.r, shadowWeight);
-        return d.color * s.albedo * transmissionColor * transLight;
+        return d.color * transmissionColor * transLight;
     #else
         half thickness = 2.0f * falloff * max(bias, d.shadow.g);
         half3 attenuation = tex2D(lut, float2(thickness * thickness, 0.5f));
         attenuation = attenuation * weight * saturate(0.3h - dot(s.ambientNormalWorld, d.direction));
-        return d.color * s.albedo * attenuation;
+        return d.color * attenuation;
     #endif
 }
 
@@ -200,7 +184,7 @@ inline half3 aStandardTransmission
 inline half3 aThinTransmission(ADirect d, ASurface s, half weight)
 {
     half attenuation = 0.5h * weight * saturate(0.3h - dot(s.ambientNormalWorld, d.direction));
-    return d.color * s.albedo * attenuation * d.shadow.r;
+    return d.color * attenuation * d.shadow.r;
 }
 
 #endif

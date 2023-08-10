@@ -49,7 +49,6 @@
         }
 
         LOD 300
-        Offset -1, -1
 
         UsePass "HSSSS/Overlay/Forward/FORWARD"
         UsePass "HSSSS/Overlay/Forward/FORWARD_DELTA"

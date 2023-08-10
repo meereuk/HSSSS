@@ -3,6 +3,26 @@
 
 #include "UnityCG.cginc"
 
+struct appdata_mrt
+{
+    float4 pos: POSITION;
+};
+
+struct v2f_mrt
+{
+    float4 cpos: SV_POSITION;
+    float2 uv: TEXCOORD0;
+};
+
+v2f_mrt vert_mrt(appdata_mrt v)
+{
+    v2f_mrt o;
+    o.cpos = float4(v.pos.xy, 0.0, 1.0);
+    o.uv = v.pos.xy * 0.5f + 0.5f;
+    o.uv.y = _ProjectionParams.x < 0.0f ? 1.0f - o.uv.y : o.uv.y;
+    return o;
+}
+
 uniform Texture2D _MainTex;
 uniform SamplerState sampler_MainTex;
 uniform float4 _MainTex_TexelSize;
@@ -185,12 +205,12 @@ inline half4 SampleGI(float2 uv, int2 offset)
 //
 // noise
 //
-inline float SampleNoise(float2 uv)
+inline float3 SampleNoise(float2 uv)
 {
     return _BlueNoise.Sample(sampler_BlueNoise, uv * _BlueNoise_TexelSize.xy * _ScreenParams.xy);
 }
 
-inline float SampleNoise(float2 uv, int2 offset)
+inline float3 SampleNoise(float2 uv, int2 offset)
 {
     return _BlueNoise.Sample(sampler_BlueNoise, uv * _BlueNoise_TexelSize.xy * _ScreenParams.xy, offset);
 }

@@ -15,7 +15,7 @@
     
         ENDCG
         
-        // subtract ambient reflections
+        // calculate specular light
         Pass
         {
             CGPROGRAM
@@ -24,21 +24,35 @@
 
             #include "UnityCG.cginc"
             #include "UnityDeferredLibrary.cginc"
+            #include "Assets/HSSSS/Framework/Utility.cginc"
 
-            sampler2D _CameraGBufferTexture2;
-            sampler2D _CameraGBufferTexture3;
-            sampler2D _CameraReflectionsTexture;
+            uniform sampler2D _AmbientDiffuseBuffer;
+            uniform sampler2D _CameraGBufferTexture0;
+            uniform sampler2D _CameraGBufferTexture2;
+            uniform sampler2D _CameraGBufferTexture3;
+            uniform sampler2D _CameraReflectionsTexture;
             
             half4 frag(v2f_img IN) : SV_Target
             {
-                half mask = tex2D(_CameraGBufferTexture2, IN.uv).a;
-                clip(0.01h - mask);
-
+                half4 albedo = tex2D(_CameraGBufferTexture0, IN.uv);
                 half4 direct = tex2D(_CameraGBufferTexture3, IN.uv);
-                half4 ambient = tex2D(_CameraReflectionsTexture, IN.uv);
+                half4 ambient = tex2D(_AmbientDiffuseBuffer, IN.uv);
+                half mask = tex2D(_CameraGBufferTexture2, IN.uv).w;
 
-                direct.rgb = direct.rgb - ambient.rgb;
-                return direct;
+                half3 color = 0.0h;
+
+                if (mask < 0.1h)
+                {
+                    color = (direct.rgb - ambient.rgb) * albedo.rgb + ambient.rgb;
+                    color = max(color, half3(0.0h, 0.0h, 0.0h));
+                }
+
+                else
+                {
+                    color = 0.0h;
+                }
+
+                return half4(color, 0.0h);
             }
             ENDCG
         }
@@ -54,8 +68,20 @@
             
             half4 frag(v2f_img IN) : SV_Target
             {
-                SkipIfNonSkin(IN);
-                return BlurInDir(IN, RandomAxis(IN).xy);
+                half mask = tex2D(_CameraGBufferTexture2, IN.uv).w;
+                half3 color = 0.0h;
+
+                if (mask < 0.1h)
+                {
+                    color = BlurInDir(IN, RandomAxis(IN).xy);
+                }
+
+                else
+                {
+                    color = 0.0h;
+                }
+
+                return half4(color, 0.0h);
             }
             ENDCG
         }
@@ -72,8 +98,20 @@
 
             half4 frag(v2f_img IN) : SV_Target
             {
-                SkipIfNonSkin(IN);
-                return BlurInDir(IN, RandomAxis(IN).yx * float2(1.0f, -1.0f));
+                half mask = tex2D(_CameraGBufferTexture2, IN.uv).w;
+                half3 color = 0.0h;
+
+                if (mask < 0.1h)
+                {
+                    color = BlurInDir(IN, RandomAxis(IN).yx * float2(1.0f, -1.0f));
+                }
+
+                else
+                {
+                    color = 0.0h;
+                }
+
+                return half4(color, 0.0h);
             }
             ENDCG
         }
@@ -88,12 +126,12 @@
             #include "UnityDeferredLibrary.cginc"
             #include "Assets/HSSSS/Framework/Utility.cginc"
 
-            sampler2D _MainTex;
-            sampler2D _AmbientDiffuseBuffer;
-            sampler2D _CameraGBufferTexture0;
-            sampler2D _CameraGBufferTexture2;
-            sampler2D _CameraGBufferTexture3;
-            sampler2D _CameraReflectionsTexture;
+            uniform sampler2D _MainTex;
+            uniform sampler2D _AmbientDiffuseBuffer;
+            uniform sampler2D _CameraGBufferTexture0;
+            uniform sampler2D _CameraGBufferTexture2;
+            uniform sampler2D _CameraGBufferTexture3;
+            uniform sampler2D _CameraReflectionsTexture;
             
             half4 frag(v2f_img IN) : SV_Target
             {
@@ -101,25 +139,26 @@
                 half4 gbuffer2 = tex2D(_CameraGBufferTexture2, IN.uv);
                 half4 gbuffer3 = tex2D(_CameraGBufferTexture3, IN.uv);
 
-                half4 ambientSpecular = tex2D(_CameraReflectionsTexture, IN.uv);
-                half4 ambientDiffuse = tex2D(_AmbientDiffuseBuffer, IN.uv);
+                half3 ambientDiffuse = tex2D(_AmbientDiffuseBuffer, IN.uv);
+                half3 ambientSpecular = tex2D(_CameraReflectionsTexture, IN.uv);
 
-                if (gbuffer2.a == 0.0h)
+                half3 result = 0.0h;
+
+                if (gbuffer2.a < 0.1h)
                 {
-                    half4 result = tex2D(_MainTex, IN.uv);
-                    half3 lightColor = max(0.0h, (gbuffer3.rgb - ambientDiffuse.rgb + 0.0001h) / (gbuffer0.rgb + 0.0001h));
-                    half luminance = aLuminance(lightColor);
+                    half3 lightColor = max(0.0h, gbuffer3.rgb - ambientDiffuse);
+                    lightColor = lightColor / max(aLuminance(lightColor), 0.01h);
 
-                    lightColor = luminance > 0.0h ? lightColor / luminance : 1.0h;
-
-                    result.rgb = result.rgb + ambientSpecular.rgb + gbuffer3.aaa * lightColor;
-                    return result;
+                    result += tex2D(_MainTex, IN.uv);
+                    result += gbuffer3.aaa * lightColor;
                 }
 
                 else
                 {
-                    return gbuffer3 + ambientSpecular;
+                    result = gbuffer3.rgb;
                 }
+
+                return half4(result + ambientSpecular, 0.0h);
             }
             ENDCG
         }

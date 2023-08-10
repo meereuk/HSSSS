@@ -2,7 +2,6 @@
 using System.Collections;
 using UnityEngine.Rendering;
 
-//[ExecuteInEditMode]
 [RequireComponent(typeof(Camera))]
 public class GlobalIllumination : MonoBehaviour
 {
@@ -34,11 +33,26 @@ public class GlobalIllumination : MonoBehaviour
     private RenderTexture giHistory;
     private RenderTexture zbHistory;
 
+    private static Mesh quad = null;
+
+    private Mesh triangle;
+
     public void OnEnable()
     {
         this.mCamera = GetComponent<Camera>();
         this.mMaterial = new Material(Shader.Find("Hidden/HSSSS/GlobalIllumination"));
         this.mMaterial.SetTexture("_BlueNoise", this.BlueNoise);
+
+        quad = new Mesh();
+
+        quad.vertices = new Vector3[] {
+            new Vector3(-1.0f, -1.0f, 0.0f),
+            new Vector3(-1.0f,  3.0f, 0.0f),
+            new Vector3( 3.0f, -1.0f, 0.0f),
+            //new Vector3( 1.0f, -1.0f, 0.0f)
+        };
+
+        quad.triangles = new int[] { 0, 1, 2 };
     }
     
     public void OnDisable()
@@ -97,45 +111,78 @@ public class GlobalIllumination : MonoBehaviour
         RenderTargetIdentifier temp = new RenderTargetIdentifier(this.giHistory);
         RenderTargetIdentifier zbuf = new RenderTargetIdentifier(this.zbHistory);
 
-        int ilum = Shader.PropertyToID("_SSGIIrradianceTexture");
-        int flip = Shader.PropertyToID("_SSGIFlipRenderTexture");
-        int flop = Shader.PropertyToID("_SSGIFlopRenderTexture");
+        int[] irad = new int[]{
+            Shader.PropertyToID("_HierachicalIrradianceBuffer0"),
+            Shader.PropertyToID("_HierachicalIrradianceBuffer1"),
+            Shader.PropertyToID("_HierachicalIrradianceBuffer2"),
+            Shader.PropertyToID("_HierachicalIrradianceBuffer3")
+        };
+
+        int[] flip = new int[]{
+            Shader.PropertyToID("_SSGIFlipDiffuseBuffer"),
+            Shader.PropertyToID("_SSGIFlipSpecularBuffer")
+        };
+
+        int[] flop = new int[]{
+            Shader.PropertyToID("_SSGIFlopDiffuseBuffer"),
+            Shader.PropertyToID("_SSGIFlopSpecularBuffer")
+        };
+
+        RenderTargetIdentifier[] iradMRT = { irad[0], irad[1], irad[2], irad[3] };
+        RenderTargetIdentifier[] flipMRT = { flip[0], flip[1]};
+        RenderTargetIdentifier[] flopMRT = { flop[0], flop[1]};
 
         this.aoBuffer = new CommandBuffer() { name = "HSSSS.SSGI" };
+
+        this.aoBuffer.GetTemporaryRT(irad[0], -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(irad[1], this.mCamera.pixelWidth / 2, this.mCamera.pixelHeight / 2, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(irad[2], this.mCamera.pixelWidth / 4, this.mCamera.pixelHeight / 4, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(irad[3], this.mCamera.pixelWidth / 8, this.mCamera.pixelHeight / 8, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
         
-        this.aoBuffer.GetTemporaryRT(ilum, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
-        this.aoBuffer.GetTemporaryRT(flip, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
-        this.aoBuffer.GetTemporaryRT(flop, -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(flip[0], -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(flip[1], -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
 
-        this.aoBuffer.Blit(temp, ilum, this.mMaterial, 0);
-        this.aoBuffer.Blit(ilum, flip, this.mMaterial, 4);
+        this.aoBuffer.GetTemporaryRT(flop[0], -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
+        this.aoBuffer.GetTemporaryRT(flop[1], -1, -1, 0, FilterMode.Point, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
 
-        // temporal denoiser
-        this.aoBuffer.Blit(flip, flop, this.mMaterial, 5);
+        this.aoBuffer.Blit(temp, irad[0], this.mMaterial, 0);
+        this.aoBuffer.Blit(irad[0], irad[1]);
+        this.aoBuffer.Blit(irad[1], irad[2]);
+        this.aoBuffer.Blit(irad[2], irad[3]);
 
+        this.aoBuffer.SetRenderTarget(flipMRT, BuiltinRenderTextureType.CameraTarget);
+        this.aoBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 4);
+
+        // spatio filter
+        this.aoBuffer.SetRenderTarget(flopMRT, BuiltinRenderTextureType.CameraTarget);
+        this.aoBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 6);
+        this.aoBuffer.SetRenderTarget(flipMRT, BuiltinRenderTextureType.CameraTarget);
+        this.aoBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 7);
+        this.aoBuffer.SetRenderTarget(flopMRT, BuiltinRenderTextureType.CameraTarget);
+        this.aoBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 8);
+        this.aoBuffer.SetRenderTarget(flipMRT, BuiltinRenderTextureType.CameraTarget);
+        this.aoBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 9);
+
+        // temporal filter
+        this.aoBuffer.Blit(null, flop[0], this.mMaterial, 5);
         // store
-        this.aoBuffer.Blit(flop, temp);
+        this.aoBuffer.Blit(flop[0], temp);
         this.aoBuffer.Blit(temp, zbuf, this.mMaterial, 12);
 
-        // median filter
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 10);
-        this.aoBuffer.Blit(flip, flop);
+        // collect pass
+        this.aoBuffer.Blit(flop[0], flip[0], this.mMaterial, 11);
+        this.aoBuffer.Blit(flip[0], BuiltinRenderTextureType.CameraTarget);
 
-        // spatio denoiser
-        /*
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 6);
-        this.aoBuffer.Blit(flip, flop, this.mMaterial, 7);
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 8);
-        this.aoBuffer.Blit(flip, flop, this.mMaterial, 9);
-        */
+        this.aoBuffer.ReleaseTemporaryRT(irad[0]);
+        this.aoBuffer.ReleaseTemporaryRT(irad[1]);
+        this.aoBuffer.ReleaseTemporaryRT(irad[2]);
+        this.aoBuffer.ReleaseTemporaryRT(irad[3]);
 
-        //
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 11);
-        this.aoBuffer.Blit(flip, BuiltinRenderTextureType.CameraTarget);
+        this.aoBuffer.ReleaseTemporaryRT(flip[0]);
+        this.aoBuffer.ReleaseTemporaryRT(flip[1]);
 
-        this.aoBuffer.ReleaseTemporaryRT(ilum);
-        this.aoBuffer.ReleaseTemporaryRT(flip);
-        this.aoBuffer.ReleaseTemporaryRT(flop);
+        this.aoBuffer.ReleaseTemporaryRT(flop[0]);
+        this.aoBuffer.ReleaseTemporaryRT(flop[1]);
 
         this.mCamera.AddCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, this.aoBuffer);
     }

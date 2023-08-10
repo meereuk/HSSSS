@@ -4,66 +4,59 @@
 #include "Assets/HSSSS/Framework/AreaLight.cginc"
 #include "Assets/HSSSS/Unity/ScreenSpaceShadows.cginc"
 
-#if defined(SHADOWS_SCREEN)
-	uniform sampler2D _CustomShadowMap;
-	uniform float4 _CustomShadowMap_TexelSize;
-#endif
-
-#if defined(SHADOWS_DEPTH)
-	uniform sampler2D _ShadowMapTexture;
-	uniform float4 _ShadowMapTexture_TexelSize;
+#if defined(SHADOWS_SCREEN) || defined(SHADOWS_DEPTH)
+	uniform Texture2D _CustomShadowMap;
+	uniform SamplerState sampler_CustomShadowMap;
 #endif
 
 #if defined(SHADOWS_CUBE)
-	uniform samplerCUBE _ShadowMapTexture;
-	uniform float4 _ShadowMapTexture_TexelSize;
+	uniform TextureCube _ShadowMapTexture;
+	uniform SamplerState sampler_ShadowMapTexture;
 #endif
 
 // cascade weights
 inline uint2 GetCascadeIndex(float viewDepth)
 {
-	#if defined(SHADOWS_DEPTH)
-		return uint2(0, 0);
-	#elif defined(SHADOWS_SCREEN)
-		float4 weight = float4(viewDepth >= _LightSplitsNear) * float4(viewDepth < _LightSplitsFar);
+	float4 weight = float4(viewDepth >= _LightSplitsNear) * float4(viewDepth < _LightSplitsFar);
 
-		uint idx = 3;
+	uint idx = 3;
 
-		idx = weight.x == 1.0f ? 0 : idx;
-		idx = weight.y == 1.0f ? 1 : idx;
-		idx = weight.z == 1.0f ? 2 : idx;
+	idx = weight.x == 1.0f ? 0 : idx;
+	idx = weight.y == 1.0f ? 1 : idx;
+	idx = weight.z == 1.0f ? 2 : idx;
 
-		// return current and next cascade
-		return uint2(idx, min(idx + 1, 3));
-	#endif
+	// return current and next cascade
+	return uint2(idx, min(idx + 1, 3));
 }
 
 // cascade blending
 inline float2 GetCascadeWeights(uint cascade, float viewDepth)
 {
 	float weight = smoothstep(
-		lerp(_LightSplitsNear[cascade], _LightSplitsFar[cascade], 0.9f),
+		lerp(_LightSplitsNear[cascade], _LightSplitsFar[cascade], 0.8f),
 		_LightSplitsFar[cascade], viewDepth
 	);
 
 	return float2(1.0f - weight, weight);
 }
 
+inline float3 GetShadowCoordinate(float3 vec)
+{
+	float4 wpos = float4(vec, 1.0f);
+	float4 coord = mul(unity_World2Shadow[0], wpos);
+	return coord.xyz / coord.w;
+}
+
 inline float3 GetShadowCoordinate(float3 vec, uint cascade)
 {
 	float4 wpos = float4(vec, 1.0f);
 	float4 coord = mul(unity_World2Shadow[cascade], wpos);
-
-	#if defined(SHADOWS_DEPTH)
-		return coord.xyz / coord.w;
-	#elif defined(SHADOWS_SCREEN)
-		return coord.xyz;
-	#endif
+	return coord.xyz;
 }
 
 inline float2 PoissonDisk(uint i, uint n)
 {
-	float t = 2.4 * i;
+	float t = 2.4f * i;
 	float r = sqrt((i + 0.5f) / n);
 	return float2(r * cos(t), r * sin(t));
 }
@@ -77,8 +70,7 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 	#if defined(SHADOWS_CUBE)
 		float pixelDepth = length(vec) * _LightPositionRange.w;
 	#elif defined(SHADOWS_DEPTH)
-		uint2 cascade = GetCascadeIndex(viewDepth);
-		float pixelDepth = GetShadowCoordinate(vec, cascade.x).z;
+		float pixelDepth = GetShadowCoordinate(vec).z;
 	#elif defined(SHADOWS_SCREEN)
 		uint2 cascade = GetCascadeIndex(viewDepth);
 		float2 pixelDepth = float2(GetShadowCoordinate(vec, cascade.x).z, GetShadowCoordinate(vec, cascade.y).z);
@@ -100,22 +92,21 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 	#if defined(SHADOWS_CUBE)
 		float depthScale = 1.0f / _LightPositionRange.w;
 	#elif defined(SHADOWS_DEPTH)
-		float depthScale = 1.0f;// / _LightPositionRange.w;
+		float depthScale = 1.0f;
 	#elif defined(SHADOWS_SCREEN)
 		float depthScale = 1.0f / abs(pixelDepth.x - GetShadowCoordinate(vec - _LightDir.xyz, cascade.x).z);
 	#endif
 
 	// slope-based bias
 	#if defined(SHADOWS_CUBE)
-		pixelDepth = pixelDepth * lerp(0.990f, 1.0f, NdotL) - lerp(0.001f, 0.0f, NdotL) / depthScale;
+		pixelDepth = pixelDepth * lerp(0.99f, 1.0f, NdotL);
 	#elif defined(SHADOWS_DEPTH)
-		pixelDepth = GetShadowCoordinate(vec + lerp(-0.001f * _LightDir.xyz, 0.0f, NdotL), cascade.x).z;
+		pixelDepth = GetShadowCoordinate(vec - lerp(0.001f * _LightDir.xyz, 0.0f, NdotL)).z;
 	#elif defined(SHADOWS_SCREEN)
-		pixelDepth = pixelDepth - lerp(0.001f, 0.0f, NdotL) / depthScale;
 	#endif
 
 	// r: shadow, g: mean z-diff.
-	float2 shadow = float2(0.0f, 0.0f);
+	half2 shadow = {0.0h, 0.0h};
 
 	// gram-schmidt process
 	#if defined(SHADOWS_CUBE)
@@ -142,11 +133,11 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 			float3 sampleCoord = mad(disk, radius.x, vec);
 
 			#if defined(SHADOWS_CUBE)
-				float sampleDepth = texCUBE(_ShadowMapTexture, sampleCoord);
+				float sampleDepth = _ShadowMapTexture.Sample(sampler_ShadowMapTexture, sampleCoord).x;
 			#elif defined(SHADOWS_DEPTH)
-				float sampleDepth = tex2D(_ShadowMapTexture, GetShadowCoordinate(sampleCoord, cascade.x).xy);
+				float sampleDepth = _CustomShadowMap.Sample(sampler_CustomShadowMap, GetShadowCoordinate(sampleCoord).xy).x;
 			#elif defined(SHADOWS_SCREEN)
-				float sampleDepth = tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.x).xy);
+				float sampleDepth = _CustomShadowMap.Sample(sampler_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.x).xy).x;
 			#endif
 
 			if (sampleDepth < pixelDepth.x)
@@ -170,6 +161,8 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 	#else
 		// fixed sized penumbra
 		float penumbra = radius.z;
+		// thicc-fucking-thickness
+		shadow.g = 100.0h;
 	#endif
 
 	/////////////////////////////////
@@ -187,13 +180,19 @@ inline float2 SamplePCFShadowMap(float3 vec, float2 uv, float viewDepth, half Nd
 		float3 sampleCoord = mad(disk, penumbra, vec);
 
 		#if defined(SHADOWS_CUBE)
-			shadow.r += texCUBE(_ShadowMapTexture, sampleCoord) > pixelDepth ? 1.0f : 0.0f;
+			shadow.r += step(pixelDepth, _ShadowMapTexture.Sample(sampler_ShadowMapTexture, sampleCoord).x);
 		#elif defined(SHADOWS_DEPTH)
-			shadow.r += tex2D(_ShadowMapTexture, GetShadowCoordinate(sampleCoord, cascade.x).xy) > pixelDepth ? 1.0f : 0.0f;
+			shadow.r += step(pixelDepth, _CustomShadowMap.Sample(sampler_CustomShadowMap, GetShadowCoordinate(sampleCoord).xy).x);
 		#elif defined(SHADOWS_SCREEN)
+			shadow.r += step(pixelDepth.x, _CustomShadowMap.Sample(sampler_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.x).xy).x);
+		/*
 			// cascade blending
-			shadow.r += tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.x).xy) > pixelDepth.x ? cascadeWeight.x : 0.0f;
-			shadow.r += tex2D(_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.y).xy) > pixelDepth.y ? cascadeWeight.y : 0.0f;
+			half2 cshadow = {
+				step(pixelDepth.x, _CustomShadowMap.Sample(sampler_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.x).xy).x),
+				step(pixelDepth.y, _CustomShadowMap.Sample(sampler_CustomShadowMap, GetShadowCoordinate(sampleCoord, cascade.y).xy).x)
+			};
+			shadow.r += dot(cshadow, cascadeWeight);
+		*/
 		#endif
 	}
 

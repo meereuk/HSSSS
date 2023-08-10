@@ -39,16 +39,6 @@ void aPostSurface(inout ASurface s)
 {
     s.ambientNormalWorld = s.normalWorld;
     s.blurredNormalTangent = s.normalTangent;
-    /*
-    #if defined(_SCREENSPACE_SSS)
-        s.blurredNormalTangent = s.normalTangent;
-        s.ambientNormalWorld = s.normalWorld;
-    #else
-        //s.blurredNormalTangent = normalize(lerp(s.normalTangent, s.blurredNormalTangent, s.scatteringMask));// * _DeferredSkinParams.w));
-        s.blurredNormalTangent = s.scatteringMask == 1.0 ? s.blurredNormalTangent : 
-        s.ambientNormalWorld = A_NORMAL_WORLD(s, s.blurredNormalTangent);
-    #endif
-    */
 }
 
 void aPackGbuffer(ASurface s, out half4 gbuffer0, out half4 gbuffer1, out half4 gbuffer2, out half4 gbuffer3)
@@ -79,14 +69,14 @@ void aDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
     // default
     if (s.scatteringMask < 0.1f)
     {
-        return;   
+        diffuse = diffuse * s.albedo;
     }
 
     // non-skin sss + thin layer transmittance
     else if (s.scatteringMask < 0.7f)
     {
         half3 transmission = aThinTransmission(d, s, _DeferredTransmissionParams.x);
-        diffuse = diffuse + transmission;
+        diffuse = (diffuse + transmission) * s.albedo;
     }
 
     // skin
@@ -127,7 +117,11 @@ void aDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
                 _DeferredTransmissionParams.x, _DeferredTransmissionParams.y, _DeferredThicknessBias);
         #endif
 
-        diffuse = diffuse + transmission;
+        #if defined(_SCREENSPACE_SSS)
+            diffuse = diffuse + transmission;
+        #else
+            diffuse = (diffuse + transmission) * s.albedo;
+        #endif
     }
 }
 

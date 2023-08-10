@@ -117,7 +117,8 @@ inline float2 HorizonTrace(ray ray, float gamma, uint split)
     {
         float2 z = 0.0h;
 
-        if (iter <= _SSAONumStride / 4)
+        // full size
+        if (iter <= (_SSAONumStride / 4))
         {
             str = max(str + minStr.x, pow(iter / _SSAONumStride, power));
 
@@ -130,7 +131,8 @@ inline float2 HorizonTrace(ray ray, float gamma, uint split)
             z.y = SampleZBufferLOD0(uv.zw);
         }
 
-        else if (iter <= _SSAONumStride / 2)
+        // 1/2 size
+        else if (iter <= (_SSAONumStride / 2))
         {
             str = max(str + minStr.y, pow(iter / _SSAONumStride, power));
 
@@ -143,7 +145,8 @@ inline float2 HorizonTrace(ray ray, float gamma, uint split)
             z.y = SampleZBufferLOD1(uv.zw);
         }
 
-        else if (iter <= _SSAONumStride * 3 / 4)
+        // 1/4 size
+        else if (iter <= (_SSAONumStride * 3 / 4))
         {
             str = max(str + minStr.z, pow(iter / _SSAONumStride, power));
 
@@ -156,6 +159,7 @@ inline float2 HorizonTrace(ray ray, float gamma, uint split)
             z.y = SampleZBufferLOD2(uv.zw);
         }
 
+        // 1/8 size
         else
         {
             str = max(str + minStr.w, pow(iter / _SSAONumStride, power));
@@ -216,6 +220,7 @@ inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
     if (depth < _SSAOFadeDepth)
     {
         float idx = GetInterleavedIdx(IN.uv, split);
+        float3 noise = SampleNoise(IN.uv);
 
         ray ray;
 
@@ -223,13 +228,13 @@ inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
         ray.org = IN.uv;
 
         ray.len = _SSAORayLength;
-        ray.len *= split == 1 ? SampleNoise(IN.uv) + 0.5f : idx + 0.5f;
+        ray.len *= split == 1 ? noise.x + 0.5f : idx + 0.5f;
 
-        ray.r = split == 1 ? SampleNoise(IN.uv + 0.4f) + 0.5f : idx + 0.5f;
+        ray.r = split == 1 ? noise.y + 0.5f : idx + 0.5f;
 
         float slice = FULL_PI / _SSAONumSample;
         float angle = FastArcCos(dot(vnrm, vdir));
-        float offset = split == 1 ? SampleNoise(IN.uv + 0.2f) : idx;
+        float offset = split == 1 ? noise.z : idx;
 
         for (float iter = 0.5f; iter < _SSAONumSample; iter += 1.0f)
         {
@@ -258,46 +263,6 @@ inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
                 ao.w += sin(theta.x - gamma) + sin(gamma - theta.y);
             #endif
         }
-
-        /*
-        if (ao.w <= 2.0f)
-        {
-            for (float iter = 1.5f; iter < _SSAONumSample; iter += 2.0f)
-            {
-                float4 dir = 0.0h;
-                sincos((iter - offset) * slice, dir.y, dir.x);
-                dir.xyz = normalize(dir.xyz - vdir * dot(dir.xyz, vdir));
-
-                float4 spos = mul(unity_CameraProjection, mad(dir, ray.len.x, vpos));
-                float2 duv = spos.xy / spos.w * 0.5f + 0.5f;
-                duv = (duv - uv) / split;
-
-                ray.fwd = +duv;
-                ray.bwd = -duv;
-
-                float gamma = sign(dot(vnrm, dir.xyz)) * angle;
-                float2 theta = HorizonTrace(ray, gamma, split);
-
-                float bentAngle = 0.5h * (theta.x + theta.y);
-                ao.xyz += vdir * cos(bentAngle) + dir.xyz * sin(bentAngle);
-
-                #ifdef _VISIBILITY_GTAO
-                    float3 nsp = normalize(cross(dir.xyz, vdir));
-                    float3 njp = vnrm - nsp * dot(vnrm, nsp);
-                    ao.w += length(njp) * dot((2.0h * theta * sin(gamma) + cos(gamma) - cos(2.0h * theta - gamma)), 0.5h);
-                #else
-                    ao.w += sin(theta.x - gamma) + sin(gamma - theta.y);
-                #endif
-            }
-
-            ao.w = 0.5h * ao.w / _SSAONumSample;
-        }
-
-        else
-        {
-            ao.w = ao.w / _SSAONumSample;
-        }
-        */
         
         ao.xyz = normalize(normalize(ao.xyz) - vdir * 0.5h);
         ao.xyz = mul(_ViewToWorldMatrix, ao.xyz);
@@ -375,6 +340,10 @@ inline half4 ApplySpecularOcclusion(v2f_img IN) : SV_TARGET
     half intersection = smoothstep(0.0h, 1.0h, 1.0h - saturate((angle.w - angle.z) / (angle.x + angle.y - angle.z)));
     half occlusion = lerp(0.0h, intersection, saturate((angle.y - 0.1h) * 5.0h));
 
+    half4 color = SampleTexel(IN.uv);
+
+    return half4(color.rgb * intersection, color.a);
+
     return intersection * SampleTexel(IN.uv);
 }
 
@@ -384,35 +353,47 @@ inline half4 SpatialDenoiser(v2f_img IN) : SV_TARGET
     half norm = 0.0h;
 
     half zRef = LinearEyeDepth(SampleZBuffer(IN.uv));
-    half3 nRef = mad(SampleGBuffer2(IN.uv), 2.0h, -1.0h);
+    half4 nRef = SampleGBuffer2(IN.uv);
+    nRef.xyz = mad(nRef.xyz , 2.0h, -1.0h);
+    nRef.w = saturate(1.0h - nRef.w);
 
-    for(int x = -KERNEL_TAPS; x <= KERNEL_TAPS; x ++)
+    if (zRef < _SSAOFadeDepth)
     {
-        for(int y = -KERNEL_TAPS; y <= KERNEL_TAPS; y ++)
+        for(int x = -KERNEL_TAPS; x <= KERNEL_TAPS; x ++)
         {
-            float2 offset = _MainTex_TexelSize.xy * float2(x, y) * KERNEL_STEP;
-            //int2 offset = int2(x, y) * KERNEL_STEP;
+            for(int y = -KERNEL_TAPS; y <= KERNEL_TAPS; y ++)
+            {
+                float2 offset = _MainTex_TexelSize.xy * float2(x, y) * KERNEL_STEP;
 
-            half4 ao = SampleTexel(IN.uv + offset);
-            ao.xyz = mad(ao.xyz, 2.0h, -1.0h);
+                half4 ao = SampleTexel(IN.uv + offset);
+                ao.xyz = mad(ao.xyz, 2.0h, -1.0h);
 
-            half zSample = LinearEyeDepth(SampleZBuffer(IN.uv + offset));
-            half3 nSample = mad(SampleGBuffer2(IN.uv + offset), 2.0h, -1.0h);
+                half zSample = LinearEyeDepth(SampleZBuffer(IN.uv + offset));
+                half4 nSample = SampleGBuffer2(IN.uv + offset);
+                nSample.xyz = mad(nSample.xyz, 2.0h, -1.0h);
+                nSample.w = saturate(1.0h - nSample.w);
 
-            half correction = torusKernel[x + KERNEL_TAPS] * torusKernel[y + KERNEL_TAPS];
-            correction = correction * exp(-abs(zSample - zRef) * 4.0h * KERNEL_STEP);
-            correction = correction * pow(max(0, dot(nSample, nRef)), 32 * KERNEL_STEP);
+                half correction = torusKernel[x + KERNEL_TAPS] * torusKernel[y + KERNEL_TAPS];
+                correction *= exp(-abs(zSample - zRef) * 4.0h * KERNEL_STEP);
+                correction *= pow(saturate(dot(nSample.xyz, nRef)), 4 * KERNEL_STEP);
+                correction *= nSample.w == nRef.w ? 1.0h : 0.0h;
             
-            sum += ao * correction;
-            norm += correction;
+                sum += ao * correction;
+                norm += correction;
+            }
         }
+
+        sum.xyz = normalize(sum.xyz / norm);
+        sum.xyz = mad(sum.xyz, 0.5h, 0.5h);
+        sum.w = sum.w / norm;
+
+        return saturate(sum);
     }
 
-    sum.xyz = normalize(sum.xyz / norm);
-    sum.xyz = mad(sum.xyz, 0.5h, 0.5h);
-    sum.w = sum.w / norm;
-
-    return saturate(sum);
+    else
+    {
+        return SampleTexel(IN.uv);
+    }
 }
 
 inline half4 DebugAO(v2f_img IN) : SV_TARGET

@@ -57,7 +57,6 @@
         }
     
         LOD 400
-        Offset -1, -1
 
         UsePass "HSSSS/Overlay/Tessellation/Forward/FORWARD"
         UsePass "HSSSS/Overlay/Tessellation/Forward/FORWARD_DELTA"
