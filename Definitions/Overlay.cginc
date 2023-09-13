@@ -17,6 +17,7 @@ void aSurface(inout ASurface s)
     aSampleSpecGloss(s);
     aSampleOcclusion(s);
     aSampleBumpTangent(s);
+    aSampleDetailTangent(s);
     aUpdateNormalData(s);
     aSampleFresnelAlpha(s);
     aSampleAlphaClip(s);

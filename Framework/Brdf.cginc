@@ -7,6 +7,8 @@
 #define A_MAX_DIELECTRIC_F0 (0.08h)
 #define A_MIN_AREA_ROUGHNESS (0.05h)
 
+#define clampInfinite(x) min(x, 8192.0h)
+
 half3 aSpecularityToF0(half specularity)
 {
     return (specularity * A_MAX_DIELECTRIC_F0).rrr;
@@ -56,7 +58,7 @@ inline half DGGX(half a, half NdotH)
 {
     half a2 = a * a;
     half denom = aLerpOneTo(a2, NdotH * NdotH);
-    return a2 / (denom * denom);
+    return clampInfinite(a2 / (denom * denom));
 }
 
 inline half DGGXAniso(half at, half ab, half TdotH, half BdotH, half NdotH)
@@ -65,7 +67,7 @@ inline half DGGXAniso(half at, half ab, half TdotH, half BdotH, half NdotH)
     half3 v = half3(ab * TdotH, at * BdotH, a2 * NdotH);
     half v2 = dot(v, v);
     half w2 = a2 / v2;
-    return a2 * w2 * w2;
+    return clampInfinite(a2 * w2 * w2);
 }
 
 // 'charlie' sheen distribution
@@ -74,7 +76,7 @@ inline half DCharlie(half a, half NdotH)
     half invA = 1.0h / a;
     half cos2h = NdotH * NdotH;
     half sin2h = max(1.0h - cos2h, 0.0078125);
-    return 0.5h * (2.0h + invA) * pow(sin2h, invA * 0.5h);
+    return clampInfinite(0.5h * (2.0h + invA) * pow(sin2h, invA * 0.5h));
 }
 
 // smith visibility
@@ -83,26 +85,26 @@ inline half VSmith(half a, half NdotV, half NdotL)
     half a2 = a * a;
     half lambdaV = NdotL * sqrt((NdotV - a2 * NdotV) * NdotV + a2);
     half lambdaL = NdotV * sqrt((NdotL - a2 * NdotL) * NdotL + a2);
-    return  saturate(0.5h / (lambdaV + lambdaL));
+    return clampInfinite(0.5h / (lambdaV + lambdaL));
 }
 
 inline half VSmithAniso(half at, half ab, half TdotV, half BdotV, half TdotL, half BdotL, half NdotV, half NdotL)
 {
     half lambdaV = NdotL * length(half3(at * TdotV, ab * BdotV, NdotV));
     half lambdaL = NdotV * length(half3(at * TdotL, ab * BdotL, NdotL));
-    return  saturate(0.5h / (lambdaV + lambdaL));
+    return clampInfinite(0.5h / (lambdaV + lambdaL));
 }
 
 // fast smith visibility
 inline half VSmithFast(half a, half NdotV, half NdotL)
 {
-    return saturate(0.5h / lerp(2.0h * NdotL * NdotV, NdotL + NdotV, a));
+    return clampInfinite(0.5h / lerp(2.0h * NdotL * NdotV, NdotL + NdotV, a));
 }
 
 // neubelt visibility (for sheen specular)
 inline half VNeubelt(half NdotV, half NdotL)
 {
-    return saturate(0.25h / (NdotL + NdotV - NdotL * NdotV));
+    return clampInfinite(0.25h / (NdotL + NdotV - NdotL * NdotV));
 }
 
 // cook-torrance specular brdf

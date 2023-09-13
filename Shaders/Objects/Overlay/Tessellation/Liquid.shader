@@ -1,11 +1,8 @@
-Shader "HSSSS/Overlay/Tessellation/Hash"
+Shader "HSSSS/Overlay/Tessellation/Liquid"
 {
     Properties
     {
-        [Enum(Standard, 0, Anisotropic, 1, Sheen, 2, Skin, 3)]
-        _MaterialType("Material Type",Float) = 0
-
-        [Space(8)][Header(Albedo)]
+        [Header(Albedo)]
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Main Color", Color) = (1,1,1,1)
 
@@ -27,13 +24,6 @@ Shader "HSSSS/Overlay/Tessellation/Hash"
         _BumpMap ("BumpMap", 2D) = "bump" {}
         _BumpScale ("BumpScale", Float) = 1
 
-        [Space(8)][Header(DetailNormal)]
-        _DetailNormalMap ("DetailNormalMap", 2D) = "bump" {}
-        _DetailNormalMapScale ("DetailNormalMapScale", Float) = 1
-
-        [Space(8)][Header(Anisotropy)]
-        _Anisotropy ("Anisotropy", Range(-1, 1)) = 0
-
         [Space(8)][Header(Tessellation)]
         _DispTex ("HeightMap", 2D) = "black" {}
         _Displacement ("Displacement", Range(0, 30)) = 0.1
@@ -41,24 +31,26 @@ Shader "HSSSS/Overlay/Tessellation/Hash"
         _EdgeLength ("EdgeLength", Range(2, 50)) = 2
 
         [Space(8)][Header(Transparency)]
-        _Hash ("Hash", Range(0, 1)) = 0
-        _FuzzBias ("FuzzBias", Range(0, 1)) = 0.0
-        _BlueNoise ("Blue Noise", 3D) = "black" {}
         _FresnelAlpha ("Fresnel Alpha", Range(0, 1)) = 0
     }
 
     CGINCLUDE
         #define A_TESSELLATION_ON
         #define _TESSELLATIONMODE_COMBINED
+        #define _WORKFLOW_SPECULAR
     ENDCG
 
     SubShader
     {
         Tags
         {
-            "Queue" = "AlphaTest" 
-            "RenderType" = "TransparentCutout"
+            "Queue" = "AlphaTest"
+            "RenderType" = "Opaque"
+            "IgnoreProjector" = "True"
+            "ForceNoShadowCasting" = "True"
+            "PerformanceChecks" = "False"
         }
+
         LOD 400
 
         Pass
@@ -66,20 +58,23 @@ Shader "HSSSS/Overlay/Tessellation/Hash"
             Name "FORWARD" 
             Tags { "LightMode" = "ForwardBase" }
 
+            Blend One OneMinusSrcAlpha
+            ZWrite Off
+
             CGPROGRAM
             #pragma target 5.0
             #pragma only_renderers d3d11
-        
+
             #pragma multi_compile_fwdbase
             #pragma multi_compile_fog
-
+            
             #pragma hull aHullShader
             #pragma vertex aVertexTessellationShader
             #pragma domain aDomainShader
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_FORWARDBASE
-            #define _ALPHAHASHED_ON
+            #define _ALPHAPREMULTIPLY_ON
         
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
@@ -100,67 +95,17 @@ Shader "HSSSS/Overlay/Tessellation/Hash"
         
             #pragma multi_compile_fwdadd_fullshadows
             #pragma multi_compile_fog
-
+        
             #pragma hull aHullShader
             #pragma vertex aVertexTessellationShader
             #pragma domain aDomainShader
             #pragma fragment aFragmentShader
 
             #define UNITY_PASS_FORWARDADD
-            #define _ALPHAHASHED_ON
+            #define _ALPHAPREMULTIPLY_ON
 
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
-            ENDCG
-        }
-    
-        Pass
-        {
-            Name "SHADOWCASTER"
-            Tags { "LightMode" = "ShadowCaster" }
-        
-            CGPROGRAM
-            #pragma target 5.0
-            #pragma only_renderers d3d11
-        
-            #pragma multi_compile_shadowcaster
-
-            #pragma hull aHullShader
-            #pragma vertex aVertexTessellationShader
-            #pragma domain aDomainShader
-            #pragma fragment aFragmentShader
-        
-            #define UNITY_PASS_SHADOWCASTER
-        
-            #include "Assets/HSSSS/Definitions/Overlay.cginc"
-            #include "Assets/HSSSS/Passes/Shadow.cginc"
-            ENDCG
-        }
-    
-        Pass
-        {
-            Name "DEFERRED"
-            Tags { "LightMode" = "Deferred" }
-
-            CGPROGRAM
-            #pragma target 5.0
-            #pragma only_renderers d3d11
-        
-            #pragma multi_compile ___ UNITY_HDR_ON
-            #pragma multi_compile LIGHTMAP_OFF LIGHTMAP_ON
-            #pragma multi_compile DIRLIGHTMAP_OFF DIRLIGHTMAP_COMBINED DIRLIGHTMAP_SEPARATE
-            #pragma multi_compile DYNAMICLIGHTMAP_OFF DYNAMICLIGHTMAP_ON
-        
-            #pragma hull aHullShader
-            #pragma vertex aVertexTessellationShader
-            #pragma domain aDomainShader
-            #pragma fragment aFragmentShader
-        
-            #define UNITY_PASS_DEFERRED
-            #define _ALPHAHASHED_ON
-        
-            #include "Assets/HSSSS/Definitions/Overlay.cginc"
-            #include "Assets/HSSSS/Passes/Deferred.cginc"
             ENDCG
         }
     }

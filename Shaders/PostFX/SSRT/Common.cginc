@@ -48,9 +48,8 @@ uniform SamplerState sampler_CameraGBufferTexture3;
 uniform Texture2D _SSGITemporalGIBuffer;
 uniform SamplerState sampler_SSGITemporalGIBuffer;
 
-uniform Texture2D _BlueNoise;
+uniform Texture3D _BlueNoise;
 uniform SamplerState sampler_BlueNoise;
-uniform float4 _BlueNoise_TexelSize;
 
 uniform float4x4 _WorldToViewMatrix;
 uniform float4x4 _ViewToWorldMatrix;
@@ -207,12 +206,8 @@ inline half4 SampleGI(float2 uv, int2 offset)
 //
 inline float3 SampleNoise(float2 uv)
 {
-    return _BlueNoise.Sample(sampler_BlueNoise, uv * _BlueNoise_TexelSize.xy * _ScreenParams.xy);
-}
-
-inline float3 SampleNoise(float2 uv, int2 offset)
-{
-    return _BlueNoise.Sample(sampler_BlueNoise, uv * _BlueNoise_TexelSize.xy * _ScreenParams.xy, offset);
+    float z = (float)(_FrameCount % 64) * 0.015625f + 0.0078125f;
+    return _BlueNoise.Sample(sampler_BlueNoise, float3(uv * _ScreenParams.xy * 0.0078125f, z));
 }
 
 inline void SampleCoordinates(float2 uv, out float4 vpos, out float4 wpos, out float depth)
@@ -498,6 +493,8 @@ inline half4 MedianFilter(v2f_img IN) : SV_TARGET
     c[7] = SampleTexel(IN.uv, int2( 1,  0));
     c[8] = SampleTexel(IN.uv, int2( 1,  1));
 
+    half3 color = c[4];
+
     half3 temp;
 
     mnmx6(c[0], c[1], c[2], c[3], c[4], c[5]);
@@ -505,7 +502,7 @@ inline half4 MedianFilter(v2f_img IN) : SV_TARGET
     mnmx4(c[2], c[3], c[4], c[7]);
     mnmx3(c[3], c[4], c[8]);
 
-    return half4(c[7], 1.0h);
+    return half4(clamp(color, c[2], c[6]), 1.0h);
 }
 
 float Hash(float x)

@@ -69,7 +69,7 @@ half3 BlurInDir(v2f_img IN, half2 direction)
 	half depthM = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));
 	
 	float scale = _DeferredBlurredNormalsParams.x * unity_CameraProjection._m11 / depthM;
-	float2 finalStep = scale * direction * dot(direction, _MainTex_TexelSize.xy);
+	float2 finalStep = 0.0005f * scale * direction * normalize(_MainTex_TexelSize.xy);
 
     half3 colorB = colorM * blurKernel[0].rgb;
 	

@@ -16,7 +16,7 @@ public class GlobalIllumination : MonoBehaviour
     public int   SSGIStepPower;
     public int   SSGIScreenDiv;
 
-    public Texture2D BlueNoise;
+    public Texture3D BlueNoise;
 
     private Matrix4x4 WorldToViewMatrix;
     private Matrix4x4 ViewToWorldMatrix;
@@ -154,6 +154,7 @@ public class GlobalIllumination : MonoBehaviour
         this.aoBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 4);
 
         // spatio filter
+        /*
         this.aoBuffer.SetRenderTarget(flopMRT, BuiltinRenderTextureType.CameraTarget);
         this.aoBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 6);
         this.aoBuffer.SetRenderTarget(flipMRT, BuiltinRenderTextureType.CameraTarget);
@@ -162,6 +163,7 @@ public class GlobalIllumination : MonoBehaviour
         this.aoBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 8);
         this.aoBuffer.SetRenderTarget(flipMRT, BuiltinRenderTextureType.CameraTarget);
         this.aoBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 9);
+        */
 
         // temporal filter
         this.aoBuffer.Blit(null, flop[0], this.mMaterial, 5);

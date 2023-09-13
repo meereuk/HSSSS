@@ -50,7 +50,7 @@
             clip(0.01 - normalM.a);
 
             half scale = _DeferredBlurredNormalsParams.x * unity_CameraProjection._m11 / depthM;
-            half2 finalStep = scale * direction * dot(direction, _MainTex_TexelSize.xy);
+            half2 finalStep = 0.0005f * scale * direction * normalize(_MainTex_TexelSize.xy);
 
             fixed3 normalB = normalM.rgb * blurKernel[0].x;
 

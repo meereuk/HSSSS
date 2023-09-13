@@ -224,26 +224,6 @@
 
         // Pass 1.0 for occlusion so we can apply it later in indirect().
         gi = UnityGI_Base(d, 1.0h, s.ambientNormalWorld);
-        /*
-        // SSS for ambient lights
-        #if defined(_SKINEFFECT_ON)
-            half3 normalR = s.ambientNormalWorld;
-            half3 normalG = normalize(lerp(s.normalWorld, s.ambientNormalWorld, 0.3));
-            half3 normalB = s.normalWorld;
-
-            UnityGI giR = UnityGI_Base(d, 1.0h, normalR);
-            UnityGI giG = UnityGI_Base(d, 1.0h, normalG);
-            UnityGI giB = UnityGI_Base(d, 1.0h, normalB);
-
-            gi = UnityGI_Base(d, 1.0h, s.ambientNormalWorld);
-
-            gi.indirect.diffuse.r = giR.indirect.diffuse.r;
-            gi.indirect.diffuse.g = giG.indirect.diffuse.g;
-            gi.indirect.diffuse.b = giB.indirect.diffuse.b;
-        #else
-            gi = UnityGI_Base(d, 1.0h, s.ambientNormalWorld);
-        #endif
-        */
 
         #ifndef A_REFLECTION_PROBES_OFF
             Unity_GlossyEnvironmentData g;

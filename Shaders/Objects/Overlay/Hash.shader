@@ -27,13 +27,17 @@ Shader "HSSSS/Overlay/Hash"
         _BumpMap ("BumpMap", 2D) = "bump" {}
         _BumpScale ("BumpScale", Float) = 1
 
+        [Space(8)][Header(DetailNormal)]
+        _DetailNormalMap ("DetailNormalMap", 2D) = "bump" {}
+        _DetailNormalMapScale ("DetailNormalMapScale", Float) = 1
+
         [Space(8)][Header(Anisotropy)]
         _Anisotropy ("Anisotropy", Range(-1, 1)) = 0
 
         [Space(8)][Header(Transparency)]
         _Hash ("Hash", Range(0, 1)) = 0
         _FuzzBias ("FuzzBias", Range(0, 1)) = 0.0
-        _BlueNoise ("Blue Noise", 2D) = "black" {}
+        _BlueNoise ("Blue Noise", 3D) = "black" {}
         _FresnelAlpha ("Fresnel Alpha", Range(0, 1)) = 0
     }
 

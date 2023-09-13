@@ -8,7 +8,6 @@
 #include "Assets/HSSSS/Framework/Surface.cginc"
 #include "Assets/HSSSS/Framework/Utility.cginc"
 #include "Assets/HSSSS/Framework/Direct.cginc"
-#include "Assets/HSSSS/Framework/AreaLight.cginc"
 
 #include "HLSLSupport.cginc"
 #include "UnityCG.cginc"

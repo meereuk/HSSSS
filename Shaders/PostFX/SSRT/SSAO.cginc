@@ -75,24 +75,27 @@ inline half4 SampleFlop(float2 uv)
     return ao;
 }
 
-inline float SampleZBufferLOD0(float2 uv)
+inline half4 SampleZBufferLOD(float2 uv, uint lod)
 {
-    return _HierachicalZBuffer0.Sample(sampler_HierachicalZBuffer0, uv).x;
-}
+    if (lod == 3)
+    {
+        return _HierachicalZBuffer3.Sample(sampler_HierachicalZBuffer3, uv).x;
+    }
 
-inline float SampleZBufferLOD1(float2 uv)
-{
-    return _HierachicalZBuffer1.Sample(sampler_HierachicalZBuffer1, uv).x;
-}
+    else if (lod == 2)
+    {
+        return _HierachicalZBuffer2.Sample(sampler_HierachicalZBuffer2, uv).x;
+    }
 
-inline float SampleZBufferLOD2(float2 uv)
-{
-    return _HierachicalZBuffer2.Sample(sampler_HierachicalZBuffer2, uv).x;
-}
+    else if (lod == 1)
+    {
+        return _HierachicalZBuffer1.Sample(sampler_HierachicalZBuffer1, uv).x;
+    }
 
-inline float SampleZBufferLOD3(float2 uv)
-{
-    return _HierachicalZBuffer3.Sample(sampler_HierachicalZBuffer3, uv).x;
+    else
+    {
+        return _HierachicalZBuffer0.Sample(sampler_HierachicalZBuffer0, uv).x;
+    }
 }
 
 inline float2 HorizonTrace(ray ray, float gamma, uint split)
@@ -117,69 +120,52 @@ inline float2 HorizonTrace(ray ray, float gamma, uint split)
     {
         float2 z = 0.0h;
 
-        // full size
+        uint lod = 0;
+
         if (iter <= (_SSAONumStride / 4))
         {
-            str = max(str + minStr.x, pow(iter / _SSAONumStride, power));
-
-            float4 uv = {
-                mad(ray.fwd, str, ray.org),
-                mad(ray.bwd, str, ray.org)
-            };
-
-            z.x = SampleZBufferLOD0(uv.xy);
-            z.y = SampleZBufferLOD0(uv.zw);
+            lod = 0;
         }
 
-        // 1/2 size
         else if (iter <= (_SSAONumStride / 2))
         {
-            str = max(str + minStr.y, pow(iter / _SSAONumStride, power));
-
-            float4 uv = {
-                mad(ray.fwd, str, ray.org),
-                mad(ray.bwd, str, ray.org)
-            };
-
-            z.x = SampleZBufferLOD1(uv.xy);
-            z.y = SampleZBufferLOD1(uv.zw);
+            lod = 1;
         }
 
-        // 1/4 size
         else if (iter <= (_SSAONumStride * 3 / 4))
         {
-            str = max(str + minStr.z, pow(iter / _SSAONumStride, power));
-
-            float4 uv = {
-                mad(ray.fwd, str, ray.org),
-                mad(ray.bwd, str, ray.org)
-            };
-
-            z.x = SampleZBufferLOD2(uv.xy);
-            z.y = SampleZBufferLOD2(uv.zw);
+            lod = 2;
         }
 
-        // 1/8 size
         else
         {
-            str = max(str + minStr.w, pow(iter / _SSAONumStride, power));
-
-            float4 uv = {
-                mad(ray.fwd, str, ray.org),
-                mad(ray.bwd, str, ray.org)
-            };
-
-            z.x = SampleZBufferLOD3(uv.xy);
-            z.y = SampleZBufferLOD3(uv.zw);
+            lod = 3;
         }
+
+        str = max(str + minStr[lod], pow(iter / _SSAONumStride, power));
+
+        float4 uv = {
+            mad(ray.fwd, str, ray.org),
+            mad(ray.bwd, str, ray.org)
+        };
+
+        z.x = SampleZBufferLOD(uv.xy, lod);
+        z.y = SampleZBufferLOD(uv.zw, lod);
 
         float2 threshold = ray.len * FastSqrt(1.0f - str * str);
         float2 dz = (ray.z - z.xy);
 
-        dz = min(threshold, dz) * step(dz, _SSAOMeanDepth * ray.r);
-        dz /= abs(str * ray.len);
+        if (dz.x - _SSAOMeanDepth * ray.r < threshold.x)
+        {
+            dz.x = min(threshold.x, dz.x) / abs(str * ray.len);
+            theta.x = max(theta.x, dz.x);
+        }
 
-        theta = max(theta, dz);
+        if (dz.y - _SSAOMeanDepth * ray.r < threshold.y)
+        {
+            dz.y = min(threshold.y, dz.y) / abs(str * ray.len);
+            theta.y = max(theta.y, dz.y);
+        }
     }
 
     theta =  FastArcTan(theta);
@@ -213,7 +199,7 @@ inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
     wnrm = normalize(mad(wnrm, 2.0f, -1.0f));
     half3 vnrm = mul(_WorldToViewMatrix, wnrm);
 
-    half3 vdir = normalize(-vpos.xyz);
+    half3 vdir = half3(0.0h, 0.0h, 1.0h);
 
     half4 ao = 0.0h;
 
@@ -316,7 +302,8 @@ inline half4 ApplySpecularOcclusion(v2f_img IN) : SV_TARGET
 
     SampleCoordinates(IN.uv, vpos, wpos, depth);
 
-    float3 vdir = normalize(_WorldSpaceCameraPos.xyz - wpos.xyz);
+    float3 vdir = mul(_ViewToWorldMatrix, float4(0.0f, 0.0f, 1.0f, 0.0f));
+    //float3 vdir = normalize(_WorldSpaceCameraPos.xyz - wpos.xyz);
 
     half3 wnrm = SampleGBuffer2(IN.uv).xyz;
     wnrm = normalize(mad(wnrm, 2.0f, -1.0f));

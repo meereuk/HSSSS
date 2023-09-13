@@ -37,7 +37,7 @@ Shader "HSSSS/Human/Hair/Deferred"
         _Hash ("Hash", Range(0, 1)) = 0
         _Cutoff ("Cutoff", Range(0, 1)) = 0.5
         _FuzzBias ("FuzzBias", Range(0, 1)) = 0.0
-        _BlueNoise ("Blue Noise", 2D) = "black" {}
+        _BlueNoise ("BlueNoise", 3D) = "black" {}
     }
 
     SubShader

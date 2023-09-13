@@ -15,7 +15,7 @@ public class AmbientOcclusion : MonoBehaviour
     public float SSAOFadeDepth;
     public int   SSAORayStride;
     public int   SSAOScreenDiv;
-    public Texture2D BlueNoise;
+    public Texture3D BlueNoise;
 
     private Matrix4x4 WorldToViewMatrix;
     private Matrix4x4 ViewToWorldMatrix;

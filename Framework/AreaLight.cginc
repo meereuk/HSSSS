@@ -8,11 +8,11 @@ uniform float3 _DirLightPenumbra;
 uniform float3 _SpotLightPenumbra;
 uniform float3 _PointLightPenumbra;
 uniform uint   _SoftShadowNumIter;
+uniform uint   _FrameCount;
 
 // jittering texture for the randomized rotation
-uniform Texture2D _ShadowJitterTexture;
+uniform Texture3D _ShadowJitterTexture;
 uniform SamplerState sampler_ShadowJitterTexture;
-uniform float4 _ShadowJitterTexture_TexelSize;
 
 // random number generator
 inline float GradientNoise(float2 uv)
@@ -22,7 +22,8 @@ inline float GradientNoise(float2 uv)
 
 inline float3 SampleNoise(float2 uv)
 {
-    return _ShadowJitterTexture.Sample(sampler_ShadowJitterTexture, uv * _ShadowJitterTexture_TexelSize.xy * _ScreenParams.xy).xyz;
+    float z = (float)(_FrameCount % 64) * 0.015625f + 0.0078125f;
+    return _ShadowJitterTexture.Sample(sampler_ShadowJitterTexture, float3(uv * _ScreenParams.xy * 0.0078125f, z));
 }
 
 // gram-schmidt process
