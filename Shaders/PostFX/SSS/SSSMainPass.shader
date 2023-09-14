@@ -1,4 +1,4 @@
-﻿Shader "Hidden/HSSSS/ScreenSpaceDiffuseBlur"
+﻿Shader "Hidden/HSSSS/SSSMainPass"
 {
     Properties
     {
@@ -15,7 +15,7 @@
     
         ENDCG
         
-        // calculate specular light
+        // pass 0 : calculate specular light
         Pass
         {
             CGPROGRAM
@@ -57,7 +57,7 @@
             ENDCG
         }
 
-        // blur in x-axis
+        // pass 1 : diffuse blur in x-axis
         Pass
         {
             CGPROGRAM
@@ -87,7 +87,7 @@
         }
         
 
-        // blur in y-axis
+        // pass 2 : diffuse blur in y-axis
         Pass
         {
             CGPROGRAM
@@ -116,6 +116,7 @@
             ENDCG
         }
 
+        // pass 3 : final collect pass
         Pass
         {
             CGPROGRAM
@@ -159,6 +160,52 @@
                 }
 
                 return half4(result + ambientSpecular, 0.0h);
+            }
+            ENDCG
+        }
+
+        // pass 4 : normal blur in x-axis
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert_img
+            #pragma fragment frag
+
+            #include "Common.cginc"
+            
+            fixed4 frag(v2f_img IN) : SV_Target
+            {
+                fixed4 normal = tex2D(_CameraGBufferTexture2, IN.uv);
+
+                if (normal.w < 0.1h)
+                {
+                    normal = NormalBlur(IN, RandomAxis(IN).xy);
+                }
+
+                return normal;
+            }
+            ENDCG
+        }
+
+        // pass 5 : normal blur in y-axis
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert_img
+            #pragma fragment frag
+
+            #include "Common.cginc"
+
+            fixed4 frag(v2f_img IN) : SV_Target
+            {
+                fixed4 normal = tex2D(_CameraGBufferTexture2, IN.uv);
+
+                if (normal.w < 0.1h)
+                {
+                    normal = NormalBlur(IN, RandomAxis(IN).yx * float2(1.0f, -1.0f));
+                }
+
+                return normal;
             }
             ENDCG
         }

@@ -1,4 +1,4 @@
-﻿Shader "Hidden/HSSSS/TransmissionBlit"
+﻿Shader "Hidden/HSSSS/SSSPrePass"
 {
     Properties
     {

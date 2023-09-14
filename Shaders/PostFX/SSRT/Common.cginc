@@ -2,7 +2,7 @@
 #define HSSSS_SSRT_CGINC
 
 #include "UnityCG.cginc"
-
+/*
 struct appdata_mrt
 {
     float4 pos: POSITION;
@@ -22,6 +22,7 @@ v2f_mrt vert_mrt(appdata_mrt v)
     o.uv.y = _ProjectionParams.x < 0.0f ? 1.0f - o.uv.y : o.uv.y;
     return o;
 }
+*/
 
 uniform Texture2D _MainTex;
 uniform SamplerState sampler_MainTex;

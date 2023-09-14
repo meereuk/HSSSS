@@ -1,10 +1,7 @@
-﻿Shader "HSSSS/Overlay/Tessellation/Deferred"
+Shader "HSSSS/Human/Eyebrow"
 {
     Properties
     {
-        [Enum(Standard, 0, Anisotropic, 1, Sheen, 2, Skin, 3)]
-        _MaterialType("Material Type",Float) = 0
-
         [Header(Albedo)]
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Main Color", Color) = (1,1,1,1)
@@ -27,22 +24,20 @@
         _BumpMap ("BumpMap", 2D) = "bump" {}
         _BumpScale ("BumpScale", Float) = 1
 
-        [Space(8)][Header(Anisotropy)]
-        _Anisotropy ("Anisotropy", Range(-1, 1)) = 0
-
         [Space(8)][Header(Tessellation)]
         _DispTex ("HeightMap", 2D) = "black" {}
         _Displacement ("Displacement", Range(0, 30)) = 0.1
         _Phong ("PhongStrength", Range(0, 1)) = 0.5
         _EdgeLength ("EdgeLength", Range(2, 50)) = 2
-
-        [Space(8)][Header(Transparency)]
-        _FresnelAlpha ("Fresnel Alpha", Range(0, 1)) = 0
+        _VertexWrapOffset ("VertexWrapOffset", Range(0, 1)) = 0.1
     }
 
     CGINCLUDE
         #define A_TESSELLATION_ON
         #define _TESSELLATIONMODE_COMBINED
+        #define _WORKFLOW_SPECULAR
+        #define _VERTEXWRAP_ON
+        #define _DISPALPHA_ON
     ENDCG
 
     SubShader
@@ -50,80 +45,68 @@
         Tags
         {
             "Queue" = "AlphaTest"
-            "RenderType" = "Opaque"
+            "RenderType" = "Transparent"
             "IgnoreProjector" = "True"
             "ForceNoShadowCasting" = "True"
             "PerformanceChecks" = "False"
         }
-    
-        LOD 400
 
-        UsePass "HSSSS/Overlay/Tessellation/Forward/FORWARD"
-        UsePass "HSSSS/Overlay/Tessellation/Forward/FORWARD_DELTA"
-    
+        LOD 400
+        Offset -1, -1
+
         Pass
         {
-            Name "DEFERRED"
-            Tags { "LightMode" = "Deferred" }
+            Name "FORWARD" 
+            Tags { "LightMode" = "ForwardBase" }
 
-            // Only overwrite G-Buffer RGB, but weight whole G-Buffer.
-            Blend SrcAlpha OneMinusSrcAlpha, Zero OneMinusSrcAlpha
+            Blend SrcAlpha OneMinusSrcAlpha
             ZWrite Off
-            Cull Back
 
             CGPROGRAM
             #pragma target 5.0
             #pragma only_renderers d3d11
 
-            #pragma multi_compile ___ UNITY_HDR_ON
-            #pragma multi_compile LIGHTMAP_OFF LIGHTMAP_ON
-            #pragma multi_compile DIRLIGHTMAP_OFF DIRLIGHTMAP_COMBINED DIRLIGHTMAP_SEPARATE
-            #pragma multi_compile DYNAMICLIGHTMAP_OFF DYNAMICLIGHTMAP_ON
-        
+            #pragma multi_compile_fwdbase
+            #pragma multi_compile_fog
+            
             #pragma hull aHullShader
             #pragma vertex aVertexTessellationShader
             #pragma domain aDomainShader
             #pragma fragment aFragmentShader
         
-            #define UNITY_PASS_DEFERRED
-            #define A_FINAL_GBUFFER_ON
-            #define A_DECAL_ALPHA_FIRSTPASS
+            #define UNITY_PASS_FORWARDBASE
+            #define _ALPHABLEND_ON
         
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
-            #include "Assets/HSSSS/Passes/Deferred.cginc"
+            #include "Assets/HSSSS/Passes/ForwardBase.cginc"
             ENDCG
         }
     
         Pass
         {
-            Name "DEFERRED"
-            Tags { "LightMode" = "Deferred" }
-
-            // Only overwrite GBuffer A.
-            Blend One One
-            ColorMask A
+            Name "FORWARD_DELTA"
+            Tags { "LightMode" = "ForwardAdd" }
+        
+            Blend SrcAlpha One
             ZWrite Off
-            Cull Back
 
             CGPROGRAM
             #pragma target 5.0
             #pragma only_renderers d3d11
-                
-            #pragma multi_compile ___ UNITY_HDR_ON
-            #pragma multi_compile LIGHTMAP_OFF LIGHTMAP_ON
-            #pragma multi_compile DIRLIGHTMAP_OFF DIRLIGHTMAP_COMBINED DIRLIGHTMAP_SEPARATE
-            #pragma multi_compile DYNAMICLIGHTMAP_OFF DYNAMICLIGHTMAP_ON
+        
+            #pragma multi_compile_fwdadd_fullshadows
+            #pragma multi_compile_fog
         
             #pragma hull aHullShader
             #pragma vertex aVertexTessellationShader
             #pragma domain aDomainShader
             #pragma fragment aFragmentShader
-        
-            #define UNITY_PASS_DEFERRED
-            #define A_FINAL_GBUFFER_ON
-        
+
+            #define UNITY_PASS_FORWARDADD
+            #define _ALPHABLEND_ON
+
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
-            #include "Assets/HSSSS/Passes/Deferred.cginc"
+            #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
             ENDCG
         }
     }

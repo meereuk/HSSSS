@@ -2,6 +2,7 @@
 #define HSSSS_SSGI_CGINC
 
 #include "Common.cginc"
+#include "MRT.cginc"
 #include "Assets/HSSSS/Framework/Brdf.cginc"
 
 uniform half _SSGIIntensity;
