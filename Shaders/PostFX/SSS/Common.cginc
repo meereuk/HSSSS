@@ -37,34 +37,39 @@ void SkipIfNonSkin(v2f_img IN)
     clip(0.01h - mask);
 }
 
-half3 BlurInDir(v2f_img IN, float2 direction)
+half4 DiffuseBlur(v2f_img IN, float2 direction)
 {
-	float2 uv = IN.uv;
+    half4 colorM = tex2D(_MainTex, IN.uv);
 
-	half3 colorM = tex2D(_MainTex, uv).rgb;
-	half depthM = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));
-	
-	float scale = _DeferredBlurredNormalsParams.x * unity_CameraProjection._m11 / depthM;
-	float2 finalStep = 0.0005f * scale * direction * normalize(_MainTex_TexelSize.xy);
+    if (colorM.w < 1.0h)
+    {
+        return 0.0h;
+    }
 
-    half3 colorB = colorM * blurKernel[0].rgb;
-	
-	[unroll]
-	for (uint i = 1; i < NUM_TAPS; i++)
-	{
-        // sample color
-		float2 offsetUv = uv + finalStep * blurKernel[i].a;
-		half3 color = tex2D(_MainTex, offsetUv);
-        // depth-aware
-		half depth = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, offsetUv));
-		half s = min(1.0h, _DeferredBlurredNormalsParams.y * abs(depth - depthM));
-        // mask-aware
-        half m = step(0.01h, tex2D(_CameraGBufferTexture2, offsetUv).a);
-        // blur
-        colorB += lerp(lerp(color, colorM, s), colorM, m) * blurKernel[i].rgb;
-	}
-        
-	return colorB;
+    else
+    {
+        half depthM = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, IN.uv));
+
+        float scale = _DeferredBlurredNormalsParams.x * unity_CameraProjection._m11 / depthM;
+	    float2 finalStep = 0.0005f * scale * direction * normalize(_MainTex_TexelSize.xy);
+
+        half3 colorB = colorM.xyz * blurKernel[0].xyz;
+
+        [unroll]
+	    for (uint i = 1; i < NUM_TAPS; i++)
+	    {
+            // sample color
+		    float2 offsetUv = IN.uv + finalStep * blurKernel[i].w;
+		    half4 color = tex2D(_MainTex, offsetUv);
+            // depth-aware
+		    half depth = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, offsetUv));
+		    half s = min(1.0h, _DeferredBlurredNormalsParams.y * abs(depth - depthM));
+            // blur
+            colorB += lerp(colorM.xyz, lerp(color.xyz, colorM.xyz, s), color.w) * blurKernel[i].xyz;
+	    }
+
+        return half4(colorB, 1.0h);
+    }
 }
 
 fixed4 NormalBlur(v2f_img IN, float2 direction)

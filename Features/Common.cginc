@@ -43,7 +43,6 @@ half3 _EmissionColor;
 half _MaterialType;
 half _Anisotropy;
 
-half _Cutoff;
 half _Metallic;
 half _Smoothness;
 half _OcclusionStrength;
@@ -53,11 +52,15 @@ half _BumpScale;
 half _BlendNormalMapScale;
 half _DetailNormalMapScale;
 
+#if defined(_ALPHATEST_ON)
+    half _Cutoff;
+#endif
+
 #if defined(_ALPHAHASHED_ON)
-    uniform Texture3D _BlueNoise;
-    uniform SamplerState sampler_BlueNoise;
     uniform uint _FrameCount;
+    sampler3D _BlueNoise;
     half _FuzzBias;
+    half _Cutoff;
     half _Hash;
 #endif
 
@@ -96,17 +99,10 @@ inline void aSampleAlphaClip(inout ASurface s)
         clip(s.opacity - _Cutoff);
     #endif
 
-    // scaled alpha test
-    #if defined(_ALPHASCALE_ON)
-        clip(_Cutoff - s.opacity);
-        s.opacity = smoothstep(0.0h, _Cutoff, s.opacity);
-        clip(s.opacity - 0.001h);
-    #endif
-
     // alpha hashed
     #if defined(_ALPHAHASHED_ON)
         float z = ((float)((_FrameCount + 32) % 64) * 0.015625f + 0.0078125f) * _FuzzBias + s.vertexColor.x;
-        half hash = _BlueNoise.Sample(sampler_BlueNoise, float3(s.screenUv.xy * _ScreenParams.xy * 0.0078125f + 0.5f, z));
+        half hash = tex3D(_BlueNoise, float3(s.screenUv.xy * _ScreenParams.xy * 0.0078125f + 0.5f, z));
         clip(s.opacity - mad(hash, _Hash, _Cutoff));
     #endif
 }
@@ -123,10 +119,8 @@ inline void aSampleSpecGloss(inout ASurface s)
     #elif defined(_SKINSPECULAR_ON)
         half gloss = aLuminance(tex.rgb);
         s.metallic = 0.0h;
-        s.specularity = gloss * _SpecColor.r;
+        s.specularity = aLuminance(_SpecColor.rgb);
         s.roughness = 1.0h - lerp(_Metallic, _Smoothness, gloss);
-        s.clearCoatWeight = gloss * _SpecColor.g;
-        s.baseColor = s.baseColor * lerp(1.0h, saturate(_SpecColor.b + 0.6h), gloss); 
     #else
         s.metallic = _Metallic * aLuminance(tex.rgb);
         s.specularity = aLuminance(_SpecColor.rgb);

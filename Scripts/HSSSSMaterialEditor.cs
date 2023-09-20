@@ -1,38 +1,137 @@
 ﻿using System;
+using System.Reflection.Emit;
 using UnityEngine;
 
 namespace UnityEditor
 {
 	public class HSSSSMaterialEditor : ShaderGUI
 	{
+		private Material mMaterial;
+		private MaterialEditor mEditor;
+		private MaterialProperty[] mProps;
+
+		private bool showDiffuse;
+		private bool showSpecular;
+		private bool showOcclusion;
+		private bool showNormal;
+		private bool showTessellation;
+
+		#region Properties
+        #endregion
+
+        public override void OnGUI (MaterialEditor editor, MaterialProperty[] props)
+		{
+			this.mMaterial = editor.target as Material;
+			this.mEditor = editor;
+			this.mProps = props;
+
+			showDiffuse = EditorGUILayout.Foldout(showDiffuse, "Diffuse Properties");
+
+            Separator();
+
+            if (showDiffuse)
+			{
+				this.DiffuseInspector();
+			}
+
+			showSpecular = EditorGUILayout.Foldout(showSpecular, "Specular Properties");
+
+            Separator();
+
+			if (showSpecular)
+			{
+				this.SpecularInspector();
+			}
+
+            showOcclusion = EditorGUILayout.Foldout(showOcclusion, "Occlusion Properties");
+
+            Separator();
+
+			if (showOcclusion)
+			{
+				this.OcclusionInspector();
+			}
+
+            showNormal = EditorGUILayout.Foldout(showNormal, "Normal Properties");
+
+            Separator();
+
+            if (showNormal)
+            {
+				this.NormalInspector();
+            }
+
+            showTessellation = EditorGUILayout.Foldout(showTessellation, "Tessellation Properties");
+
+            Separator();
+        }
+
+		private void DiffuseInspector()
+		{
+			PropertyInspector("_MainTex", "Main Texture");
+			PropertyInspector("_Color", "Main Color");
+
+			PropertyInspector("_ColorMask", "Color Mask");
+			PropertyInspector("_Color_3", "Secondary Color");
+
+			PropertyInspector("_DetailAlbedoMap", "Detail Albedo");
+
+			PropertyInspector("_EmissionMap", "Emission Texture");
+			PropertyInspector("_EmissionColor", "Emission Color");
+
+			Separator();
+        }
+
+		private void SpecularInspector()
+		{
+			PropertyInspector("_SpecGlossMap", "Specular/Glossiness Texture");
+			PropertyInspector("_SpecColor", "Specular Color");
+			PropertyInspector("_Metallic", "Metallic");
+			PropertyInspector("_Smoothness", "Smoothness");
+
+			Separator();
+		}
+
+		private void OcclusionInspector()
+		{
+			PropertyInspector("_OcclusionMap", "Occlusion Texture");
+			PropertyInspector("_OcclusionStrength", "Occlusion Strength");
+
+            Separator();
+        }
+
+		private void NormalInspector()
+		{
+			PropertyInspector("_BumpMap", "Bump Texture");
+			PropertyInspector("_BumpScale", "Bump Scale");
+
+			PropertyInspector("_BlendNormalMap", "Blendnormal Texture");
+			PropertyInspector("_BlendNormalMapScale", "Blendnormal Scale");
+
+			PropertyInspector("_DetailNormalMap", "Detailnormal Texture");
+			PropertyInspector("_DetailNormalMapScale", "Detailnormal Scale");
+		}
+
+		private void PropertyInspector(string name, string label)
+		{
+			if (this.mMaterial.HasProperty(name))
+			{
+				this.mEditor.ShaderProperty(FindProperty(name, this.mProps), label);
+            }
+		}
+
+		private static void Separator(int height = 1)
+		{
+			Rect rect = EditorGUILayout.GetControlRect(false, height);
+			EditorGUI.DrawRect(rect, new Color (0.0f, 0.0f, 0.0f, 1.0f));
+		}
+
+		/*
 		private static GUIContent label = new GUIContent("", "");
 
 		private Material mMaterial;
 		private MaterialEditor mEditor;
 		private MaterialProperty[] mProps;
-
-		private MaterialProperty albedoMap = null;
-		private MaterialProperty albedoColor = null;
-		private MaterialProperty colorMask = null;
-		private MaterialProperty secondColor = null;
-		private MaterialProperty detailAlbedo = null;
-
-		private MaterialProperty specularMap = null;
-		private MaterialProperty specularColor = null;
-		private MaterialProperty metallic = null;
-		private MaterialProperty smoothness = null;
-
-		private MaterialProperty occlusionMap = null;
-		private MaterialProperty occluionStrength = null;
-
-		private MaterialProperty bumpMap = null;
-		private MaterialProperty bumpScale = null;
-
-		private MaterialProperty blendNormalMap = null;
-		private MaterialProperty blendNormalMapScale = null;
-
-		private MaterialProperty detailNormalMap = null;
-		private MaterialProperty detailNormalMapScale = null;
 
 		private bool showAlbedoField = true;
 		private bool showSpecularField = true;
@@ -111,5 +210,6 @@ namespace UnityEditor
 			this.mEditor.TexturePropertySingleLine(label, this.occlusionMap, this.occluionStrength);
 			this.mEditor.TextureScaleOffsetProperty(this.occlusionMap);
 		}
+		*/
 	}
 }

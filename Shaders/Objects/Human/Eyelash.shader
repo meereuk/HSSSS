@@ -11,6 +11,10 @@ Shader "HSSSS/Human/Eyelash"
         _EmissionColor ("Emission Color", Color) = (0, 0, 0, 1)
     }
 
+    CGINCLUDE
+        #define _ALPHABLEND_ON
+    ENDCG
+
     SubShader
     {
         Tags
@@ -43,7 +47,6 @@ Shader "HSSSS/Human/Eyelash"
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_FORWARDBASE
-            #define _ALPHABLEND_ON
         
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
@@ -70,7 +73,6 @@ Shader "HSSSS/Human/Eyelash"
             #pragma fragment aFragmentShader
 
             #define UNITY_PASS_FORWARDADD
-            #define _ALPHABLEND_ON
 
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardAdd.cginc"

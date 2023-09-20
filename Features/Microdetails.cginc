@@ -37,37 +37,6 @@ float4 tex2DStochastic(sampler2D tex, float2 uv, float4x3 bw, float2 dx, float2 
             mul(tex2D(tex, uv + hash2D2D(bw[2].xy), dx, dy), bw[3].z);
 }
 
-/*
-float4 tex2DStochastic(sampler2D tex, float2 UV)
-{
-	//triangle vertices and blend weights
-	//BW_vx[0...2].xyz = triangle verts
-	//BW_vx[3].xy = blend weights (z is unused)
-	float4x3 BW_vx;
- 
-	//uv transformed into triangular grid space with UV scaled by approximation of 2*sqrt(3)
-	float2 skewUV = mul(float2x2 (1.0 , 0.0 , -0.57735027 , 1.15470054), UV * 3.464);
- 
-	//vertex IDs and barycentric coords
-	float2 vxID = float2 (floor(skewUV));
-	float3 barry = float3 (frac(skewUV), 0);
-	barry.z = 1.0-barry.x-barry.y;
- 
-	BW_vx = ((barry.z>0) ? 
-		float4x3(float3(vxID, 0), float3(vxID + float2(0, 1), 0), float3(vxID + float2(1, 0), 0), barry.zyx) :
-		float4x3(float3(vxID + float2 (1, 1), 0), float3(vxID + float2 (1, 0), 0), float3(vxID + float2 (0, 1), 0), float3(-barry.z, 1.0-barry.y, 1.0-barry.x)));
- 
-	//calculate derivatives to avoid triangular grid artifacts
-	float2 dx = ddx(UV);
-	float2 dy = ddy(UV);
- 
-	//blend samples with calculated weights
-	return mul(tex2D(tex, UV + hash2D2D(BW_vx[0].xy), dx, dy), BW_vx[3].x) + 
-        mul(tex2D(tex, UV + hash2D2D(BW_vx[1].xy), dx, dy), BW_vx[3].y) + 
-        mul(tex2D(tex, UV + hash2D2D(BW_vx[2].xy), dx, dy), BW_vx[3].z);
-}
-*/
-
 #if defined(_MICRODETAILS_ON)
     A_SAMPLER2D(_DetailNormalMap_2);
     A_SAMPLER2D(_DetailNormalMap_3);
@@ -112,7 +81,7 @@ inline void aSampleMicroTangent(inout ASurface s)
             _DetailNormalMapScale_2 * s.NdotV,
             _DetailNormalMapScale_3 * s.NdotV
         };
-
+        
         s.ambientOcclusion = s.ambientOcclusion * lerp(1.0h, mad(dot(pore, weight), 0.2h, 0.8h), _OcclusionStrength * s.NdotV);
         s.normalWorld = A_NORMAL_WORLD(s, s.normalTangent);
 

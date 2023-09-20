@@ -117,11 +117,15 @@ void aDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
                 _DeferredTransmissionParams.x, _DeferredTransmissionParams.y, _DeferredThicknessBias);
         #endif
 
+        diffuse = (diffuse + transmission) * s.albedo;
+
+        /*
         #if defined(_SCREENSPACE_SSS)
-            diffuse = diffuse + transmission;
+            diffuse = (diffuse + transmission);
         #else
             diffuse = (diffuse + transmission) * s.albedo;
         #endif
+        */
     }
 }
 

@@ -40,6 +40,19 @@ Shader "Hidden/HSSSS/Deferred Shading"
             #include "Assets/HSSSS/Lighting/StandardSkin.cginc"
             #include "Assets/HSSSS/Framework/Deferred.cginc"
 
+            #ifdef _SCREENSPACE_SSS
+                uniform RWTexture2D<float> _SpecularBufferR : register(u1);
+                uniform RWTexture2D<float> _SpecularBufferG : register(u2);
+                uniform RWTexture2D<float> _SpecularBufferB : register(u3);
+            #endif
+
+            // RGB to YCoCg color space
+            static const half3x3 EncodeRGB = {
+                { 0.25h,  0.50h,  0.25h },
+                { 0.50h,  0.00h, -0.50h },
+                {-0.25h,  0.50h, -0.25h }
+            };
+
             half4 CalculateLight (unity_v2f_deferred i)
             {
                 ASurface s = aDeferredSurface(i);
@@ -53,19 +66,29 @@ Shader "Hidden/HSSSS/Deferred Shading"
                 diffuse = aHdrClamp(diffuse);
                 specular = aHdrClamp(specular);
 
-                #if defined(_SCREENSPACE_SSS)
-                    //uint2 coord = UnityPixelSnap(i.pos);
-                    //_SpecularBuffer[coord.x + round(_ScreenParams.x) * coord.y] += specular;
-                    //return diffuse;
-
-                    if (s.scatteringMask != 1.0h)
+                #ifdef _SCREENSPACE_SSS
+                    if (s.scatteringMask < 1.0h)
                     {
                         return half4(diffuse + specular, 0.0h);
                     }
 
                     else
                     {
-                        return half4(diffuse, aLuminance(specular));
+                        uint2 coord = UnityPixelSnap(i.pos);
+
+                        _SpecularBufferR[coord] += specular.r;
+                        _SpecularBufferG[coord] += specular.g;
+                        _SpecularBufferB[coord] += specular.b;
+
+                        return half4(diffuse, 0.0h);
+
+                        /*
+                        diffuse = mul(EncodeRGB, diffuse);
+                        specular = mul(EncodeRGB, specular);
+
+                        bool pattern = (coord.x & 1) == (coord.y & 1);
+                        return pattern ? half4(diffuse.rg, specular.rg) : half4(diffuse.rb, specular.rb);
+                        */
                     }
                 #else
                     return half4(diffuse + specular, 1.0h);

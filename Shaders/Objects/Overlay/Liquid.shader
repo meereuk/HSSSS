@@ -34,6 +34,11 @@ Shader "HSSSS/Overlay/Liquid"
         _FresnelAlpha ("Fresnel Alpha", Range(0, 1)) = 0
     }
 
+    CGINCLUDE
+        #define _ALPHAPREMULTIPLY_ON
+        #define _FORWARDONLY_OVERLAY
+    ENDCG
+
     SubShader
     {
         CGINCLUDE
