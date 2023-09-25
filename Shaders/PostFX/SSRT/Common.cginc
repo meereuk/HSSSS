@@ -31,9 +31,6 @@ uniform float4 _MainTex_TexelSize;
 uniform Texture2D _CameraDepthTexture;
 uniform SamplerState sampler_CameraDepthTexture;
 
-uniform Texture2D _CameraDepthHistory;
-uniform SamplerState sampler_CameraDepthHistory;
-
 uniform Texture2D _CameraGBufferTexture0;
 uniform SamplerState sampler_CameraGBufferTexture0;
 
@@ -129,16 +126,6 @@ inline float SampleZBuffer(float2 uv, int2 offset)
     return _CameraDepthTexture.Sample(sampler_CameraDepthTexture, uv, offset);
 }
 
-inline float SampleZHistory(float2 uv)
-{
-    return _CameraDepthHistory.Sample(sampler_CameraDepthHistory, uv);
-}
-
-inline float SampleZHistory(float2 uv, int2 offset)
-{
-    return _CameraDepthHistory.Sample(sampler_CameraDepthHistory, uv, offset);
-}
-
 //
 // albedo occlusion buffer
 //
@@ -191,17 +178,6 @@ inline half4 SampleGBuffer3(float2 uv, int2 offset)
     return _CameraGBufferTexture3.Sample(sampler_CameraGBufferTexture3, uv, offset);
 }
 
-// gi buffer
-inline half4 SampleGI(float2 uv)
-{
-    return _SSGITemporalGIBuffer.Sample(sampler_SSGITemporalGIBuffer, uv);
-}
-
-inline half4 SampleGI(float2 uv, int2 offset)
-{
-    return _SSGITemporalGIBuffer.Sample(sampler_SSGITemporalGIBuffer, uv, offset);
-}
-
 //
 // noise
 //
@@ -211,53 +187,44 @@ inline float3 SampleNoise(float2 uv)
     return _BlueNoise.Sample(sampler_BlueNoise, float3(uv * _ScreenParams.xy * 0.0078125f, z));
 }
 
+//
+// recunstruct position from z-buffer
+//
 inline void SampleCoordinates(float2 uv, out float4 vpos, out float4 wpos, out float depth)
 {
-    float4 spos = float4(uv * 2.0h - 1.0h, 1.0h, 1.0h);
-    spos = mul(_ClipToViewMatrix, spos);
-    spos = spos / spos.w;
-
     // sample depth first
     depth = SampleZBuffer(uv);
     float vdepth = Linear01Depth(depth);
     depth = LinearEyeDepth(depth);
-    // view space
-    vpos = float4(spos.xyz * vdepth, 1.0f);
+    // screen-space position
+    float4 spos = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0h);
+    // view-space position
+    vpos = mul(_ClipToViewMatrix, spos);
+    vpos = float4(vpos.xyz * vdepth / vpos.w, 1.0f);
     // world space
     wpos = mul(_ViewToWorldMatrix, vpos);
 }
 
-inline float2 GetAccumulationUv(float4 wpos)
+//
+// gram-schmidt process
+//
+inline float3x3 GramSchmidtMatrix(float2 uv, float3 axis)
 {
-    float4 vpos = mul(_PrevWorldToViewMatrix, wpos);
-    float4 spos = mul(_PrevViewToClipMatrix, vpos);
-    return mad(spos.xy / spos.w, 0.5h, 0.5h);
+    float3 jitter = normalize(mad(SampleNoise(uv), 2.0f, -1.0f));
+    float3 tangent = normalize(jitter - axis * dot(jitter, axis));
+    float3 bitangent = normalize(cross(axis, tangent));
+
+    return float3x3(tangent, bitangent, axis);
 }
 
-inline float4 GetAccumulationPos(float2 uv)
+//
+// poisson disk sampling
+//
+inline float3 PoissonDisk(uint i, uint N)
 {
-    float4 spos = float4(uv * 2.0f - 1.0f, 1.0f, 1.0f);
-    spos = mul(_PrevClipToViewMatrix, spos);
-    spos = spos / spos.w;
-
-    float depth = Linear01Depth(SampleZHistory(uv));
-    float4 vpos = float4(spos.xyz * depth, 1.0f);
-    return mul(_PrevViewToWorldMatrix, vpos);
-}
-
-/*
-inline float GradientNoise(float2 uv)
-{
-    uv = uv + frac(_Time.xx);
-    float3 hash = frac(uv.xyx * 10.311f);
-    hash += dot(hash, hash.yzx + 33.33f);
-    return frac((hash.x + hash.y) * hash.z);
-}
-*/
-
-inline float GradientNoise(float2 uv)
-{
-    return frac(sin(dot(uv, float2(12.9898f, 78.2333f))) * 43758.5453123f);
+	float t = 2.4f * i;
+	float r = sqrt((i + 0.5f) / N);
+	return float3(r * cos(t), r * sin(t), r);
 }
 
 inline float FastSqrt(float x)
@@ -423,8 +390,6 @@ inline float GetInterleavedIdx(float2 uv, uint split)
     {
         return 0.0f;
     }
-
-    //return (split * floor(uv.y * split) + floor(uv.x * split)) / (split * split);
 }
 
 inline void ClampInterleavedUV(float2 uv, float2 duv, out float2 fwd, out float2 bwd, inout float2 len, uint2 split)
@@ -451,22 +416,6 @@ inline void ClampInterleavedUV(float2 uv, float2 duv, out float2 fwd, out float2
     fwd =  duv * fac.x;
     bwd = -duv * fac.y;
     len =  len * fac;
-
-/*
-    float2 div = {
-        length(fwd),
-        length(bwd)
-    };
-
-    div /= length(duv);
-
-    len *= d
-
-    float div = min(length(fwd), length(bwd)) / length(duv);
-
-    duv *= div;
-    len *= div;
-    */
 }
 
 inline half FadeScreenBoundary(float2 uv)

@@ -26,11 +26,20 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
+        // pass 1 : zbuffer downsampling
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment ZBufferDownSample
+            #include "SSAO.cginc"
+            ENDCG
+        }
+
         //
         // HBAO MAIN PASS
         //
 
-        // pass 1 : hbao low
+        // pass 2 : hbao low
         Pass
         {
             CGPROGRAM
@@ -40,7 +49,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 2 : hbao medium
+        // pass 3 : hbao medium
         Pass
         {
             CGPROGRAM
@@ -50,7 +59,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 3 : hbao high
+        // pass 4 : hbao high
         Pass
         {
             CGPROGRAM
@@ -60,7 +69,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 4 : hbao ultra
+        // pass 5 : hbao ultra
         Pass
         {
             CGPROGRAM
@@ -74,7 +83,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
         // GTAO MAIN PASS
         //
 
-        // pass 5 : gtao low
+        // pass 6 : gtao low
         Pass
         {
             CGPROGRAM
@@ -85,7 +94,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 6 : gtao medium
+        // pass 7 : gtao medium
         Pass
         {
             CGPROGRAM
@@ -96,7 +105,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 7 : gtao high
+        // pass 8 : gtao high
         Pass
         {
             CGPROGRAM
@@ -107,7 +116,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 8 : gtao ultra
+        // pass 9 : gtao ultra
         Pass
         {
             CGPROGRAM
@@ -118,7 +127,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 9 : decoding pass
+        // pass 10 : decoding pass
         Pass
         {
             CGPROGRAM
@@ -131,7 +140,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
         // 
         //
 
-        // pass 10 : spatio denoiser 1
+        // pass 11 : spatio denoiser
         Pass
         {
             CGPROGRAM
@@ -141,37 +150,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 11 : spatio denoiser 2
-        Pass
-        {
-            CGPROGRAM
-            #pragma fragment SpatialDenoiser
-            #define KERNEL_STEP 2
-            #include "SSAO.cginc"
-            ENDCG
-        }
-
-        // pass 12 : spatio denoiser 3
-        Pass
-        {
-            CGPROGRAM
-            #pragma fragment SpatialDenoiser
-            #define KERNEL_STEP 4
-            #include "SSAO.cginc"
-            ENDCG
-        }
-
-        // pass 13 : spatio denoiser 4
-        Pass
-        {
-            CGPROGRAM
-            #pragma fragment SpatialDenoiser
-            #define KERNEL_STEP 8
-            #include "SSAO.cginc"
-            ENDCG
-        }
-
-        // pass 14 : ao to GBuffer 0
+        // pass 12 : ao to GBuffer 0
         Pass
         {
             CGPROGRAM
@@ -180,7 +159,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 15 : ao to GBuffer 3
+        // pass 13 : ao to GBuffer 3
         Pass
         {
             CGPROGRAM
@@ -189,7 +168,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 16 : specular occlusion
+        // pass 14 : specular occlusion
         Pass
         {
             CGPROGRAM
@@ -198,7 +177,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 17 : debug
+        // pass 15 : debug
         Pass
         {
             CGPROGRAM

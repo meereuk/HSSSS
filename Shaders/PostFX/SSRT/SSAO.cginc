@@ -183,6 +183,11 @@ inline float ZBufferPrePass(v2f_img IN) : SV_TARGET
     return LinearEyeDepth(SampleZBuffer(uv));
 }
 
+inline float ZBufferDownSample(v2f_img IN) : SV_TARGET
+{
+    return dot(_MainTex.Gather(sampler_MainTex, IN.uv), 0.25f);
+}
+
 inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
 {
     float4 vpos;
@@ -336,38 +341,52 @@ inline half4 ApplySpecularOcclusion(v2f_img IN) : SV_TARGET
 
 inline half4 SpatialDenoiser(v2f_img IN) : SV_TARGET
 {
-    half4 sum = 0.0h;
-    half norm = 0.0h;
+    float4 vpos, wpos;
+    float depth;
 
-    half zRef = LinearEyeDepth(SampleZBuffer(IN.uv));
-    half4 nRef = SampleGBuffer2(IN.uv);
-    nRef.xyz = mad(nRef.xyz , 2.0h, -1.0h);
-    nRef.w = saturate(1.0h - nRef.w);
+    SampleCoordinates(IN.uv, vpos, wpos, depth);
 
-    if (zRef < _SSAOFadeDepth)
+    if (depth > _SSAOFadeDepth)
     {
-        for(int x = -KERNEL_TAPS; x <= KERNEL_TAPS; x ++)
+        return SampleTexel(IN.uv);
+    }
+
+    else
+    {
+        half4 wnrm = SampleGBuffer2(IN.uv);
+        wnrm.xyz = normalize(mad(wnrm.xyz, 2.0h, -1.0h));
+        half4 vnrm = mul(_WorldToViewMatrix, half4(wnrm.xyz, 0.0h));
+
+        float3x3 tbn = GramSchmidtMatrix(IN.uv, vnrm.xyz);
+
+        half4 sum = SampleTexel(IN.uv);
+        sum.xyz = normalize(mad(sum.xyz, 2.0h, -1.0h));
+        half norm = 1.0h;
+
+        float radius = 0.01f;
+
+        for (uint i = 0; i < 8; i ++)
         {
-            for(int y = -KERNEL_TAPS; y <= KERNEL_TAPS; y ++)
-            {
-                float2 offset = _MainTex_TexelSize.xy * float2(x, y) * KERNEL_STEP;
+            float3 disk = PoissonDisk(i, 8);
+            float3 dir = mul(float3(disk.xy, 0.0f), tbn);
+            float4 vp = float4(mad(dir, radius, vpos.xyz), 1.0f);
+            float4 sp = mul(unity_CameraProjection, vp);
+            float2 uv = sp.xy / sp.w * 0.5f + 0.5f;
 
-                half4 ao = SampleTexel(IN.uv + offset);
-                ao.xyz = mad(ao.xyz, 2.0h, -1.0h);
+            half4 ao = SampleTexel(uv);
+            ao.xyz = mad(ao.xyz, 2.0h, -1.0h);
 
-                half zSample = LinearEyeDepth(SampleZBuffer(IN.uv + offset));
-                half4 nSample = SampleGBuffer2(IN.uv + offset);
-                nSample.xyz = mad(nSample.xyz, 2.0h, -1.0h);
-                nSample.w = saturate(1.0h - nSample.w);
+            float z = LinearEyeDepth(SampleZBuffer(uv));
+            half4 n = SampleGBuffer2(uv);
+            n.xyz = normalize(mad(n.xyz, 2.0h, -1.0h));
 
-                half correction = torusKernel[x + KERNEL_TAPS] * torusKernel[y + KERNEL_TAPS];
-                correction *= exp(-abs(zSample - zRef) * 4.0h * KERNEL_STEP);
-                correction *= pow(saturate(dot(nSample.xyz, nRef)), 4 * KERNEL_STEP);
-                correction *= nSample.w == nRef.w ? 1.0h : 0.0h;
-            
-                sum += ao * correction;
-                norm += correction;
-            }
+            half correction = exp(-4.0h * disk.z * disk.z);
+            correction *= exp(-256.0h * (z + vp.z) * (z + vp.z));
+            correction *= pow(saturate(dot(n.xyz, wnrm.xyz)), 4);
+            correction *= wnrm.w == n.w ? 1.0h : 0.0h;
+
+            sum += ao * correction;
+            norm += correction;
         }
 
         sum.xyz = normalize(sum.xyz / norm);
@@ -375,11 +394,6 @@ inline half4 SpatialDenoiser(v2f_img IN) : SV_TARGET
         sum.w = sum.w / norm;
 
         return saturate(sum);
-    }
-
-    else
-    {
-        return SampleTexel(IN.uv);
     }
 }
 

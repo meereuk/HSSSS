@@ -88,13 +88,13 @@ void aDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
 
         // jimenez (do nothing)
         #if defined(_SCREENSPACE_SSS)
-        // faceworks type2 (skin + shadow)
+        // faceworks type 2 (skin + shadow)
         #elif defined(_FACEWORKS_TYPE2)
             diffuse = aStandardSkin(d, s,
                 _DeferredSkinLut, _DeferredShadowLut,
                 _DeferredSkinParams.y, _DeferredSkinParams.z,
                 _DeferredShadowParams.x, _DeferredShadowParams.y);
-        // faceworks type2 and penner (skin)
+        // faceworks type 1 and penner (skin)
         #else
             diffuse = aStandardSkin(d, s,
                 _DeferredSkinLut, _DeferredSkinParams.y, _DeferredSkinParams.z);
@@ -118,14 +118,6 @@ void aDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
         #endif
 
         diffuse = (diffuse + transmission) * s.albedo;
-
-        /*
-        #if defined(_SCREENSPACE_SSS)
-            diffuse = (diffuse + transmission);
-        #else
-            diffuse = (diffuse + transmission) * s.albedo;
-        #endif
-        */
     }
 }
 

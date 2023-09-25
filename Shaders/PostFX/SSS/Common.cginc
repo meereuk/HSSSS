@@ -6,17 +6,17 @@
 #define NUM_TAPS 11
 
 const static float4 blurKernel[NUM_TAPS] = {
-    float4(0.560479, 0.669086, 0.784728, 0),
-    float4(0.00471691, 0.000184771, 5.07566e-005, -2),
-    float4(0.0192831, 0.00282018, 0.00084214, -1.28),
-    float4(0.03639, 0.0130999, 0.00643685, -0.72),
-    float4(0.0821904, 0.0358608, 0.0209261, -0.32),
-    float4(0.0771802, 0.113491, 0.0793803, -0.08),
-    float4(0.0771802, 0.113491, 0.0793803, 0.08),
-    float4(0.0821904, 0.0358608, 0.0209261, 0.32),
-    float4(0.03639, 0.0130999, 0.00643685, 0.72),
-    float4(0.0192831, 0.00282018, 0.00084214, 1.28),
-    float4(0.00471691, 0.000184771, 5.07565e-005, 2),
+    {0.56047900f, 0.66908600f, 0.78472800f,  0.00f},
+    {0.00471691f, 0.00018477f, 0.00005076f, -2.00f},
+    {0.01928310f, 0.00282018f, 0.00084214f, -1.28f},
+    {0.03639000f, 0.01309990f, 0.00643685f, -0.72f},
+    {0.08219040f, 0.03586080f, 0.02092610f, -0.32f},
+    {0.07718020f, 0.11349100f, 0.07938030f, -0.08f},
+    {0.07718020f, 0.11349100f, 0.07938030f,  0.08f},
+    {0.08219040f, 0.03586080f, 0.02092610f,  0.32f},
+    {0.03639000f, 0.01309990f, 0.00643685f,  0.72f},
+    {0.01928310f, 0.00282018f, 0.00084214f,  1.28f},
+    {0.00471691f, 0.00018477f, 0.00005076f,  2.00f},
 };
 
 uniform sampler2D _MainTex;
@@ -28,13 +28,52 @@ uniform sampler2D _CameraGBufferTexture2;
 uniform float4 _MainTex_TexelSize;
 uniform float4 _SkinJitter_TexelSize;
 
+uniform float4x4 _WorldToViewMatrix;
+uniform float4x4 _ViewToWorldMatrix;
+
+uniform float4x4 _ViewToClipMatrix;
+uniform float4x4 _ClipToViewMatrix;
+
 uniform half2 _DeferredBlurredNormalsParams;
 
-
-void SkipIfNonSkin(v2f_img IN)
+inline half4 SampleTexel(float2 uv)
 {
-    half mask = tex2D(_CameraGBufferTexture2, IN.uv).a;
-    clip(0.01h - mask);
+    return tex2D(_MainTex, uv);
+}
+
+inline half4 SampleGBuffer2(float2 uv)
+{
+    return tex2D(_CameraGBufferTexture2, uv);
+}
+
+inline float SampleZBuffer(float2 uv)
+{
+    return tex2D(_CameraDepthTexture, uv);
+}
+
+inline void SampleCoordinates(float2 uv, out float4 vpos, out float depth)
+{
+    float4 spos = float4(uv * 2.0h - 1.0h, 1.0h, 1.0h);
+    spos = mul(_ClipToViewMatrix, spos);
+    spos = spos / spos.w;
+
+    depth = SampleZBuffer(uv);
+    vpos = float4(spos.xyz * Linear01Depth(depth), 1.0f);
+
+    depth = LinearEyeDepth(depth);
+}
+
+inline half3 SampleViewNormal(float2 uv)
+{
+    half3 vnrm = SampleGBuffer2(uv);
+    vnrm = normalize(mad(vnrm, 2.0h, -1.0h));
+    return mul(_WorldToViewMatrix, vnrm);
+}
+
+inline float3 SampleDirection(float3 vnrm, float2 direction)
+{
+    float3 dir = float3(direction, 0.0f) - vnrm * dot(float3(direction, 0.0f), vnrm);
+    return normalize(dir) * _DeferredBlurredNormalsParams.x * 0.001f;
 }
 
 half4 DiffuseBlur(v2f_img IN, float2 direction)
@@ -43,69 +82,99 @@ half4 DiffuseBlur(v2f_img IN, float2 direction)
 
     if (colorM.w < 1.0h)
     {
-        return 0.0h;
+        return half4(colorM.xyz, 0.0h);
     }
 
     else
     {
-        half depthM = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, IN.uv));
+        float4 vpos;
+        float depth;
 
-        float scale = _DeferredBlurredNormalsParams.x * unity_CameraProjection._m11 / depthM;
-	    float2 finalStep = 0.0005f * scale * direction * normalize(_MainTex_TexelSize.xy);
+        SampleCoordinates(IN.uv, vpos, depth);
 
-        half3 colorB = colorM.xyz * blurKernel[0].xyz;
+        half3 vnrm = SampleViewNormal(IN.uv);
+        float3 dir = SampleDirection(vnrm, direction);
 
+        half3 sum = colorM.xyz * blurKernel[0].xyz;
+        half3 norm = blurKernel[0].xyz;
+        
         [unroll]
-	    for (uint i = 1; i < NUM_TAPS; i++)
-	    {
-            // sample color
-		    float2 offsetUv = IN.uv + finalStep * blurKernel[i].w;
-		    half4 color = tex2D(_MainTex, offsetUv);
-            // depth-aware
-		    half depth = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, offsetUv));
-		    half s = min(1.0h, _DeferredBlurredNormalsParams.y * abs(depth - depthM));
-            // blur
-            colorB += lerp(colorM.xyz, lerp(color.xyz, colorM.xyz, s), color.w) * blurKernel[i].xyz;
-	    }
+        for (uint i = 1; i < NUM_TAPS; i ++)
+        {
+            float4 vp = float4(mad(dir, blurKernel[i].w, vpos.xyz), 1.0f);
+            float4 sp = mul(unity_CameraProjection, vp);
+            float2 uv = sp.xy / sp.w * 0.5f + 0.5f;
 
-        return half4(colorB, 1.0h);
+            half4 colorSample = SampleTexel(uv);
+            float depthSample = LinearEyeDepth(SampleZBuffer(uv));
+
+            // depth-aware
+            half zCorr = exp(-_DeferredBlurredNormalsParams.y * abs(vp.z + depthSample));
+            // mask-aware
+            half mCorr = step(1.0h, colorSample.w);
+
+            sum += colorSample.xyz * blurKernel[i].xyz * zCorr * mCorr;
+            norm += blurKernel[i].xyz * zCorr * mCorr;
+        }
+
+        return half4(sum / norm, 1.0h);
     }
 }
 
 fixed4 NormalBlur(v2f_img IN, float2 direction)
 {
-    float2 uv = IN.uv;
+    fixed4 normalM = tex2D(_MainTex, IN.uv);
 
-    half depthM = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, uv));
-    fixed4 normalM = tex2D(_MainTex, uv);
-    normalM.xyz = mad(normalM.xyz, 2.0h, -1.0h);
-
-    float scale = _DeferredBlurredNormalsParams.x * unity_CameraProjection._m11 / depthM;
-	float2 finalStep = 0.0005f * scale * direction * normalize(_MainTex_TexelSize.xy);
-
-    fixed3 normalB = normalM.rgb * blurKernel[0].x;
-
-    [unroll]
-    for (uint i = 1; i < NUM_TAPS; i++)
+    if (normalM.w > 0.0h)
     {
-        // sample normal
-        float2 offsetUv = uv + finalStep * blurKernel[i].w;
-        fixed4 normal = tex2D(_MainTex, offsetUv);
-        normal.xyz = mad(normal.xyz, 2.0h, -1.0h);
-        // depth-aware
-        half depth = LinearEyeDepth(SAMPLE_DEPTH_TEXTURE(_CameraDepthTexture, offsetUv));
-        half s = min(1.0h, _DeferredBlurredNormalsParams.y * abs(depth - depthM));
-        // mask-aware
-        half m = step(0.01h, normal.w);
-        normalB += lerp(lerp(normal.xyz, normalM.xyz, s), normalM.xyz, m) * blurKernel[i].x;
+        return normalM;
     }
 
-    return fixed4(normalize(normalB) * 0.5h + 0.5h, normalM.a);
+    else
+    {
+        normalM.xyz = normalize(mad(normalM.xyz, 2.0h, -1.0h));
+
+        float4 vpos;
+        float depth;
+
+        SampleCoordinates(IN.uv, vpos, depth);
+
+        half3 vnrm = SampleViewNormal(IN.uv);
+        float3 dir = SampleDirection(vnrm, direction);
+
+        half3 sum = normalM.xyz * blurKernel[0].x;
+        half norm = blurKernel[0].x;
+
+        [unroll]
+        for (uint i = 1; i < NUM_TAPS; i ++)
+        {
+            float4 vp = float4(mad(dir, blurKernel[i].w, vpos.xyz), 1.0f);
+            float4 sp = mul(unity_CameraProjection, vp);
+            float2 uv = sp.xy / sp.w * 0.5f + 0.5f;
+
+            half4 normalSample = SampleTexel(uv);
+            float depthSample = LinearEyeDepth(SampleZBuffer(uv));
+            normalSample.xyz = normalize(mad(normalSample.xyz, 2.0h, -1.0h));
+
+            // depth-aware
+            half zCorr = exp(-_DeferredBlurredNormalsParams.y * abs(vp.z + depthSample));
+            // mask-aware
+            half mCorr = step(normalSample.w, 0.1h);
+
+            sum += normalSample.xyz * blurKernel[i].x * zCorr * mCorr;
+            norm += blurKernel[i].x * zCorr * mCorr;
+        }
+
+        sum = normalize(sum / norm);
+        sum = mad(sum, 0.5h, 0.5h);
+
+        return fixed4(sum, normalM.w);
+    }
 }
 
 inline half2 RandomAxis(v2f_img IN)
 {
-    return tex2D(_SkinJitter, IN.uv * _ScreenParams.xy * _SkinJitter_TexelSize.xy + frac(_Time.yy)).rg;
+    return tex2D(_SkinJitter, IN.uv * _ScreenParams.xy * _SkinJitter_TexelSize.xy).xy;
 }
 
 #endif

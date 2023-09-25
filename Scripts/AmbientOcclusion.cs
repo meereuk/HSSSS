@@ -2,7 +2,6 @@
 using System.Collections;
 using UnityEngine.Rendering;
 
-//[ExecuteInEditMode]
 [RequireComponent(typeof(Camera))]
 public class AmbientOcclusion : MonoBehaviour
 {
@@ -40,13 +39,11 @@ public class AmbientOcclusion : MonoBehaviour
     public void OnDisable()
     {
         this.RemoveCommandBuffer();
-        this.RemoveHistoryBuffer();
         this.mCamera = null;
     }
 
     public void Start()
     {
-        this.SetUpHistoryBuffer();
         this.SetupCommandBuffer();
     }
 
@@ -106,34 +103,14 @@ public class AmbientOcclusion : MonoBehaviour
 
         this.aoBuffer.Blit(BuiltinRenderTextureType.CurrentActive, zbuf, this.mMaterial, 0);
 
-        this.aoBuffer.Blit(zbuf, ZB1);
-        this.aoBuffer.Blit(zbuf, ZB2);
-        this.aoBuffer.Blit(zbuf, ZB3);
+        this.aoBuffer.Blit(zbuf, ZB1, this.mMaterial, 1);
+        this.aoBuffer.Blit(ZB1, ZB2, this.mMaterial, 2);
+        this.aoBuffer.Blit(ZB2, ZB3, this.mMaterial, 3);
 
-        this.aoBuffer.Blit(zbuf, flip, this.mMaterial, 8);
-        this.aoBuffer.Blit(flip, flop, this.mMaterial, 9);
-
-/*
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 10);
-        this.aoBuffer.Blit(flip, flop, this.mMaterial, 11);
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 12);
-        this.aoBuffer.Blit(flip, flop);*/
-
-/*
-        // diffuse occlusion
-        this.aoBuffer.Blit(BuiltinRenderTextureType.CameraTarget, flip, this.mMaterial, 15);
+        this.aoBuffer.Blit(zbuf, flip, this.mMaterial, 9);
+        this.aoBuffer.Blit(flip, flop, this.mMaterial, 10);
+        this.aoBuffer.Blit(flop, flip, this.mMaterial, 15);
         this.aoBuffer.Blit(flip, BuiltinRenderTextureType.CameraTarget);
-        // specular occlusion
-        this.aoBuffer.Blit(BuiltinRenderTextureType.Reflections, flip, this.mMaterial, 16);
-        this.aoBuffer.Blit(flip, BuiltinRenderTextureType.Reflections);
-        //
-*/
-        this.aoBuffer.SetGlobalTexture("_SSAOBentNormalTexture", flop);
-
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 17);
-        this.aoBuffer.Blit(flip, BuiltinRenderTextureType.CameraTarget);
-
-        //this.aoBuffer.Blit(flop, depth, this.mMaterial, 17);
 
         this.aoBuffer.ReleaseTemporaryRT(flip);
         this.aoBuffer.ReleaseTemporaryRT(flop);
@@ -149,30 +126,5 @@ public class AmbientOcclusion : MonoBehaviour
     {
         this.mCamera.RemoveCommandBuffer(CameraEvent.BeforeImageEffectsOpaque, this.aoBuffer);
         this.aoBuffer = null;
-    }
-
-        private void SetUpHistoryBuffer()
-    {
-        this.aoHistory = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.ARGBHalf, RenderTextureReadWrite.Linear);
-        this.aoHistory.filterMode = FilterMode.Bilinear;
-        this.aoHistory.Create();
-
-        this.zbHistory = new RenderTexture(Screen.width, Screen.height, 0, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
-        this.zbHistory.Create();
-
-        RenderTexture rt = RenderTexture.active;
-        RenderTexture.active = this.aoHistory;
-        GL.Clear(true, true, Color.clear);
-        RenderTexture.active = this.zbHistory;
-        GL.Clear(true, true, Color.clear);
-        RenderTexture.active = rt;
-    }
-
-    private void RemoveHistoryBuffer()
-    {
-        this.aoHistory.Release();
-        this.zbHistory.Release();
-        this.aoHistory = null;
-        this.zbHistory = null;
     }
 }
