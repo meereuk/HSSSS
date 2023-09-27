@@ -1,9 +1,7 @@
 #ifndef HSSSS_SSGI_CGINC
-// Upgrade NOTE: excluded shader from OpenGL ES 2.0 because it uses non-square matrices
-#pragma exclude_renderers gles
-// Upgrade NOTE: excluded shader from DX11 and Xbox360 because it uses wrong array syntax (type[size] name)
-#pragma exclude_renderers d3d11 xbox360
 #define HSSSS_SSGI_CGINC
+
+#pragma exclude_renderers gles
 
 #include "Common.cginc"
 #include "MRT.cginc"
@@ -68,60 +66,25 @@ uniform SamplerState sampler_SSGIFlopSpecularBuffer;
 uniform float4 _SSGIFlopSpecularBuffer_TexelSize;
 
 #ifndef _SSGINumSample
-    #define _SSGINumSample 2
+    #define _SSGINumSample 4
 #endif
 
 #ifndef _SSGINumStride
     #define _SSGINumStride 4
 #endif
 
-/*
-static const int2 neighbors[9] = {
-    {  0,  0 },
-    {  1,  0 },
-    {  0,  1 },
-    { -1,  0 },
-    {  0, -1 },
-    {  1,  1 },
-    { -1,  1 },
-    { -1, -1 },
-    {  1, -1 }
-    };
-*/
-
 struct ray
 {
-    /*
-    float2 uv0;
-    float2 uv1;
-    float2 uv2;
-
-    float4 vp0[9];
-    float4 vp1;
-    float4 vp2;
-
-    half3 vn0[9];
-    */
-
     // uv
-    float2 uv0;
-    float2 uv1;
-    float2 uv2;
-
+    float3x2 uv;
     // view space position
-    float4 vp0;
-    float4 vp1;
-    float4 vp2;
-
+    float4 vp;
     // view space normal
-    half3 nrm;
-
+    half3 vn;
     // length
     float len;
-
     // random thickness
     float t;
-    
     // specular properties
     half3 f0;
     half3 a;
@@ -147,6 +110,29 @@ inline half4 SampleIrradianceBufferLOD(float2 uv, uint lod)
     else
     {
         return _HierachicalIrradianceBuffer0.Sample(sampler_HierachicalIrradianceBuffer0, uv);
+    }
+}
+
+inline half4 SampleIrradianceBufferLOD(float2 uv, int2 offset, uint lod)
+{
+    if (lod == 3)
+    {
+        return _HierachicalIrradianceBuffer3.Sample(sampler_HierachicalIrradianceBuffer3, uv, offset);
+    }
+
+    else if (lod == 2)
+    {
+        return _HierachicalIrradianceBuffer2.Sample(sampler_HierachicalIrradianceBuffer2, uv, offset);
+    }
+
+    else if (lod == 1)
+    {
+        return _HierachicalIrradianceBuffer1.Sample(sampler_HierachicalIrradianceBuffer1, uv, offset);
+    }
+
+    else
+    {
+        return _HierachicalIrradianceBuffer0.Sample(sampler_HierachicalIrradianceBuffer0, uv, offset);
     }
 }
 
@@ -245,105 +231,11 @@ inline half DBlinn(half a2, half NdotH)
     return clampInfinite(pow(NdotH, 2.0h / a2 - 2.0h) / a2);
 }
 
-/*
-inline float4x2 SampleUv(float2 uv)
-{
-    float4x2 nuv;
-
-    for (int i = 0; i < 4; i ++)
-    {
-        nuv[i] = uv + (_ScreenParams.zw - 1.0f) * neighbors[i];
-    }
-
-    return nuv;
-}
-
-inline void SamplePosition(float2 uv, out float4 vpos[9])
-{
-    for (int i = 0; i < 9; i ++)
-    {
-        float2 nuv = uv + (_ScreenParams.zw - 1.0f) * neighbors[i];
-        float4 spos = float4(mad(nuv, 2.0f, -1.0f), 1.0f, 1.0f);
-        float depth = Linear01Depth(SampleZBuffer(uv, neighbors[i]));
-        vpos[i] = mul(_ClipToViewMatrix, spos);
-        vpos[i] = float4(vpos[i].xyz * depth / vpos[i].w, 1.0f);
-    }
-}
-
-inline void SampleNormal(float2 uv, out half3 vnrm[9])
-{
-    for (int i = 0; i < 9; i ++)
-    {
-        vnrm[i] = SampleGBuffer2(uv, neighbors[i]);
-        vnrm[i] = normalize(mad(vnrm[i], 2.0f, -1.0f));
-        vnrm[i] = mul(_WorldToViewMatrix, vnrm[i]);
-    }
-}
-
-inline void HorizonTrace(ray ray, out half3 diffuse[9], out half3 specular[9])
-{
-    uint power = max(1, _SSGIStepPower);
-
-    float2 duv = ray.uv1 - ray.uv0;
-    float slope = duv.y / duv.x;
-
-    float4 minStr = {
-        min(length(_HierachicalIrradianceBuffer0_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer0_TexelSize.yy * float2(1.0f / slope, 1.0f))),
-        min(length(_HierachicalIrradianceBuffer1_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer1_TexelSize.yy * float2(1.0f / slope, 1.0f))),
-        min(length(_HierachicalIrradianceBuffer2_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer2_TexelSize.yy * float2(1.0f / slope, 1.0f))),
-        min(length(_HierachicalIrradianceBuffer3_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer3_TexelSize.yy * float2(1.0f / slope, 1.0f)))
-    };
-
-    for (int i = 0; i < 9; i ++)
-    {
-        diffuse[i] = 0.0h;
-        specular[i] = 0.0h;
-    }
-
-    float str = 0.0f;
-
-    for (float iter = 1.0f; iter <= _SSGINumStride; iter += 1.0f)
-    {
-        uint lod = GetLOD(iter);
-
-        float ds = max(str + minStr[lod], pow(iter / _SSGINumStride, power)) - str;
-        str = str + ds;
-
-        float2 uv1 = lerp(ray.uv0, ray.uv1, str);
-        float2 uv2 = lerp(ray.uv0, ray.uv2, str);
-
-        half4 irad1 = SampleIrradianceBufferLOD(uv1, lod);
-        half4 irad2 = SampleIrradianceBufferLOD(uv2, lod);
-
-        float4 sp1 = float4(mad(uv1, 2.0f, -1.0f), 1.0f, 1.0f);
-        float4 sp2 = float4(mad(uv1, 2.0f, -1.0f), 1.0f, 1.0f);
-
-        float4 vp1 = mul(_ClipToViewMatrix, sp1);
-        float4 vp2 = mul(_ClipToViewMatrix, sp2);
-
-        vp1 = float4(vp1.xyz * Linear01Depth(irad1.w) / vp1.w, 1.0f);
-        vp2 = float4(vp2.xyz * Linear01Depth(irad2.w) / vp2.w, 1.0f);
-
-        for (int i = 0; i < 9; i ++)
-        {
-            diffuse[i] += irad1.xyz * dot(ray.vn0[i], normalize(vp1.xyz - ray.vp0[i].xyz));
-            diffuse[i] += irad2.xyz * dot(ray.vn0[i], normalize(vp2.xyz - ray.vp0[i].xyz));
-        }
-    }
-
-    for (int i = 0; i < 9; i ++)
-    {
-        diffuse[i] /= _SSGINumStride;
-        specular[i] /= _SSGINumStride;
-    }
-}
-*/
-
 inline void HorizonTrace(ray ray, out half3 diffuse, out half3 specular)
 {
     uint power = max(1, _SSGIStepPower);
 
-    float2 duv = ray.uv1 - ray.uv0;
+    float2 duv = ray.uv[1] - ray.uv[0];
     float slope = duv.y / duv.x;
 
     float4 minStr = {
@@ -358,101 +250,123 @@ inline void HorizonTrace(ray ray, out half3 diffuse, out half3 specular)
     diffuse = 0.0h;
     specular = 0.0h;
 
-    float2 theta = -10.0f;
-
+    float3 vdir = {0.0f, 0.0f, 1.0f};
+    float2x2 theta = {{-10.0f, -10.0f}, {-10.0f, -10.0f}};
     float str = 0.0f;
-    float sss = 0.0f;
 
-    half3 vdir = half3(0.0h, 0.0h, 1.0h);
-
+    [unroll]
     for (float iter = 1.0f; iter <= _SSGINumStride && str <= 1.0f; iter += 1.0f)
     {
         uint lod = GetIrradianceLOD(iter);
 
         float ds = max(str + minStr[lod], pow(iter / _SSGINumStride, power)) - str;
-        str = str + ds;
+        str = str + ds; 
 
         // uv
-        float2 uv1 = lerp(ray.uv0, ray.uv1, str);
-        float2 uv2 = lerp(ray.uv0, ray.uv2, str);
-        float threshold = ray.len * FastSqrt(1.0f - str * str);
+        float2x2 uv = {
+            lerp(ray.uv[0], ray.uv[1], str),
+            lerp(ray.uv[0], ray.uv[2], str)
+        };
 
-        if (0.0f <= uv1.x && uv1.x <= 1.0f && 0.0f <= uv1.y && uv1.y <= 1.0f)
-        {
-            float4 vp = lerp(ray.vp0, ray.vp1, str);
-            half4 ir = SampleIrradianceBufferLOD(uv1, lod);
-            vp.z = -LinearEyeDepth(ir.w);
-            float dz = vp.z - ray.vp0.z;
+        float2x4 ir = {
+            SampleIrradianceBufferLOD(uv[0], lod),
+            SampleIrradianceBufferLOD(uv[1], lod)
+        };
 
-            if (dz - ray.t < threshold)
-            {
-            dz = min(threshold, dz);
-            dz = dz / abs(str * ray.len);
+        float2x4 sp = {
+            float4(mad(uv[0], 2.0f, -1.0f), 1.0f, 1.0f),
+            float4(mad(uv[1], 2.0f, -1.0f), 1.0f, 1.0f)
+        };
 
-            half3 ldir = normalize(vp.xyz - ray.vp0.xyz);
-            half3 hdir = normalize(ldir + vdir);
+        float2x4 vp = {
+            mul(_ClipToViewMatrix, sp[0]),
+            mul(_ClipToViewMatrix, sp[1])
+        };
 
-            half ndotl = saturate(dot(ray.nrm, ldir));
-            half ndoth = saturate(dot(ray.nrm, hdir));
-            half ldoth = saturate(dot(ldir, hdir));
+        vp[0] = float4(vp[0].xyz * ir[0].w / vp[0].w, 1.0f);
+        vp[1] = float4(vp[1].xyz * ir[1].w / vp[1].w, 1.0f);
 
-            ir.xyz *= ndotl;
-            ir.xyz *= step(theta.x, dz);
-            ir.xyz *= abs(ds);
+        half2x3 ldir = {
+            normalize(vp[0].xyz - ray.vp.xyz),
+            normalize(vp[1].xyz - ray.vp.xyz)
+        };
 
-            diffuse += ir.xyz;
-            specular += ir.xyz * FSchlick(ray.f0, ldoth) * DBlinn(ray.a, ndoth) * 0.25h;
+        half2x3 hdir = {
+            normalize(ldir[0] + vdir),
+            normalize(ldir[1] + vdir)
+        };
 
-            theta.x = max(theta.x, dz);
-            }
-        }
+        half2 ndotl = {
+            saturate(dot(ray.vn, ldir[0])),
+            saturate(dot(ray.vn, ldir[1]))
+        };
 
-        if (0.0f <= uv2.x && uv2.x <= 1.0f && 0.0f <= uv2.y && uv2.y <= 1.0f)
-        {
-            float4 vp = lerp(ray.vp0, ray.vp2, str);
-            half4 ir = SampleIrradianceBufferLOD(uv2, lod);
-            vp.z = -LinearEyeDepth(ir.w);
-            float dz = vp.z - ray.vp1.z;
+        half2 ndoth = {
+            saturate(dot(ray.vn, hdir[0])),
+            saturate(dot(ray.vn, hdir[1]))
+        };
 
-            if (dz - ray.t < threshold)
-            {
-            dz = min(threshold, dz);
-            dz = dz / abs(str * ray.len);
+        half2 ldoth = {
+            saturate(dot(ldir[0], hdir[0])),
+            saturate(dot(ldir[1], hdir[1]))
+        };
 
-            half3 ldir = normalize(vp.xyz - ray.vp0.xyz);
-            half3 hdir = normalize(ldir + vdir);
+        half2 dz = {
+            (vp[0].z - ray.vp.z - 0.005f) / distance(vp[0].xy, ray.vp.xy),
+            (vp[1].z - ray.vp.z - 0.005f) / distance(vp[1].xy, ray.vp.xy)
+        };
 
-            half ndotl = saturate(dot(ray.nrm, ldir));
-            half ndoth = saturate(dot(ray.nrm, hdir));
-            half ldoth = saturate(dot(ldir, hdir));
+        float2 threshold = {
+            FastSqrt(max(0.0f, ray.len * ray.len - dot(vp[0].xy - ray.vp.xy, vp[0].xy - ray.vp.xy))),
+            FastSqrt(max(0.0f, ray.len * ray.len - dot(vp[1].xy - ray.vp.xy, vp[1].xy - ray.vp.xy)))
+        };
 
-            ir.xyz *= ndotl;
-            ir.xyz *= step(theta.y, dz);
-            ir.xyz *= abs(ds);
+        ir[0].xyz = ir[0].xyz * ndotl[0] * step(theta[0].x, dz[0]) * ds;
+        ir[1].xyz = ir[1].xyz * ndotl[1] * step(theta[1].x, dz[1]) * ds;
 
-            diffuse += ir.xyz;
-            specular += ir.xyz * FSchlick(ray.f0, ldoth) * DBlinn(ray.a, ndoth) * 0.25h;
+        ir[0].xyz = ir[0].xyz * step(abs(vp[0].z - ray.vp.z), threshold[0]);
+        ir[1].xyz = ir[1].xyz * step(abs(vp[1].z - ray.vp.z), threshold[1]);
 
-            theta.y = max(theta.y, dz);
-            }
-        }
+        diffuse += ir[0].xyz;
+        diffuse += ir[1].xyz;
+
+        specular += ir[0].xyz * FSchlick(ray.f0, ldoth[0]) * DBlinn(ray.a, ndoth[0]) * 0.25h;
+        specular += ir[1].xyz * FSchlick(ray.f0, ldoth[1]) * DBlinn(ray.a, ndoth[1]) * 0.25h;
+
+        theta[0].x = max(theta[0].x, dz[0]);
+        theta[1].x = max(theta[1].x, dz[1]);
     }
 }
 
-half4 GBufferPrePass(v2f_img IN): SV_TARGET
+inline float4 SampleViewPosition(float2 uv)
 {
-    half4 diffuse, specular;
+    float4 depth = SampleIrradianceBufferLOD(uv, 0).w;
+    float4 spos = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
+    float4 vpos = mul(_ClipToViewMatrix, spos);
+    return float4(vpos.xyz * depth / vpos.w, 1.0f);
+}
+
+inline half3 SampleViewNormal(float2 uv)
+{
+    half3 vnrm = SampleGBuffer2(uv);
+    vnrm = normalize(mad(vnrm, 2.0f, -1.0f));
+    return mul(_WorldToViewMatrix, vnrm);
+}
+
+float4 GBufferPrePass(v2f_img IN): SV_TARGET
+{
+    float4 diffuse, specular;
     SampleGIHistory(IN.uv, diffuse, specular);
     half4 albedo = SampleGBuffer0(IN.uv);
     half4 direct = SampleGBuffer3(IN.uv);
     half3 ambient = mad(diffuse.xyz, albedo.xyz, specular.xyz);
-    half depth = SampleZBuffer(IN.uv);
-    return half4(mad(ambient, _SSGISecondary, direct.xyz), depth);
+    float depth = Linear01Depth(SampleZBuffer(IN.uv));
+    return float4(mad(ambient, _SSGISecondary, direct.xyz), depth);
 }
 
-half4 GBufferDownSample(v2f_img IN): SV_TARGET
+float4 GBufferDownSample(v2f_img IN): SV_TARGET
 {
-    half4 gbuffer = {
+    float4 gbuffer = {
         dot(_MainTex.GatherRed  (sampler_MainTex, IN.uv), 0.25h),
         dot(_MainTex.GatherGreen(sampler_MainTex, IN.uv), 0.25h),
         dot(_MainTex.GatherBlue (sampler_MainTex, IN.uv), 0.25h),
@@ -462,112 +376,44 @@ half4 GBufferDownSample(v2f_img IN): SV_TARGET
     return gbuffer;
 }
 
-/*
 void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET1)
 {
-    float depth = SampleZBuffer(IN.uv);
-    float4 spos = float4(mad(IN.uv, 2.0f, -1.0f), 1.0f, 1.0f);
-    float4 vpos = mul(_ClipToViewMatrix, spos);
-    vpos = float4(vpos.xyz * Linear01Depth(depth) / vpos.w, 1.0f);
-    depth = LinearEyeDepth(depth);
-
-    float3 vdir = float3(0.0f, 0.0f, 1.0f);
-
     mrt0 = 0.0h;
     mrt1 = 0.0h;
 
-    if (depth > _SSGIFadeDepth)
+    // temporal-aware blue noise
+    float3 noise = SampleNoise(IN.uv);
+    // view direction
+    float3 vdir = float3(0.0h, 0.0h, 1.0h);
+    // f0 and roughness
+    half4 gbuffer1 = SampleGBuffer1(IN.uv);
+
+    ray ray;
+
+    ray.uv[0] = IN.uv;
+    ray.vp = SampleViewPosition(IN.uv);
+    ray.vn = SampleViewNormal(IN.uv);
+
+    ray.len = _SSGIRayLength * (noise.x + 0.5f);
+    ray.f0 = gbuffer1.xyz;
+
+    // beckmann roughness to bllinn-phong exponent
+    // http://simonstechblog.blogspot.com/2011/12/microfacet-brdf.html
+    ray.a = lerp(0.99h, _SSGIRoughness, gbuffer1.w);
+    ray.a = ray.a * ray.a;
+    ray.a = ray.a * ray.a;
+
+    ray.t = (noise.y + 0.5f) *_SSGIMeanDepth;
+
+    if (-ray.vp.z > _SSGIFadeDepth)
     {
         return;
     }
 
     else
     {
-        float3 noise = SampleNoise(IN.uv);
-
-        ray ray;
-
-        ray.uv0 = IN.uv;
-        SampleNormal(IN.uv, ray.vn0);
-        SamplePosition(IN.uv, ray.vp0);
-
-        float radius = _SSGIRayLength * (noise.x + 0.5f);
-        float slice = FULL_PI / _SSGINumSample;
-        float offset = noise.z;
-
-        for (float iter = 0.5h; iter < _SSGINumSample; iter += 1.0f)
-        {
-            float4 dir = 0.0h;
-            sincos((iter - offset) * slice, dir.y, dir.x);
-            dir.xyz = normalize(dir.xyz - vdir * dot(dir.xyz, vdir));
-
-            ray.vp1 = mad( dir, radius, vpos);
-            ray.vp2 = mad(-dir, radius, vpos);
-
-            float4 sp1 = mul(unity_CameraProjection, ray.vp1);
-            float4 sp2 = mul(unity_CameraProjection, ray.vp2);
-
-            ray.uv1 = sp1.xy / sp1.w * 0.5f + 0.5f;
-            ray.uv2 = sp2.xy / sp2.w * 0.5f + 0.5f;
-
-            half3 diffuse[9];
-            half3 specular[9];
-
-            HorizonTrace(ray, diffuse, specular);
-
-            mrt0 += half4(diffuse[0], 0.0h) / _SSGINumSample;
-            mrt1 += half4(diffuse[1].r, diffuse[2].r, diffuse[3].r, diffuse[4].r) / _SSGINumSample;
-        }
-    }
-}
-*/
-
-void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET1)
-{
-    // coordinate
-    float4 vpos;
-    float4 wpos;
-    half depth;
-    
-    // interleaved uv
-    SampleCoordinates(IN.uv, vpos, wpos, depth);
-
-    // normal
-    half3 wnrm = SampleGBuffer2(IN.uv);
-    wnrm = normalize(mad(wnrm, 2.0f, -1.0f));
-    half3 vnrm = mul(_WorldToViewMatrix, wnrm);
-
-    // view direction
-    //half3 vdir = normalize(-vpos.xyz);
-    half3 vdir = half3(0.0h, 0.0h, 1.0h);
-
-    // f0 and roughness
-    half4 gbuffer1 = SampleGBuffer1(IN.uv);
-
-    half3 diffuse = 0.0h;
-    half3 specular = 0.0h;
-
-    if (depth < _SSGIFadeDepth)
-    {
-        float3 noise = SampleNoise(IN.uv);
-
-        ray ray;
-
-        ray.uv0 = IN.uv;
-        ray.vp0 = vpos;
-        ray.nrm = vnrm;
-        ray.len = _SSGIRayLength;
-        ray.len *= noise.x + 0.5f;
-
-        ray.f0 = gbuffer1.xyz;
-
-        // beckmann roughness to bllinn-phong exponent
-        // http://simonstechblog.blogspot.com/2011/12/microfacet-brdf.html
-        ray.a = lerp(0.99h, _SSGIRoughness, gbuffer1.w);
-        ray.a = ray.a * ray.a;
-        ray.a = ray.a * ray.a;
-
-        ray.t = (noise.y + 0.5f) *_SSGIMeanDepth;
+        half3 diffuse = 0.0h;
+        half3 specular = 0.0h;
 
         float slice = FULL_PI / _SSGINumSample;
         float offset = noise.z;
@@ -576,32 +422,35 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
         {
             float4 dir = 0.0h;
             sincos((iter - offset) * slice, dir.y, dir.x);
-            dir.xyz = normalize(dir.xyz - vdir * dot(dir.xyz, vdir));
 
-            ray.vp1 = mad( dir, ray.len, vpos);
-            ray.vp2 = mad(-dir, ray.len, vpos);
+            float2x4 vp = {
+                mad( dir, ray.len, ray.vp),
+                mad(-dir, ray.len, ray.vp)
+            };
 
-            float4 sp1 = mul(unity_CameraProjection, ray.vp1);
-            float4 sp2 = mul(unity_CameraProjection, ray.vp2);
+            float2x4 sp = {
+                mul(unity_CameraProjection, vp[0]),
+                mul(unity_CameraProjection, vp[1])
+            };
 
-            ray.uv1 = sp1.xy / sp1.w * 0.5f + 0.5f;
-            ray.uv2 = sp2.xy / sp2.w * 0.5f + 0.5f;
+            ray.uv[1] = sp[0].xy / sp[0].w * 0.5f + 0.5f;
+            ray.uv[2] = sp[1].xy / sp[1].w * 0.5f + 0.5f;
 
-            half3 d = 0.0h;
-            half3 s = 0.0h;
+            half3 d;
+            half3 s;
 
             HorizonTrace(ray, d, s);
 
             diffuse += d;
             specular += s;
         }
+
+        diffuse = clamp(diffuse / _SSGINumSample, 0.0h, 4.0h);
+        specular = clamp(specular / _SSGINumSample, 0.0h, 4.0h);
+
+        mrt0 = half4(diffuse, 0.0h);
+        mrt1 = half4(specular, 0.0h);
     }
-
-    diffuse = clamp(diffuse / _SSGINumSample, 0.0h, 4.0h);
-    specular = clamp(specular / _SSGINumSample, 0.0h, 4.0h);
-
-    mrt0 = half4(diffuse, 0.0h);
-    mrt1 = half4(specular, 0.0h);
 }
 
 void BilateralDiscBlur(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET1)
@@ -640,9 +489,9 @@ void BilateralDiscBlur(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: S
     #if defined(_PREPASS_BLUR)
         radius = 0.01f;
     #elif defined(_POSTPASS_BLUR)
-        radius = lerp(0.001f, 0.40f, pow(1.0f - weight, 2));
+        radius = lerp(0.00f, 0.05f, pow(1.0f - weight, 2));
     #else
-        radius = lerp(0.001f, 0.40f, pow(1.0f - weight, 2));
+        radius = lerp(0.00f, 0.10f, pow(1.0f - weight, 2));
     #endif
 
     if (depth < _SSGIFadeDepth)
@@ -668,8 +517,8 @@ void BilateralDiscBlur(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: S
 
             float z = LinearEyeDepth(SampleZBuffer(uv));
 
-            half acc = pow(saturate(dot(nm.xyz, wnrm.xyz)), 4);
-            acc *= exp(-4.0h * disk.z * disk.z);
+            half acc = pow(saturate(dot(nm.xyz, wnrm.xyz)), 8);
+            acc *= exp(-2.0h * disk.z * disk.z);
             acc *= exp(-64.0h * (z + vp.z) * (z + vp.z));
             acc *= wnrm.w == nm.w ? 1.0h : 0.0h;
 

@@ -1,6 +1,8 @@
 #ifndef HSSSS_SSAO_CGINC
 #define HSSSS_SSAO_CGINC
 
+#pragma exclude_renderers gles
+
 #include "Common.cginc"
 
 uniform half _SSAOIntensity;
@@ -75,7 +77,34 @@ inline half4 SampleFlop(float2 uv)
     return ao;
 }
 
-inline half4 SampleZBufferLOD(float2 uv, uint lod)
+inline uint GetZBufferLOD(float iter)
+{
+    uint lod = 0;
+
+    if (iter <= (_SSAONumStride / 4))
+    {
+        lod = 0;
+    }
+
+    else if (iter <= (_SSAONumStride / 2))
+    {
+        lod = 1;
+    }
+
+    else if (iter <= (_SSAONumStride * 3 / 4))
+    {
+        lod = 2;
+    }
+
+    else
+    {
+        lod = 3;
+    }
+
+    return lod;
+}
+
+inline float SampleZBufferLOD(float2 uv, uint lod)
 {
     if (lod == 3)
     {
@@ -118,29 +147,7 @@ inline float2 HorizonTrace(ray ray, float gamma, uint split)
     [unroll]
     for (float iter = 1.0f; iter <= _SSAONumStride && str <= 1.0f; iter += 1.0f)
     {
-        float2 z = 0.0h;
-
-        uint lod = 0;
-
-        if (iter <= (_SSAONumStride / 4))
-        {
-            lod = 0;
-        }
-
-        else if (iter <= (_SSAONumStride / 2))
-        {
-            lod = 1;
-        }
-
-        else if (iter <= (_SSAONumStride * 3 / 4))
-        {
-            lod = 2;
-        }
-
-        else
-        {
-            lod = 3;
-        }
+        uint lod = GetZBufferLOD(iter);
 
         str = max(str + minStr[lod], pow(iter / _SSAONumStride, power));
 
@@ -149,8 +156,10 @@ inline float2 HorizonTrace(ray ray, float gamma, uint split)
             mad(ray.bwd, str, ray.org)
         };
 
-        z.x = SampleZBufferLOD(uv.xy, lod);
-        z.y = SampleZBufferLOD(uv.zw, lod);
+        float2 z = {
+            SampleZBufferLOD(uv.xy, lod),
+            SampleZBufferLOD(uv.zw, lod)
+        };
 
         float2 threshold = ray.len * FastSqrt(1.0f - str * str);
         float2 dz = (ray.z - z.xy);
