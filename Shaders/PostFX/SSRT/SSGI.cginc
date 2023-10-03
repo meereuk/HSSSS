@@ -46,7 +46,10 @@ uniform Texture2D _HierachicalIrradianceBuffer3;
 uniform SamplerState sampler_HierachicalIrradianceBuffer3;
 uniform float4 _HierachicalIrradianceBuffer3_TexelSize;
 
-// temporal flip-flop buffers
+uniform Texture2D _HierachicalIrradianceBuffer4;
+uniform SamplerState sampler_HierachicalIrradianceBuffer4;
+uniform float4 _HierachicalIrradianceBuffer4_TexelSize;
+
 // diffuse
 uniform Texture2D _SSGIFlipDiffuseBuffer;
 uniform SamplerState sampler_SSGIFlipDiffuseBuffer;
@@ -73,6 +76,24 @@ uniform float4 _SSGIFlopSpecularBuffer_TexelSize;
     #define _SSGINumStride 4
 #endif
 
+#define KERNEL_TAPS 8
+
+#ifndef KERNEL_STEP
+    #define KERNEL_STEP 1
+#endif
+
+static const int2 neighbors[KERNEL_TAPS] = 
+{
+    {  1,  0 }, {  1,  1 }, {  0,  1 }, { -1,  1 },
+    { -1,  0 }, { -1, -1 }, {  0, -1 }, {  1, -1 },
+};
+
+static const half weights[KERNEL_TAPS] = 
+{
+    0.50h, 0.25h, 0.50h, 0.25h,
+    0.50h, 0.25h, 0.50h, 0.25h
+};
+
 struct ray
 {
     // uv
@@ -90,9 +111,14 @@ struct ray
     half3 a;
 };
 
-inline half4 SampleIrradianceBufferLOD(float2 uv, uint lod)
+inline float4 SampleIrradianceBufferLOD(float2 uv, uint lod)
 {
-    if (lod == 3)
+    if (lod == 4)
+    {
+        return _HierachicalIrradianceBuffer4.Sample(sampler_HierachicalIrradianceBuffer4, uv);
+    }
+
+    else if (lod == 3)
     {
         return _HierachicalIrradianceBuffer3.Sample(sampler_HierachicalIrradianceBuffer3, uv);
     }
@@ -113,9 +139,14 @@ inline half4 SampleIrradianceBufferLOD(float2 uv, uint lod)
     }
 }
 
-inline half4 SampleIrradianceBufferLOD(float2 uv, int2 offset, uint lod)
+inline float4 SampleIrradianceBufferLOD(float2 uv, int2 offset, uint lod)
 {
-    if (lod == 3)
+    if (lod == 4)
+    {
+        return _HierachicalIrradianceBuffer4.Sample(sampler_HierachicalIrradianceBuffer4, uv, offset);
+    }
+
+    else if (lod == 3)
     {
         return _HierachicalIrradianceBuffer3.Sample(sampler_HierachicalIrradianceBuffer3, uv, offset);
     }
@@ -136,36 +167,16 @@ inline half4 SampleIrradianceBufferLOD(float2 uv, int2 offset, uint lod)
     }
 }
 
-inline half4 SampleFlipDiffuse(float2 uv)
+inline void SampleFlipBuffer(float2 uv, out half4 diffuse, out half4 specular)
 {
-    return _SSGIFlipDiffuseBuffer.Sample(sampler_SSGIFlipDiffuseBuffer, uv);
+    diffuse = _SSGIFlipDiffuseBuffer.Sample(sampler_SSGIFlipDiffuseBuffer, uv);
+    specular = _SSGIFlipSpecularBuffer.Sample(sampler_SSGIFlipSpecularBuffer, uv);
 }
 
-inline half4 SampleFlipSpecular(float2 uv)
+inline void SampleFlopBuffer(float2 uv, out half4 diffuse, out half4 specular)
 {
-    return _SSGIFlipSpecularBuffer.Sample(sampler_SSGIFlipSpecularBuffer, uv);
-}
-
-inline void SampleFlip(float2 uv, out half4 diffuse, out half4 specular)
-{
-    diffuse = SampleFlipDiffuse(uv);
-    specular = SampleFlipSpecular(uv);
-}
-
-inline half4 SampleFlopDiffuse(float2 uv)
-{
-    return _SSGIFlopDiffuseBuffer.Sample(sampler_SSGIFlopDiffuseBuffer, uv);
-}
-
-inline half4 SampleFlopSpecular(float2 uv)
-{
-    return _SSGIFlopSpecularBuffer.Sample(sampler_SSGIFlopSpecularBuffer, uv);
-}
-
-inline void SampleFlop(float2 uv, out half4 diffuse, out half4 specular)
-{
-    diffuse = SampleFlopDiffuse(uv);
-    specular = SampleFlopSpecular(uv);
+    diffuse = _SSGIFlopDiffuseBuffer.Sample(sampler_SSGIFlopDiffuseBuffer, uv);
+    specular = _SSGIFlopSpecularBuffer.Sample(sampler_SSGIFlopSpecularBuffer, uv);
 }
 
 inline float SampleZHistory(float2 uv)
@@ -202,27 +213,37 @@ inline uint GetIrradianceLOD(float iter)
 {
     uint lod = 0;
 
-    if (iter <= (_SSGINumStride / 4))
+    if (iter < 3)
     {
         lod = 0;
     }
 
-    else if (iter <= (_SSGINumStride / 2))
+    else if (iter < 5)
     {
         lod = 1;
     }
 
-    else if (iter <= (_SSGINumStride * 3 / 4))
+    else if (iter < 7)
     {
         lod = 2;
     }
 
-    else
+    else if (iter < 9)
     {
         lod = 3;
     }
 
+    else
+    {
+        lod = 4;
+    }
+
     return lod;
+}
+
+inline half GetLuminance(half3 color)
+{
+    return dot(half3(0.299h, 0.587h, 0.114h), color);
 }
 
 // blinn-phong
@@ -238,14 +259,15 @@ inline void HorizonTrace(ray ray, out half3 diffuse, out half3 specular)
     float2 duv = ray.uv[1] - ray.uv[0];
     float slope = duv.y / duv.x;
 
-    float4 minStr = {
-        min(length(_HierachicalIrradianceBuffer0_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer0_TexelSize.yy * float2(1.0f / slope, 1.0f))),
-        min(length(_HierachicalIrradianceBuffer1_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer1_TexelSize.yy * float2(1.0f / slope, 1.0f))),
-        min(length(_HierachicalIrradianceBuffer2_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer2_TexelSize.yy * float2(1.0f / slope, 1.0f))),
-        min(length(_HierachicalIrradianceBuffer3_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer3_TexelSize.yy * float2(1.0f / slope, 1.0f)))
+    float minStr[5] = {
+        min(length(_HierachicalIrradianceBuffer0_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer0_TexelSize.yy * float2(1.0f / slope, 1.0f))) / length(duv),
+        min(length(_HierachicalIrradianceBuffer1_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer1_TexelSize.yy * float2(1.0f / slope, 1.0f))) / length(duv),
+        min(length(_HierachicalIrradianceBuffer2_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer2_TexelSize.yy * float2(1.0f / slope, 1.0f))) / length(duv),
+        min(length(_HierachicalIrradianceBuffer3_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer3_TexelSize.yy * float2(1.0f / slope, 1.0f))) / length(duv),
+        min(length(_HierachicalIrradianceBuffer4_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer4_TexelSize.yy * float2(1.0f / slope, 1.0f))) / length(duv)
     };
 
-    minStr /= length(duv);
+    //minStr /= length(duv);
 
     diffuse = 0.0h;
     specular = 0.0h;
@@ -260,81 +282,38 @@ inline void HorizonTrace(ray ray, out half3 diffuse, out half3 specular)
         uint lod = GetIrradianceLOD(iter);
 
         float ds = max(str + minStr[lod], pow(iter / _SSGINumStride, power)) - str;
-        str = str + ds; 
+        str = str + ds;
 
-        // uv
-        float2x2 uv = {
-            lerp(ray.uv[0], ray.uv[1], str),
-            lerp(ray.uv[0], ray.uv[2], str)
-        };
+        for (int i = 0; i < 2; i ++)
+        {
+            float2 uv = lerp(ray.uv[0], ray.uv[i + 1], str);
 
-        float2x4 ir = {
-            SampleIrradianceBufferLOD(uv[0], lod),
-            SampleIrradianceBufferLOD(uv[1], lod)
-        };
+            if (uv.x <= 1.0f && 0.0f <= uv.x && uv.y <= 1.0f && 0.0f <= uv.y)
+            {
+            float4 ir = SampleIrradianceBufferLOD(uv, lod);
+            float4 sp = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
+            float4 vp = mul(_ClipToViewMatrix, sp);
+            vp = float4(vp.xyz * ir.w / vp.w, 1.0f);
 
-        float2x4 sp = {
-            float4(mad(uv[0], 2.0f, -1.0f), 1.0f, 1.0f),
-            float4(mad(uv[1], 2.0f, -1.0f), 1.0f, 1.0f)
-        };
+            half3 ldir = normalize(vp.xyz - ray.vp.xyz);
+            half3 hdir = normalize(ldir + vdir);
+            half ndotl = saturate(dot(ray.vn, ldir));
+            half ndoth = saturate(dot(ray.vn, hdir));
+            half ldoth = saturate(dot(ldir, hdir));
 
-        float2x4 vp = {
-            mul(_ClipToViewMatrix, sp[0]),
-            mul(_ClipToViewMatrix, sp[1])
-        };
+            half dz = (vp.z - ray.vp.z - 0.005f) / distance(vp.xy, ray.vp.xy);
 
-        vp[0] = float4(vp[0].xyz * ir[0].w / vp[0].w, 1.0f);
-        vp[1] = float4(vp[1].xyz * ir[1].w / vp[1].w, 1.0f);
+            float threshold = FastSqrt(max(0.0f, ray.len * ray.len - dot(vp.xy - ray.vp.xy, vp.xy - ray.vp.xy)));
 
-        half2x3 ldir = {
-            normalize(vp[0].xyz - ray.vp.xyz),
-            normalize(vp[1].xyz - ray.vp.xyz)
-        };
+            ir.xyz = ir.xyz * ndotl * step(theta[i].x, dz) * ds;
+            ir.xyz = ir.xyz * step(abs(vp.z - ray.vp.z), threshold);
 
-        half2x3 hdir = {
-            normalize(ldir[0] + vdir),
-            normalize(ldir[1] + vdir)
-        };
+            diffuse += ir.xyz;
+            specular += ir.xyz * FSchlick(ray.f0, ldoth) * DBlinn(ray.a, ndoth) * 0.25h;
 
-        half2 ndotl = {
-            saturate(dot(ray.vn, ldir[0])),
-            saturate(dot(ray.vn, ldir[1]))
-        };
-
-        half2 ndoth = {
-            saturate(dot(ray.vn, hdir[0])),
-            saturate(dot(ray.vn, hdir[1]))
-        };
-
-        half2 ldoth = {
-            saturate(dot(ldir[0], hdir[0])),
-            saturate(dot(ldir[1], hdir[1]))
-        };
-
-        half2 dz = {
-            (vp[0].z - ray.vp.z - 0.005f) / distance(vp[0].xy, ray.vp.xy),
-            (vp[1].z - ray.vp.z - 0.005f) / distance(vp[1].xy, ray.vp.xy)
-        };
-
-        float2 threshold = {
-            FastSqrt(max(0.0f, ray.len * ray.len - dot(vp[0].xy - ray.vp.xy, vp[0].xy - ray.vp.xy))),
-            FastSqrt(max(0.0f, ray.len * ray.len - dot(vp[1].xy - ray.vp.xy, vp[1].xy - ray.vp.xy)))
-        };
-
-        ir[0].xyz = ir[0].xyz * ndotl[0] * step(theta[0].x, dz[0]) * ds;
-        ir[1].xyz = ir[1].xyz * ndotl[1] * step(theta[1].x, dz[1]) * ds;
-
-        ir[0].xyz = ir[0].xyz * step(abs(vp[0].z - ray.vp.z), threshold[0]);
-        ir[1].xyz = ir[1].xyz * step(abs(vp[1].z - ray.vp.z), threshold[1]);
-
-        diffuse += ir[0].xyz;
-        diffuse += ir[1].xyz;
-
-        specular += ir[0].xyz * FSchlick(ray.f0, ldoth[0]) * DBlinn(ray.a, ndoth[0]) * 0.25h;
-        specular += ir[1].xyz * FSchlick(ray.f0, ldoth[1]) * DBlinn(ray.a, ndoth[1]) * 0.25h;
-
-        theta[0].x = max(theta[0].x, dz[0]);
-        theta[1].x = max(theta[1].x, dz[1]);
+            theta[i].x = max(theta[i].x, dz);
+            }
+        }
     }
 }
 
@@ -355,13 +334,13 @@ inline half3 SampleViewNormal(float2 uv)
 
 float4 GBufferPrePass(v2f_img IN): SV_TARGET
 {
-    float4 diffuse, specular;
+    half4 diffuse, specular;
     SampleGIHistory(IN.uv, diffuse, specular);
     half4 albedo = SampleGBuffer0(IN.uv);
     half4 direct = SampleGBuffer3(IN.uv);
     half3 ambient = mad(diffuse.xyz, albedo.xyz, specular.xyz);
     float depth = Linear01Depth(SampleZBuffer(IN.uv));
-    return float4(mad(ambient, _SSGISecondary, direct.xyz), depth);
+    return half4(mad(ambient, _SSGISecondary, direct.xyz), depth);
 }
 
 float4 GBufferDownSample(v2f_img IN): SV_TARGET
@@ -445,15 +424,18 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
             specular += s;
         }
 
-        diffuse = clamp(diffuse / _SSGINumSample, 0.0h, 4.0h);
-        specular = clamp(specular / _SSGINumSample, 0.0h, 4.0h);
+        diffuse = clamp(diffuse / _SSGINumSample, 0.0h, 8.0h);
+        specular = clamp(specular / _SSGINumSample, 0.0h, 8.0h);
 
-        mrt0 = half4(diffuse, 0.0h);
-        mrt1 = half4(specular, 0.0h);
+        mrt0 = half4(diffuse, GetLuminance(diffuse));
+        mrt1 = half4(specular, GetLuminance(specular));
+
+        mrt0.w *= mrt0.w;
+        mrt1.w *= mrt1.w;
     }
 }
 
-void BilateralDiscBlur(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET1)
+void BilateralBlur(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET1)
 {
     mrt0 = 0.0h;
     mrt1 = 0.0h;
@@ -462,76 +444,68 @@ void BilateralDiscBlur(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: S
     float depth;
 
     SampleCoordinates(IN.uv, vpos, wpos, depth);
-    half4 wnrm = SampleGBuffer2(IN.uv);
-    wnrm.xyz = normalize(mad(wnrm.xyz, 2.0h, -1.0h));
-    half3 vnrm = mul(_WorldToViewMatrix, wnrm.xyz);
 
-    float3x3 tbn;
-
-    #if defined(_PREPASS_BLUR)
-        tbn = GramSchmidtMatrix(IN.uv + 0.2f, vnrm);
-    #elif defined(_POSTPASS_BLUR)
-        tbn = GramSchmidtMatrix(IN.uv + 0.4f, vnrm);
-    #else
-        tbn = GramSchmidtMatrix(IN.uv + 0.6f, vnrm);
-    #endif
-
-    #if defined(_POSTPASS_BLUR)
-        SampleFlop(IN.uv, mrt0, mrt1);
-    #else
-        SampleFlip(IN.uv, mrt0, mrt1);
-    #endif
-    
-    half3 weight = mrt0.w;
-    half sum = 1.0h;
-    float radius;
-
-    #if defined(_PREPASS_BLUR)
-        radius = 0.01f;
-    #elif defined(_POSTPASS_BLUR)
-        radius = lerp(0.00f, 0.05f, pow(1.0f - weight, 2));
-    #else
-        radius = lerp(0.00f, 0.10f, pow(1.0f - weight, 2));
-    #endif
-
-    if (depth < _SSGIFadeDepth)
+    if (depth > _SSGIFadeDepth)
     {
-        for (uint i = 0; i < 8; i ++)
+        return;
+    }
+
+    else
+    {
+        half4 wnrm = SampleGBuffer2(IN.uv);
+        wnrm.xyz = normalize(mad(wnrm.xyz, 2.0h, -1.0h));
+        half3 vnrm = mul(_WorldToViewMatrix, wnrm.xyz);
+
+        #if defined(_SAMPLE_FLOP)
+            SampleFlopBuffer(IN.uv, mrt0, mrt1);
+        #else
+            SampleFlipBuffer(IN.uv, mrt0, mrt1);
+        #endif
+
+        half2 illum = { GetLuminance(mrt0.xyz), GetLuminance(mrt1.xyz) };
+        half2 var = { max(0.0h, mrt0.w - illum.x * illum.x), max(0.0h, mrt1.w - illum.y * illum.y) };
+
+        half2 norm = 1.0h;
+
+        half minvar = 1.0h - 0.999h * smoothstep(0.2h, 0.8h, _SSGIMixFactor);
+
+        [unroll]
+        for (int i = 0; i < KERNEL_TAPS; i ++)
         {
-            float3 disk = PoissonDisk(i, 8);
-            float3 dir = mul(float3(disk.xy, 0.0f), tbn);
-            float4 vp = float4(mad(dir, radius, vpos.xyz), 1.0f);
-            float4 sp = mul(unity_CameraProjection, vp);
-            float2 uv = sp.xy / sp.w * 0.5f + 0.5f;
+            int2 offset = KERNEL_STEP * neighbors[i];
+            float2 uv = IN.uv + (_ScreenParams.zw - 1.0f) * offset;
+            half2 corr = weights[i];
 
-            half4 diffuse, specular;
+            half4 diffuse = 0.0h;
+            half4 specular = 0.0h;
 
-            #if defined(_POSTPASS_BLUR)
-                SampleFlop(uv, diffuse, specular);
+            #if defined(_SAMPLE_FLOP)
+                SampleFlopBuffer(uv, diffuse, specular);
             #else
-                SampleFlip(uv, diffuse, specular);
+                SampleFlipBuffer(uv, diffuse, specular);
             #endif
 
-            half4 nm = SampleGBuffer2(uv);
-            nm.xyz = normalize(mad(nm.xyz, 2.0h, -1.0h));
+            // geometry aware
+            float z = LinearEyeDepth(SampleZBuffer(IN.uv, offset));
+            float2 dz = { ddx_fine(z), ddy_fine(z) };
+            corr *= exp(-abs(z - depth) / (abs(dot(dz, offset)) + 0.001h));
+            // normal aware
+            half4 n = SampleGBuffer2(IN.uv, offset);
+            n.xyz = normalize(mad(n.xyz, 2.0h, -1.0h));
+            corr *= pow(saturate(dot(n.xyz, wnrm.xyz)), 64);
+            // mask aware
+            corr *= wnrm.w == n.w ? 1.0h : 0.0h;
+            // luminance aware
+            half2 lum = { GetLuminance(diffuse.xyz), GetLuminance(specular.xyz) };
+            corr *= exp(-abs(lum - illum) / mad(var, 4.0h, minvar));
 
-            float z = LinearEyeDepth(SampleZBuffer(uv));
-
-            half acc = pow(saturate(dot(nm.xyz, wnrm.xyz)), 8);
-            acc *= exp(-2.0h * disk.z * disk.z);
-            acc *= exp(-64.0h * (z + vp.z) * (z + vp.z));
-            acc *= wnrm.w == nm.w ? 1.0h : 0.0h;
-
-            mrt0 += half4(diffuse.xyz, 0.0h) * acc;
-            mrt1 += half4(specular.xyz, 0.0h) * acc;
-            sum += acc;
+            mrt0 += diffuse * corr.x;
+            mrt1 += specular * corr.y;
+            norm += corr;
         }
 
-        mrt0.xyz /= sum;
-        mrt1.xyz /= sum;
-
-        mrt0.w = weight;
-        mrt1.w = weight;
+        mrt0 /= norm.x;
+        mrt1 /= norm.y;
     }
 }
 
@@ -548,7 +522,7 @@ void TemporalFilter(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_T
     half4 diffuseCurrent, diffuseHistory;
     half4 specularCurrent, specularHistory;
 
-    SampleFlop(IN.uv, diffuseCurrent, specularCurrent);
+    SampleFlipBuffer(IN.uv, diffuseCurrent, specularCurrent);
     SampleGIHistory(uvHistory, diffuseHistory, specularHistory);
 
     half3 normalCurrent = _CameraGBufferTexture2.Sample(sampler_CameraGBufferTexture2, IN.uv);
@@ -559,17 +533,14 @@ void TemporalFilter(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_T
 
     half weight = saturate(_SSGIMixFactor * smoothstep(0.96h, 1.00h, dot(normalCurrent, normalHistory)));
 
-    mrt0.xyz = lerp(diffuseCurrent.xyz, diffuseHistory.xyz, weight * 0.98h);
-    mrt1.xyz = lerp(specularCurrent.xyz, specularHistory.xyz, weight * 0.98h);
-
-    mrt0.w = weight;
-    mrt1.w = weight;
+    mrt0 = lerp(diffuseCurrent, diffuseHistory, weight * 0.99h);
+    mrt1 = lerp(specularCurrent, specularHistory, weight * 0.99h);
 }
 
 inline half4 CollectGI(v2f_img IN) : SV_TARGET
 {
     half4 diffuse, specular;
-    SampleFlip(IN.uv, diffuse, specular);
+    SampleFlopBuffer(IN.uv, diffuse, specular);
     half4 albedo = SampleGBuffer0(IN.uv);
     half4 direct = SampleGBuffer3(IN.uv);
 
@@ -579,19 +550,27 @@ inline half4 CollectGI(v2f_img IN) : SV_TARGET
 
 inline void StoreHistory(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET1, out fixed4 mrt2: SV_TARGET2, out half mrt3: SV_TARGET3)
 {
-    SampleFlip(IN.uv, mrt0, mrt1);
+    SampleFlopBuffer(IN.uv, mrt0, mrt1);
     mrt2 = SampleGBuffer2(IN.uv);
     mrt3 = SampleZBuffer(IN.uv);
 }
 
 inline void BlitFlipToFlop(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET1)
 {
-    SampleFlip(IN.uv, mrt0, mrt1);
+    SampleFlipBuffer(IN.uv, mrt0, mrt1);
 }
 
 inline void BlitFlopToFlip(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET2)
 {
-    SampleFlop(IN.uv, mrt0, mrt1);
+    SampleFlopBuffer(IN.uv, mrt0, mrt1);
+}
+
+inline half4 DebugGI(v2f_img IN) : SV_TARGET
+{
+    half4 color = SampleTexel(IN.uv);
+    half illum = GetLuminance(color.xyz);
+
+    return color;//color.w - illum * illum;
 }
 
 #endif

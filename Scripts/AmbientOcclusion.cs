@@ -109,7 +109,14 @@ public class AmbientOcclusion : MonoBehaviour
 
         this.aoBuffer.Blit(zbuf, flip, this.mMaterial, 9);
         this.aoBuffer.Blit(flip, flop, this.mMaterial, 10);
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 15);
+
+        // denoising pass
+        this.aoBuffer.Blit(flop, flip, this.mMaterial, 11);
+        this.aoBuffer.Blit(flip, flop, this.mMaterial, 12);
+        this.aoBuffer.Blit(flop, flip, this.mMaterial, 13);
+        this.aoBuffer.Blit(flip, flop);
+
+        this.aoBuffer.Blit(flop, flip, this.mMaterial, 17);
         this.aoBuffer.Blit(flip, BuiltinRenderTextureType.CameraTarget);
 
         this.aoBuffer.ReleaseTemporaryRT(flip);

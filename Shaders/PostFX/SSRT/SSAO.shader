@@ -150,7 +150,27 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 12 : ao to GBuffer 0
+        // pass 12 : spatio denoiser
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment SpatialDenoiser
+            #define KERNEL_STEP 2
+            #include "SSAO.cginc"
+            ENDCG
+        }
+
+        // pass 13 : spatio denoiser
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment SpatialDenoiser
+            #define KERNEL_STEP 4
+            #include "SSAO.cginc"
+            ENDCG
+        }
+
+        // pass 14 : ao to GBuffer 0
         Pass
         {
             CGPROGRAM
@@ -159,7 +179,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 13 : ao to GBuffer 3
+        // pass 15 : ao to GBuffer 3
         Pass
         {
             CGPROGRAM
@@ -168,7 +188,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 14 : specular occlusion
+        // pass 16 : specular occlusion
         Pass
         {
             CGPROGRAM
@@ -177,7 +197,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 15 : debug
+        // pass 17 : debug
         Pass
         {
             CGPROGRAM

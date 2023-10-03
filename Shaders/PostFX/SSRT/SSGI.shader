@@ -42,7 +42,8 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             CGPROGRAM
             #pragma vertex vert_mrt
             #pragma fragment IndirectDiffuse
-            #define _SSGINumStride 4
+            #define _SSGINumStride 8
+            #define _SSGINumSample 3
             #include "SSGI.cginc"
             ENDCG
         }
@@ -53,7 +54,8 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             CGPROGRAM
             #pragma vertex vert_mrt
             #pragma fragment IndirectDiffuse
-            #define _SSGINumStride 8
+            #define _SSGINumStride 12
+            #define _SSGINumSample 3
             #include "SSGI.cginc"
             ENDCG
         }
@@ -65,6 +67,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             #pragma vertex vert_mrt
             #pragma fragment IndirectDiffuse
             #define _SSGINumStride 12
+            #define _SSGINumSample 4
             #include "SSGI.cginc"
             ENDCG
         }
@@ -76,6 +79,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             #pragma vertex vert_mrt
             #pragma fragment IndirectDiffuse
             #define _SSGINumStride 16
+            #define _SSGINumSample 4
             #include "SSGI.cginc"
             ENDCG
         }
@@ -95,8 +99,9 @@ Shader "Hidden/HSSSS/GlobalIllumination"
         {
             CGPROGRAM
             #pragma vertex vert_mrt
-            #pragma fragment BilateralDiscBlur
-            #define _PREPASS_BLUR
+            #pragma fragment BilateralBlur
+            #define KERNEL_STEP 1
+            #define _SAMPLE_FLOP
             #include "SSGI.cginc"
             ENDCG
         }
@@ -106,7 +111,8 @@ Shader "Hidden/HSSSS/GlobalIllumination"
         {
             CGPROGRAM
             #pragma vertex vert_mrt
-            #pragma fragment BilateralDiscBlur
+            #pragma fragment BilateralBlur
+            #define KERNEL_STEP 2
             #include "SSGI.cginc"
             ENDCG
         }
@@ -116,8 +122,9 @@ Shader "Hidden/HSSSS/GlobalIllumination"
         {
             CGPROGRAM
             #pragma vertex vert_mrt
-            #pragma fragment BilateralDiscBlur
-            #define _POSTPASS_BLUR
+            #pragma fragment BilateralBlur
+            #define KERNEL_STEP 4
+            #define _SAMPLE_FLOP
             #include "SSGI.cginc"
             ENDCG
         }
@@ -158,6 +165,16 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             CGPROGRAM
             #pragma vertex vert_mrt
             #pragma fragment BlitFlopToFlip
+            #include "SSGI.cginc"
+            ENDCG
+        }
+
+        // pass 14 : debug
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert_img
+            #pragma fragment DebugGI
             #include "SSGI.cginc"
             ENDCG
         }

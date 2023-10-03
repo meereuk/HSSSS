@@ -165,25 +165,32 @@ public class GlobalIllumination : MonoBehaviour
         this.mBuffer.Blit(irad[1], irad[2], this.mMaterial, 1);
         this.mBuffer.Blit(irad[2], irad[3], this.mMaterial, 1);
 
+        // main pass
         this.mBuffer.SetRenderTarget(flipMRT, BuiltinRenderTextureType.CameraTarget);
         this.mBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 5);
 
+        // temporal filter
         this.mBuffer.SetRenderTarget(flopMRT, BuiltinRenderTextureType.CameraTarget);
-        this.mBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 7);
-
-        this.mBuffer.SetRenderTarget(flipMRT, BuiltinRenderTextureType.CameraTarget);
         this.mBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 6);
 
+        // spatio filter
+        this.mBuffer.SetRenderTarget(flipMRT, BuiltinRenderTextureType.CameraTarget);
+        this.mBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 7);
         this.mBuffer.SetRenderTarget(flopMRT, BuiltinRenderTextureType.CameraTarget);
         this.mBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 8);
-
         this.mBuffer.SetRenderTarget(flipMRT, BuiltinRenderTextureType.CameraTarget);
         this.mBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 9);
+        this.mBuffer.SetRenderTarget(flopMRT, BuiltinRenderTextureType.CameraTarget);
+        this.mBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 12);
 
+        // store normal and history
         this.mBuffer.SetRenderTarget(hist, BuiltinRenderTextureType.CameraTarget);
         this.mBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 10);
 
-        this.mBuffer.Blit(flip[0], BuiltinRenderTextureType.CameraTarget);
+        // debug
+        this.mBuffer.Blit(flip[0], flip[1], this.mMaterial, 11);
+
+        this.mBuffer.Blit(flip[1], BuiltinRenderTextureType.CameraTarget);
 
         this.mBuffer.ReleaseTemporaryRT(irad[0]);
         this.mBuffer.ReleaseTemporaryRT(irad[1]);
