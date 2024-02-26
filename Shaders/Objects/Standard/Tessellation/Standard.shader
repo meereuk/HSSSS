@@ -163,5 +163,4 @@ Shader "HSSSS/Standard/Tessellation/Standard"
     }
 
     FallBack "Standard"
-    CustomEditor "HSSSSMaterialEditor"
 }

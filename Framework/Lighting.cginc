@@ -46,8 +46,7 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
     else if (s.scatteringMask < 0.4h)
     {
         half3 halfvector = normalize(d.direction + s.viewDirWorld);
-
-        //half3 bitangent = normalize(s.viewDirWorld - dot(s.viewDirWorld, s.normalWorld) * s.normalWorld);
+        
         half3 bitangent = normalize(half3(0.0h, 1.0h, 0.0h) - s.normalWorld * s.normalWorld.y);
         half3 tangent = normalize(cross(s.normalWorld, bitangent));
 
@@ -65,8 +64,10 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
         half at = s.beckmannRoughness * (1.0h + anisotropy);
         half ab = s.beckmannRoughness * (1.0h - anisotropy);
 
+        half3 sssColor = 0.25h * (s.albedo + 0.25h) / aLuminance(s.albedo + 0.25h);
+
         diffuse *= saturate((d.NdotLm + 0.5h) / 2.25h);
-        diffuse *= saturate(normalize(s.albedo + 0.5h) + d.NdotL);
+        diffuse *= saturate(sssColor + d.NdotL);
         specular *= DGGXAniso(at, ab, TdotH, BdotH, d.NdotH);
         specular *= VSmithAniso(at, ab, TdotV, BdotV, TdotL, BdotL, s.NdotV, d.NdotL);
     }

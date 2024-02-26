@@ -153,5 +153,5 @@ Shader "HSSSS/Standard/Standard"
     }
 
     FallBack "Standard"
-    CustomEditor "HSSSSMaterialEditor"
+    //CustomEditor "HSSSSMaterialEditor"
 }

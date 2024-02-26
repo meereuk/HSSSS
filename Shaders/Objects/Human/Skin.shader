@@ -41,6 +41,7 @@ Shader "HSSSS/Human/Skin"
         _DetailNormalMap_3 ("DetailNormalMap_3", 2D) = "bump" {}
         _DetailNormalMapScale_3 ("DetailNormalMapScale_3", Float) = 1
         _DetailSkinPoreMap ("DetailSkinPoreMap", 2D) = "white" {}
+        _PoreOcclusionStrength ("PoreOcclusionStrength", Range(0, 1)) = 1
 
         [Space(8)][Header(Transmission)]
         _Thickness ("ThicknessMap", 2D) = "white" {}

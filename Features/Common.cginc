@@ -164,6 +164,7 @@ inline void aSampleEmission(inout ASurface s)
 {
     half4 emission = tex2D(_EmissionMap, A_TRANSFORM_UV_SCROLL(s, _EmissionMap));
     s.emission = _EmissionColor * emission.rgb * emission.a;
+    s.emission += max(0.0h, s.baseColor - saturate(s.baseColor));
 }
 
 inline void aSampleTransmission(inout ASurface s)

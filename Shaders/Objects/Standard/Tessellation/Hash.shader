@@ -1,50 +1,55 @@
-Shader "HSSSS/Overlay/Tessellation/Hash"
+Shader "HSSSS/Standard/Tessellation/Hash"
 {
     Properties
     {
         [Enum(Standard, 0, Anisotropic, 1, Sheen, 2, Skin, 3)]
         _MaterialType("Material Type",Float) = 0
 
-        [Space(8)][Header(Albedo)]
+        // diffuse
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Main Color", Color) = (1,1,1,1)
 
-        [Space(8)][Header(Emission)]
+        _ColorMask ("Color Mask", 2D) = "black" {}
+        _Color_3 ("Secondary Color", Color) = (1,1,1,1)
+
+        _DetailAlbedoMap ("Detail Albedo", 2D) = "white" {}
+
         _EmissionMap ("Emission Map", 2D) = "white" {}
         _EmissionColor ("Emission Color", Color) = (0, 0, 0, 1)
 
-        [Space(8)][Header(Specular)]
+        // specular
         _SpecGlossMap ("SpecGlossMap", 2D) = "white" {}
         _SpecColor ("SpecColor", Color) = (1,1,1,1)
         _Metallic ("Specularity", Range(0, 1)) = 0
         _Smoothness ("Smoothness", Range(0, 1)) = 0
 
-        [Space(8)][Header(Occlusion)]
+        // occlusion
         _OcclusionMap ("OcclusionMap", 2D) = "white" {}
         _OcclusionStrength ("OcclusionStrength", Range(0, 1)) = 0
 
-        [Space(8)][Header(Normal)]
+        // normal
         _BumpMap ("BumpMap", 2D) = "bump" {}
         _BumpScale ("BumpScale", Float) = 1
 
-        [Space(8)][Header(DetailNormal)]
+        _BlendNormalMap ("BlendNormalMap", 2D) = "bump" {}
+        _BlendNormalMapScale("BlendNormalMapScale", Float) = 1
+
         _DetailNormalMap ("DetailNormalMap", 2D) = "bump" {}
         _DetailNormalMapScale ("DetailNormalMapScale", Float) = 1
 
-        [Space(8)][Header(Anisotropy)]
         _Anisotropy ("Anisotropy", Range(-1, 1)) = 0
 
-        [Space(8)][Header(Tessellation)]
-        _DispTex ("HeightMap", 2D) = "black" {}
-        _Displacement ("Displacement", Range(0, 30)) = 0.1
-        _Phong ("PhongStrength", Range(0, 1)) = 0.5
-        _EdgeLength ("EdgeLength", Range(2, 50)) = 2
+        _Thickness ("ThicknessMap", 2D) = "white" {}
 
-        [Space(8)][Header(Transparency)]
         _Hash ("Hash", Range(0, 1)) = 0
         _FuzzBias ("FuzzBias", Range(0, 1)) = 0.0
         _BlueNoise ("Blue Noise", 3D) = "black" {}
         _FresnelAlpha ("Fresnel Alpha", Range(0, 1)) = 0
+
+        _DispTex ("HeightMap", 2D) = "black" {}
+        _Displacement ("Displacement", Range(0, 30)) = 0.1
+        _Phong ("PhongStrength", Range(0, 1)) = 0.5
+        _EdgeLength ("EdgeLength", Range(2, 50)) = 2
     }
 
     CGINCLUDE
@@ -56,8 +61,8 @@ Shader "HSSSS/Overlay/Tessellation/Hash"
     {
         Tags
         {
-            "Queue" = "AlphaTest" 
-            "RenderType" = "TransparentCutout"
+            "Queue" = "Geometry" 
+            "RenderType" = "Opaque"
         }
         LOD 400
 
@@ -81,7 +86,7 @@ Shader "HSSSS/Overlay/Tessellation/Hash"
             #define UNITY_PASS_FORWARDBASE
             #define _ALPHAHASHED_ON
         
-            #include "Assets/HSSSS/Definitions/Overlay.cginc"
+            #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
             ENDCG
         }
@@ -109,7 +114,7 @@ Shader "HSSSS/Overlay/Tessellation/Hash"
             #define UNITY_PASS_FORWARDADD
             #define _ALPHAHASHED_ON
 
-            #include "Assets/HSSSS/Definitions/Overlay.cginc"
+            #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
             ENDCG
         }
@@ -132,7 +137,7 @@ Shader "HSSSS/Overlay/Tessellation/Hash"
         
             #define UNITY_PASS_SHADOWCASTER
         
-            #include "Assets/HSSSS/Definitions/Overlay.cginc"
+            #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/Shadow.cginc"
             ENDCG
         }
@@ -159,7 +164,7 @@ Shader "HSSSS/Overlay/Tessellation/Hash"
             #define UNITY_PASS_DEFERRED
             #define _ALPHAHASHED_ON
         
-            #include "Assets/HSSSS/Definitions/Overlay.cginc"
+            #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/Deferred.cginc"
             ENDCG
         }
