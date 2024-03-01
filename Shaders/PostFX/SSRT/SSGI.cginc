@@ -1,8 +1,6 @@
 #ifndef HSSSS_SSGI_CGINC
 #define HSSSS_SSGI_CGINC
 
-#pragma exclude_renderers gles
-
 #include "Common.cginc"
 #include "MRT.cginc"
 #include "Assets/HSSSS/Framework/Brdf.cginc"
@@ -275,6 +273,7 @@ inline void HorizonTrace(ray ray, out half3 diffuse, out half3 specular)
     float3 vdir = {0.0f, 0.0f, 1.0f};
     float2x2 theta = {{-10.0f, -10.0f}, {-10.0f, -10.0f}};
     float str = 0.0f;
+    float div = 0.0f;
 
     [unroll]
     for (float iter = 1.0f; iter <= _SSGINumStride && str <= 1.0f; iter += 1.0f)
@@ -288,33 +287,49 @@ inline void HorizonTrace(ray ray, out half3 diffuse, out half3 specular)
         {
             float2 uv = lerp(ray.uv[0], ray.uv[i + 1], str);
 
-            if (uv.x <= 1.0f && 0.0f <= uv.x && uv.y <= 1.0f && 0.0f <= uv.y)
+            bool frustum = uv.x <= 1.0f;
+            frustum = frustum && 0.0f <= uv.x;
+            frustum = frustum && uv.y <= 1.0f;
+            frustum = frustum && 0.0f <= uv.y;
+
+            if (frustum)
             {
-            float4 ir = SampleIrradianceBufferLOD(uv, lod);
-            float4 sp = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
-            float4 vp = mul(_ClipToViewMatrix, sp);
-            vp = float4(vp.xyz * ir.w / vp.w, 1.0f);
+                float4 ir = SampleIrradianceBufferLOD(uv, lod);
+                float4 sp = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
+                float4 vp = mul(_ClipToViewMatrix, sp);
+                vp = float4(vp.xyz * ir.w / vp.w, 1.0f);
 
-            half3 ldir = normalize(vp.xyz - ray.vp.xyz);
-            half3 hdir = normalize(ldir + vdir);
-            half ndotl = saturate(dot(ray.vn, ldir));
-            half ndoth = saturate(dot(ray.vn, hdir));
-            half ldoth = saturate(dot(ldir, hdir));
+                float3 vn = cross(ddx_fine(vp.xyz), ddy_fine(vp.xyz));
+                vn = normalize(vn);
 
-            half dz = (vp.z - ray.vp.z - 0.005f) / distance(vp.xy, ray.vp.xy);
+                half3 ldir = normalize(vp.xyz - ray.vp.xyz);
+                half3 hdir = normalize(ldir + vdir);
+                half ndotl = saturate(dot(ray.vn, ldir));
+                half ndoth = saturate(dot(ray.vn, hdir));
+                half ldoth = saturate(dot(ldir, hdir));
+                half vdotn = vn.z;
 
-            float threshold = FastSqrt(max(0.0f, ray.len * ray.len - dot(vp.xy - ray.vp.xy, vp.xy - ray.vp.xy)));
+                half dz = (vp.z - ray.vp.z - 0.005f) / distance(vp.xy, ray.vp.xy);
 
-            ir.xyz = ir.xyz * ndotl * step(theta[i].x, dz) * ds;
-            ir.xyz = ir.xyz * step(abs(vp.z - ray.vp.z), threshold);
+                float threshold = FastSqrt(max(0.0f, ray.len * ray.len - dot(vp.xy - ray.vp.xy, vp.xy - ray.vp.xy)));
 
-            diffuse += ir.xyz;
-            specular += ir.xyz * FSchlick(ray.f0, ldoth) * DBlinn(ray.a, ndoth) * 0.25h;
+                ir.xyz = ir.xyz * ndotl * step(theta[i].x, dz) * ds * ds;
+                ir.xyz = ir.xyz * step(abs(vp.z - ray.vp.z), threshold);
 
-            theta[i].x = max(theta[i].x, dz);
+                ir.xyz /= max(abs(vn.z), 0.1h);
+
+                diffuse += ir.xyz;
+                specular += ir.xyz * FSchlick(ray.f0, ldoth) * DBlinn(ray.a, ndoth) * 0.25h;
+
+                theta[i].x = max(theta[i].x, dz);
+
+                div += ds * ds;
             }
         }
     }
+
+    diffuse /= div;
+    specular /= div;
 }
 
 inline float4 SampleViewPosition(float2 uv)
