@@ -14,20 +14,32 @@
 #include "UnityStandardBRDF.cginc"
 #include "UnityStandardUtils.cginc"
 
-#if defined(_PCF_ON) || defined(_PCSS_ON)
-    #include "Assets/HSSSS/Unity/HSSSSDeferredLibrary.cginc"
-#else
-    #include "UnityDeferredLibrary.cginc"
-#endif
-#if defined(_SSCS_ON)
-    #include "Assets/HSSSS/Unity/ScreenSpaceShadows.cginc"
-#endif
-
+#include "UnityDeferredLibrary.cginc"
 #include "Assets/HSSSS/Unity/DirectOcclusion.cginc"
 
 sampler2D _CameraGBufferTexture0;
 sampler2D _CameraGBufferTexture1;
 sampler2D _CameraGBufferTexture2;
+
+uniform sampler2D _ScreenSpaceShadowMap;
+
+inline half SampleShadow(float3 pos, float depth, float fadeDist, float2 uv, half ndotl)
+{
+    half shadow = 0.0h;
+
+#ifdef SHADOWS_OFF
+    shadow = 1.0h;
+#else
+    shadow = tex2D(_ScreenSpaceShadowMap, uv);
+    shadow = lerp(shadow, 1.0h, _LightShadowData.x);
+
+    float fade = fadeDist * _LightShadowData.z + _LightShadowData.w;
+    fade = saturate(fade);
+    shadow = saturate(shadow + fade);
+#endif
+
+    return shadow;
+}
 
 ASurface aDeferredSurface(inout unity_v2f_deferred i)
 {
@@ -79,21 +91,8 @@ ADirect aDeferredDirect(ASurface s)
     // directional light
     #if defined(DIRECTIONAL) || defined(DIRECTIONAL_COOKIE)
         // directional shadow
-        #if defined(_PCF_ON) || defined(_PCSS_ON)
-            d.shadow = UnityDeferredComputeShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
-        #else
-            d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv);
-        #endif
-
+        d.shadow = SampleShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
         lightVector = -_LightDir.xyz;
-
-        // contact shadow
-        #if defined(_SSCS_ON)
-            ComputeScreenSpaceShadow(s.positionWorld, lightVector, s.screenUv, d.shadow);
-        #endif
-
-        // direct occlusion
-        ComputeDirectOcclusion(s.positionWorld, lightVector, s.screenUv, d.shadow);
         
         #if !defined(ALLOY_SUPPORT_REDLIGHTS) && defined(DIRECTIONAL_COOKIE)
             half4 cookie = tex2Dbias(_LightTexture0, float4(mul(_LightMatrix0, half4(s.positionWorld, 1)).xy, 0, -8));
@@ -109,20 +108,7 @@ ADirect aDeferredDirect(ASurface s)
 
         // spot light
         #if defined (SPOT)
-            // spot shadow
-            #if defined(_PCF_ON) || defined(_PCSS_ON)
-                d.shadow = UnityDeferredComputeShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
-            #else
-                d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv);
-            #endif
-
-            // contact shadow
-            #if defined(_SSCS_ON)
-                ComputeScreenSpaceShadow(s.positionWorld, lightVector, s.screenUv, d.shadow);
-            #endif
-
-            // direct occlusion
-            ComputeDirectOcclusion(s.positionWorld, lightVector, s.screenUv, d.shadow);
+            d.shadow = SampleShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
             
             // light cookie
             float4 uvCookie = mul(_LightMatrix0, float4(s.positionWorld, 1.0f));
@@ -140,20 +126,7 @@ ADirect aDeferredDirect(ASurface s)
 
         // point light
         #if defined (POINT) || defined (POINT_COOKIE)
-            // point shadow
-            #if defined(_PCF_ON) || defined(_PCSS_ON)
-                d.shadow = UnityDeferredComputeShadow(-lightVector, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
-            #else
-                d.shadow = UnityDeferredComputeShadow(-lightVector, fadeDist, s.screenUv);
-            #endif
-
-            // contact shadow
-            #if defined(_SSCS_ON)
-                ComputeScreenSpaceShadow(s.positionWorld, lightVector, s.screenUv, d.shadow);
-            #endif
-
-            // direct occlusion
-            ComputeDirectOcclusion(s.positionWorld, lightVector, s.screenUv, d.shadow);
+            d.shadow = SampleShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
 
             // light cookie
             #if defined (POINT_COOKIE)

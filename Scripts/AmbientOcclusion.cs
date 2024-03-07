@@ -104,20 +104,22 @@ public class AmbientOcclusion : MonoBehaviour
         this.aoBuffer.Blit(BuiltinRenderTextureType.CurrentActive, zbuf, this.mMaterial, 0);
 
         this.aoBuffer.Blit(zbuf, ZB1, this.mMaterial, 1);
-        this.aoBuffer.Blit(ZB1, ZB2, this.mMaterial, 2);
-        this.aoBuffer.Blit(ZB2, ZB3, this.mMaterial, 3);
+        this.aoBuffer.Blit(ZB1, ZB2, this.mMaterial, 1);
+        this.aoBuffer.Blit(ZB2, ZB3, this.mMaterial, 1);
 
         this.aoBuffer.Blit(zbuf, flip, this.mMaterial, 9);
         this.aoBuffer.Blit(flip, flop, this.mMaterial, 10);
+        this.aoBuffer.Blit(flop, flip, this.mMaterial, 11);
 
         // denoising pass
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 11);
+        /*
         this.aoBuffer.Blit(flip, flop, this.mMaterial, 12);
         this.aoBuffer.Blit(flop, flip, this.mMaterial, 13);
-        this.aoBuffer.Blit(flip, flop);
+        */
+        //this.aoBuffer.Blit(flip, flop);
 
-        this.aoBuffer.Blit(flop, flip, this.mMaterial, 17);
-        this.aoBuffer.Blit(flip, BuiltinRenderTextureType.CameraTarget);
+        //this.aoBuffer.Blit(flop, flip, this.mMaterial, 17);
+        //this.aoBuffer.Blit(flip, BuiltinRenderTextureType.CameraTarget);
 
         this.aoBuffer.ReleaseTemporaryRT(flip);
         this.aoBuffer.ReleaseTemporaryRT(flop);

@@ -132,7 +132,7 @@ inline float SampleZBufferLOD(float2 uv, uint lod)
     }
 }
 
-inline float2 HorizonTrace(ray ray, float gamma, uint split)
+inline float2 HorizonTrace(ray ray, float gamma)
 {
     uint power = max(_SSAORayStride, 1);
     float slope = ray.fwd.y / ray.fwd.x;
@@ -164,7 +164,7 @@ inline float2 HorizonTrace(ray ray, float gamma, uint split)
         for (uint i = 0; i < 2; i ++)
         {
             float z = SampleZBufferLOD(uv[i], lod);
-            float2 duv = EncodeInterleavedUV(uv[i], _HierachicalZBuffer0_TexelSize, split);
+            float2 duv = uv[i];
 
             float4 sp = float4(mad(duv, 2.0f, -1.0f), 1.0f, 1.0f);
             float4 vp = mul(_ClipToViewMatrix, sp);
@@ -190,9 +190,7 @@ inline float2 HorizonTrace(ray ray, float gamma, uint split)
 
 inline float ZBufferPrePass(v2f_img IN) : SV_TARGET
 {
-    uint split = max(min(exp2(_SSAOScreenDiv), 8), 1);
-    float2 uv = EncodeInterleavedUV(IN.uv, _MainTex_TexelSize, split);
-    return Linear01Depth(SampleZBuffer(uv));
+    return Linear01Depth(SampleZBuffer(IN.uv));
 }
 
 inline float ZBufferDownSample(v2f_img IN) : SV_TARGET
@@ -206,10 +204,15 @@ inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
     float depth;
 
     // interleaved uv
-    uint split = max(min(exp2(_SSAOScreenDiv), 8), 1);
-    float2 uv = EncodeInterleavedUV(IN.uv, _MainTex_TexelSize, split);
+    float2 uv = IN.uv;
 
-    depth = SampleZBufferLOD(IN.uv, 0);
+    uint2 coord = round((uv - 0.5f * _MainTex_TexelSize.xy) * _MainTex_TexelSize.zw);
+	coord.x = coord.y % 2 == _FrameCount % 2 ? 2 * coord.x : 2 * coord.x + 1;
+	uv = ((float2) coord + 0.5f) * _MainTex_TexelSize.xy;
+
+    if (uv.x > 1.0f) discard;
+
+    depth = SampleZBufferLOD(uv, 0);
     float4 spos = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
     vpos = mul(_ClipToViewMatrix, spos);
     vpos = float4(vpos.xyz * depth / vpos.w, 1.0f);
@@ -225,12 +228,11 @@ inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
 
     if (-vpos.z < _SSAOFadeDepth)
     {
-        float idx = GetInterleavedIdx(IN.uv, split);
         float3 noise = SampleNoise(uv);
 
         ray ray;
         ray.vp = vpos;
-        ray.org = IN.uv;
+        ray.org = uv;
 
         ray.len = _SSAORayLength;
         ray.len *= noise.x + 0.5f;
@@ -249,13 +251,13 @@ inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
 
             float4 spos = mul(unity_CameraProjection, mad(dir, ray.len.x, vpos));
             float2 duv = spos.xy / spos.w * 0.5f + 0.5f;
-            duv = (duv - uv) / split;
+            duv = (duv - uv);
 
             ray.fwd = +duv;
             ray.bwd = -duv;
 
             float gamma = sign(dot(vnrm, dir.xyz)) * angle;
-            float2 theta = HorizonTrace(ray, gamma, split);
+            float2 theta = HorizonTrace(ray, gamma);
 
             float bentAngle = 0.5h * (theta.x + theta.y);
             ao.xyz += vdir * cos(bentAngle) + dir.xyz * sin(bentAngle);
@@ -291,23 +293,62 @@ inline half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
     return saturate(ao);
 }
 
-inline half4 DeinterleaveAO(v2f_img IN) : SV_TARGET
+inline half4 DecodeAO(v2f_img IN) : SV_TARGET
 {
-    uint split = max(min(exp2(_SSAOScreenDiv), 8), 1);
-    float2 uv = DecodeInterleavedUV(IN.uv, _MainTex_TexelSize, split);
+    float2 uv = IN.uv;
+    uint2 coord = round((uv - 0.5f * _MainTex_TexelSize.xy) * _MainTex_TexelSize.zw);
+    if ((coord.x + coord.y) % 2 != _FrameCount % 2) return 0.0h;
+    coord.x = coord.x / 2;
+    uv = ((float2) coord + 0.5f) * _MainTex_TexelSize.xy;
+
     return SampleTexel(uv);
+}
+
+inline half4 Interpolate(v2f_img IN) : SV_TARGET
+{
+    float2 uv = IN.uv;
+    uint2 coord = round((uv - 0.5f * _MainTex_TexelSize.xy) * _MainTex_TexelSize.zw);
+
+    half4 ao = 0.0h;
+
+    if ((coord.x + coord.y) % 2 != _FrameCount % 2)
+    {
+        half4x4 tex = {
+            SampleTexel(uv, int2( 0,  1)),
+            SampleTexel(uv, int2( 1,  0)),
+            SampleTexel(uv, int2( 0, -1)),
+            SampleTexel(uv, int2(-1,  0))
+        };
+
+        ao.xyz += mad(tex[0].xyz, 2.0h, -1.0h);
+        ao.xyz += mad(tex[1].xyz, 2.0h, -1.0h);
+        ao.xyz += mad(tex[2].xyz, 2.0h, -1.0h);
+        ao.xyz += mad(tex[3].xyz, 2.0h, -1.0h);
+
+        ao.xyz = normalize(ao.xyz);
+        ao.xyz = mad(ao.xyz, 0.5h, 0.5h);
+
+        ao.w = min(min(tex[0].w, tex[1].w), min(tex[2].w, tex[3].w));
+    }
+
+    else
+    {
+        ao = SampleTexel(uv);
+    }
+
+    return ao;
 }
 
 inline half4 ApplyOcclusionToGBuffer0(v2f_img IN) : SV_TARGET
 {
-    half ao = SampleFlop(IN.uv).a;
+    half ao = SampleFlip(IN.uv).a;
     half4 color = SampleTexel(IN.uv);
     return half4(color.rgb, min(color.a, ao));
 }
 
 inline half4 ApplyOcclusionToGBuffer3(v2f_img IN) : SV_TARGET
 {
-    half ao = SampleFlop(IN.uv).a;
+    half ao = SampleFlip(IN.uv).a;
     half4 color = SampleTexel(IN.uv);
     return half4(color.rgb * ao, color.a);
 }
@@ -327,7 +368,7 @@ inline half4 ApplySpecularOcclusion(v2f_img IN) : SV_TARGET
     half3 wnrm = SampleGBuffer2(IN.uv).xyz;
     wnrm = normalize(mad(wnrm, 2.0f, -1.0f));
 
-    half4 ao = SampleFlop(IN.uv);
+    half4 ao = SampleFlip(IN.uv);
 
     half roughness = saturate(1.0h - SampleGBuffer1(IN.uv).w);
     roughness *= roughness;

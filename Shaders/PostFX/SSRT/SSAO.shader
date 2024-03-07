@@ -131,7 +131,16 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
         Pass
         {
             CGPROGRAM
-            #pragma fragment DeinterleaveAO
+            #pragma fragment DecodeAO
+            #include "SSAO.cginc"
+            ENDCG
+        }
+
+        // pass 11 : bilinear interpolation
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment Interpolate
             #include "SSAO.cginc"
             ENDCG
         }
@@ -140,7 +149,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
         // 
         //
 
-        // pass 11 : spatio denoiser
+        // pass 12 : spatio denoiser
         Pass
         {
             CGPROGRAM
@@ -150,22 +159,12 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 12 : spatio denoiser
-        Pass
-        {
-            CGPROGRAM
-            #pragma fragment SpatialDenoiser
-            #define KERNEL_STEP 2
-            #include "SSAO.cginc"
-            ENDCG
-        }
-
         // pass 13 : spatio denoiser
         Pass
         {
             CGPROGRAM
             #pragma fragment SpatialDenoiser
-            #define KERNEL_STEP 4
+            #define KERNEL_STEP 2
             #include "SSAO.cginc"
             ENDCG
         }

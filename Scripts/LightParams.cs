@@ -6,76 +6,153 @@ using UnityEngine.Rendering;
 public class LightParams : MonoBehaviour
 {
     private Light mLight;
+    private Material mMaterial;
     private CommandBuffer mBuffer;
+    private CommandBuffer nBuffer;
 
-    public int quality;
-    public float searchRadius;
-    public float lightRadius;
-    public float minRadius;
+    public Shader mShader;
+    public Camera mCamera;
 
-    public Texture2D blueNoise;
+    public Matrix4x4 WorldToView;
+    public Matrix4x4 ViewToWorld;
+
+    public Matrix4x4 ViewToClip;
+    public Matrix4x4 ClipToView;
+
+    private int lightType;
 
     public void OnEnable()
     {
         this.mLight = GetComponent<Light>();
+        this.mMaterial = new Material(mShader);
 
-        if (this.mLight.type != LightType.Point)
+        switch(this.mLight.type)
         {
-            this.SetupCommandBuffer();
+            case LightType.Point:
+                lightType = 0;
+                this.mMaterial.EnableKeyword("POINT");
+                break;
+            
+            case LightType.Spot:
+                lightType = 1;
+                this.mMaterial.EnableKeyword("SPOT");
+                break;
+
+            case LightType.Directional:
+                lightType = 2;
+                this.mMaterial.EnableKeyword("DIRECTIONAL");
+                break;
+
+            default:
+                lightType = 0;
+                break;
         }
+
+        this.SetupCommandBuffer();
     }
 
     public void OnDisable()
     {
-        if (this.mLight.type != LightType.Point)
-        {
-            this.RemoveCommandBuffer();
-        }
-
-        this.mLight = null;
+        this.RemoveCommandBuffer();
     }
 
     public void Update()
     {
-        switch (this.mLight.type)
+        this.WorldToView = mCamera.worldToCameraMatrix;
+        this.ViewToWorld = this.WorldToView.inverse;
+        this.ViewToClip = mCamera.projectionMatrix;
+        this.ClipToView = this.ViewToClip.inverse;
+
+        Shader.SetGlobalMatrix("_WorldToViewMatrix", this.WorldToView);
+        Shader.SetGlobalMatrix("_ViewToWorldMatrix", this.ViewToWorld);
+        Shader.SetGlobalMatrix("_ViewToClipMatrix", this.ViewToClip);
+        Shader.SetGlobalMatrix("_ClipToViewMatrix", this.ClipToView);
+
+        if (this.mLight)
         {
-            case LightType.Point:
-                Shader.SetGlobalVector("_PointLightPenumbra", new Vector3(this.searchRadius, this.lightRadius, this.minRadius));
-                break;
-
-            case LightType.Spot:
-                Shader.SetGlobalVector("_SpotLightPenumbra", new Vector3(this.searchRadius, this.lightRadius, this.minRadius));
-                break;
-
-            case LightType.Directional:
-                Shader.SetGlobalVector("_DirLightPenumbra", new Vector3(this.searchRadius, this.lightRadius, this.minRadius));
-                break;
-
-            default:
-                break;
+            if (this.mLight.type == LightType.Spot)
+            {
+                UpdateProjectionMatrix();
+            }
         }
+    }
 
-        Shader.SetGlobalInt("_SoftShadowNumIter", quality);
-        Shader.SetGlobalTexture("_BlueNoise", blueNoise);
+    private void UpdateProjectionMatrix()
+    {
+        Matrix4x4 LightClip = Matrix4x4.TRS(new Vector3(0.5f, 0.5f, 0.5f), Quaternion.identity, new Vector3(0.5f, 0.5f, 0.5f));
+        Matrix4x4 LightView = Matrix4x4.TRS(this.mLight.transform.position, this.mLight.transform.rotation, Vector3.one).inverse;
+        Matrix4x4 LightProj = Matrix4x4.Perspective(this.mLight.spotAngle, 1, this.mLight.shadowNearPlane, this.mLight.range);
+
+        Matrix4x4 m = LightClip * LightProj;
+
+        m[0, 2] *= -1;
+        m[1, 2] *= -1;
+        m[2, 2] *= -1;
+        m[3, 2] *= -1;
+
+        if (this.mMaterial)
+        {
+            this.mMaterial.SetMatrix("_ShadowProjMatrix", m * LightView);
+        }
     }
 
     private void SetupCommandBuffer()
     {
         RenderTargetIdentifier source = BuiltinRenderTextureType.CurrentActive;
-        int target = Shader.PropertyToID("_CustomShadowMap");
 
-        this.mBuffer = new CommandBuffer() { name = "HSSSS.SMDispatcher" };
+        int flipSM = Shader.PropertyToID("_TemporaryFlipShadowMap");
+        int flopSM = Shader.PropertyToID("_TemporaryFlopShadowMap");
+
+        int target = Shader.PropertyToID("_ScreenSpaceShadowMap");
+
+        this.mBuffer = new CommandBuffer() { name = "HSSSS.ScreenSpaceShadow" };
         this.mBuffer.SetShadowSamplingMode(source, ShadowSamplingMode.RawDepth);
-        this.mBuffer.GetTemporaryRT(target, 4096, 4096, 0, FilterMode.Point, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
-        this.mBuffer.Blit(source, target);
+        this.mBuffer.GetTemporaryRT(target, -1, -1, 0, FilterMode.Point, RenderTextureFormat.RHalf, RenderTextureReadWrite.Linear);
+        this.mBuffer.GetTemporaryRT(flipSM, -1, -1, 0, FilterMode.Point, RenderTextureFormat.RHalf, RenderTextureReadWrite.Linear);
+        this.mBuffer.GetTemporaryRT(flopSM, -1, -1, 0, FilterMode.Point, RenderTextureFormat.RHalf, RenderTextureReadWrite.Linear);
+
+        this.mBuffer.Blit(source, flipSM, this.mMaterial, 0);
+        this.mBuffer.Blit(flipSM, flopSM, this.mMaterial, 3);
+        this.mBuffer.Blit(flopSM, flipSM, this.mMaterial, 4);
+        this.mBuffer.Blit(flipSM, target);
+
         this.mBuffer.ReleaseTemporaryRT(target);
+        this.mBuffer.ReleaseTemporaryRT(flipSM);
+        this.mBuffer.ReleaseTemporaryRT(flopSM);
         
-        this.mLight.AddCommandBuffer(LightEvent.AfterShadowMap, this.mBuffer);
+        if (this.lightType == 2)
+        {
+            int temp = Shader.PropertyToID("_CascadeShadowMap");
+            this.nBuffer = new CommandBuffer() { name = "HSSSS.BlitShadowMap"};
+            this.nBuffer.SetShadowSamplingMode(source, ShadowSamplingMode.RawDepth);
+            this.nBuffer.GetTemporaryRT(temp, 4096, 4096, 0, FilterMode.Point, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
+            this.nBuffer.Blit(source, temp);
+            this.nBuffer.ReleaseTemporaryRT(temp);
+
+            this.mLight.AddCommandBuffer(LightEvent.AfterShadowMap, this.nBuffer);
+            this.mLight.AddCommandBuffer(LightEvent.BeforeScreenspaceMask, this.mBuffer);
+        }
+
+        else
+        {
+            this.mLight.AddCommandBuffer(LightEvent.AfterShadowMap, this.mBuffer);
+        }
     }
 
     private void RemoveCommandBuffer()
     {
-        this.mLight.RemoveCommandBuffer(LightEvent.AfterShadowMap, this.mBuffer);
+        if (this.lightType == 2)
+        {
+            this.mLight.RemoveCommandBuffer(LightEvent.AfterShadowMap, this.nBuffer);
+            this.mLight.RemoveCommandBuffer(LightEvent.BeforeScreenspaceMask, this.mBuffer);
+        }
+
+        else
+        {
+            this.mLight.RemoveCommandBuffer(LightEvent.AfterShadowMap, this.mBuffer);
+        }
+        
         this.mBuffer = null;
+        this.mMaterial = null;
     }
 }

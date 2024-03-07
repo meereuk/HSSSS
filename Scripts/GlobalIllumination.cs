@@ -173,6 +173,7 @@ public class GlobalIllumination : MonoBehaviour
         this.mBuffer.SetRenderTarget(flopMRT, BuiltinRenderTextureType.CameraTarget);
         this.mBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 6);
 
+/*
         // spatio filter
         this.mBuffer.SetRenderTarget(flipMRT, BuiltinRenderTextureType.CameraTarget);
         this.mBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 7);
@@ -182,7 +183,7 @@ public class GlobalIllumination : MonoBehaviour
         this.mBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 9);
         this.mBuffer.SetRenderTarget(flopMRT, BuiltinRenderTextureType.CameraTarget);
         this.mBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 12);
-
+*/
         // store normal and history
         this.mBuffer.SetRenderTarget(hist, BuiltinRenderTextureType.CameraTarget);
         this.mBuffer.DrawMesh(quad, Matrix4x4.identity, this.mMaterial, 0, 10);

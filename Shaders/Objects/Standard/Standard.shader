@@ -75,6 +75,7 @@ Shader "HSSSS/Standard/Standard"
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_FORWARDBASE
+            #define _WORKFLOW_SPECULAR
         
             #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
@@ -100,6 +101,7 @@ Shader "HSSSS/Standard/Standard"
             #pragma fragment aFragmentShader
 
             #define UNITY_PASS_FORWARDADD
+            #define _WORKFLOW_SPECULAR
 
             #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
@@ -145,6 +147,7 @@ Shader "HSSSS/Standard/Standard"
             #pragma fragment aFragmentShader
 
             #define UNITY_PASS_DEFERRED
+            #define _WORKFLOW_SPECULAR
 
             #include "Assets/HSSSS/Definitions/Core.cginc"
             #include "Assets/HSSSS/Passes/Deferred.cginc"

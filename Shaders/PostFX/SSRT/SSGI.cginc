@@ -1,6 +1,8 @@
 #ifndef HSSSS_SSGI_CGINC
 #define HSSSS_SSGI_CGINC
 
+#pragma exclude_renderers gles
+
 #include "Common.cginc"
 #include "MRT.cginc"
 #include "Assets/HSSSS/Framework/Brdf.cginc"
@@ -107,6 +109,8 @@ struct ray
     // specular properties
     half3 f0;
     half3 a;
+    // initial tangents
+    float2 tan;
 };
 
 inline float4 SampleIrradianceBufferLOD(float2 uv, uint lod)
@@ -250,6 +254,13 @@ inline half DBlinn(half a2, half NdotH)
     return clampInfinite(pow(NdotH, 2.0h / a2 - 2.0h) / a2);
 }
 
+inline float2 GetInitialTangent(float3 nrm, float3 dir)
+{
+    float3 vec = normalize(dir - nrm * dot(dir, nrm));
+    float tangent = vec.z / length(vec.xy);
+    return float2(tangent, -tangent) - 2.0h;
+}
+
 inline void HorizonTrace(ray ray, out half3 diffuse, out half3 specular)
 {
     uint power = max(1, _SSGIStepPower);
@@ -265,13 +276,11 @@ inline void HorizonTrace(ray ray, out half3 diffuse, out half3 specular)
         min(length(_HierachicalIrradianceBuffer4_TexelSize.xx * float2(1.0f, slope)), length(_HierachicalIrradianceBuffer4_TexelSize.yy * float2(1.0f / slope, 1.0f))) / length(duv)
     };
 
-    //minStr /= length(duv);
-
     diffuse = 0.0h;
     specular = 0.0h;
 
     float3 vdir = {0.0f, 0.0f, 1.0f};
-    float2x2 theta = {{-10.0f, -10.0f}, {-10.0f, -10.0f}};
+    float2 theta = ray.tan;
     float str = 0.0f;
     float div = 0.0f;
 
@@ -299,7 +308,8 @@ inline void HorizonTrace(ray ray, out half3 diffuse, out half3 specular)
                 float4 vp = mul(_ClipToViewMatrix, sp);
                 vp = float4(vp.xyz * ir.w / vp.w, 1.0f);
 
-                float3 vn = cross(ddx_fine(vp.xyz), ddy_fine(vp.xyz));
+                // sampling point normal (approx.)
+                float3 vn = cross(ddy_fine(vp.xyz), ddx_fine(vp.xyz));
                 vn = normalize(vn);
 
                 half3 ldir = normalize(vp.xyz - ray.vp.xyz);
@@ -307,21 +317,20 @@ inline void HorizonTrace(ray ray, out half3 diffuse, out half3 specular)
                 half ndotl = saturate(dot(ray.vn, ldir));
                 half ndoth = saturate(dot(ray.vn, hdir));
                 half ldoth = saturate(dot(ldir, hdir));
-                half vdotn = vn.z;
 
-                half dz = (vp.z - ray.vp.z - 0.005f) / distance(vp.xy, ray.vp.xy);
-
-                float threshold = FastSqrt(max(0.0f, ray.len * ray.len - dot(vp.xy - ray.vp.xy, vp.xy - ray.vp.xy)));
-
-                ir.xyz = ir.xyz * ndotl * step(theta[i].x, dz) * ds * ds;
-                ir.xyz = ir.xyz * step(abs(vp.z - ray.vp.z), threshold);
-
+                // ambient light intensity
+                ir.xyz = ir.xyz * ndotl * ds * ds;
                 ir.xyz /= max(abs(vn.z), 0.1h);
 
-                diffuse += ir.xyz;
-                specular += ir.xyz * FSchlick(ray.f0, ldoth) * DBlinn(ray.a, ndoth) * 0.25h;
+                // shadow
+                half dz = (vp.z - ray.vp.z - lerp(0.002h, 0.000h, str)) / distance(vp.xy, ray.vp.xy);
+                ir.xyz = ir.xyz * smoothstep(-0.01h * str, 0.01h * str, dz - theta[i]);
+                theta[i] = max(theta[i], dz);
 
-                theta[i].x = max(theta[i].x, dz);
+                // lambertian diffuse 
+                diffuse += ir.xyz;
+                // blinn-phong specular
+                specular += ir.xyz * FSchlick(ray.f0, ldoth) * DBlinn(ray.a, ndoth) * 0.25h;
 
                 div += ds * ds;
             }
@@ -414,8 +423,18 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
 
         for (float iter = 0.5h; iter < _SSGINumSample; iter += 1.0f)
         {
+            float2x2 rotation = {
+                { cos((iter - offset) * slice), -sin((iter - offset) * slice) },
+                { sin((iter - offset) * slice),  cos((iter - offset) * slice) }
+            };
+
             float4 dir = 0.0h;
-            sincos((iter - offset) * slice, dir.y, dir.x);
+
+            dir.xy = normalize(ray.vn.xy);
+            dir.xy = mul(rotation, dir.xy);
+            //sincos((iter - offset) * slice, dir.y, dir.x);
+
+            ray.tan = GetInitialTangent(ray.vn, dir);
 
             float2x4 vp = {
                 mad( dir, ray.len, ray.vp),
@@ -546,10 +565,12 @@ void TemporalFilter(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_T
     normalCurrent = normalize(mad(normalCurrent, 2.0h, -1.0h));
     normalHistory = normalize(mad(normalHistory, 2.0h, -1.0h));
 
-    half weight = saturate(_SSGIMixFactor * smoothstep(0.96h, 1.00h, dot(normalCurrent, normalHistory)));
+    half weight = _SSGIMixFactor * smoothstep(0.96h, 1.00h, dot(normalCurrent, normalHistory));
 
-    mrt0 = lerp(diffuseCurrent, diffuseHistory, weight * 0.99h);
-    mrt1 = lerp(specularCurrent, specularHistory, weight * 0.99h);
+    weight = clamp(weight, 0.0h, 0.99h);
+
+    mrt0 = lerp(diffuseCurrent,  diffuseHistory,  weight);
+    mrt1 = lerp(specularCurrent, specularHistory, weight);
 }
 
 inline half4 CollectGI(v2f_img IN) : SV_TARGET
