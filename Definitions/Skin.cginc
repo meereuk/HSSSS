@@ -2,7 +2,6 @@
 #define HSSSS_DEFINITIONS_SKIN
 
 #define _SKINSPECULAR_ON
-#define _MICRODETAILS_ON
 #define A_SCREEN_UV_ON
 
 #include "Assets/HSSSS/Lighting/StandardSkin.cginc"

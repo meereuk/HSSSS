@@ -42,8 +42,8 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             CGPROGRAM
             #pragma vertex vert_mrt
             #pragma fragment IndirectDiffuse
-            #define _SSGINumStride 12
-            #define _SSGINumSample 3
+            #define _SSGINumStride 4
+            #define _SSGINumSample 4
             #include "SSGI.cginc"
             ENDCG
         }
@@ -54,8 +54,8 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             CGPROGRAM
             #pragma vertex vert_mrt
             #pragma fragment IndirectDiffuse
-            #define _SSGINumStride 16
-            #define _SSGINumSample 3
+            #define _SSGINumStride 4
+            #define _SSGINumSample 4
             #include "SSGI.cginc"
             ENDCG
         }
@@ -66,7 +66,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             CGPROGRAM
             #pragma vertex vert_mrt
             #pragma fragment IndirectDiffuse
-            #define _SSGINumStride 12
+            #define _SSGINumStride 8
             #define _SSGINumSample 4
             #include "SSGI.cginc"
             ENDCG
@@ -78,7 +78,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             CGPROGRAM
             #pragma vertex vert_mrt
             #pragma fragment IndirectDiffuse
-            #define _SSGINumStride 16
+            #define _SSGINumStride 8
             #define _SSGINumSample 4
             #include "SSGI.cginc"
             ENDCG

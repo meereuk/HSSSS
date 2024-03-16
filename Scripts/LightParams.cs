@@ -13,11 +13,11 @@ public class LightParams : MonoBehaviour
     public Shader mShader;
     public Camera mCamera;
 
-    public Matrix4x4 WorldToView;
-    public Matrix4x4 ViewToWorld;
+    private Matrix4x4 WorldToView;
+    private Matrix4x4 ViewToWorld;
 
-    public Matrix4x4 ViewToClip;
-    public Matrix4x4 ClipToView;
+    private Matrix4x4 ViewToClip;
+    private Matrix4x4 ClipToView;
 
     private int lightType;
 
@@ -62,6 +62,8 @@ public class LightParams : MonoBehaviour
         this.ViewToWorld = this.WorldToView.inverse;
         this.ViewToClip = mCamera.projectionMatrix;
         this.ClipToView = this.ViewToClip.inverse;
+
+        this.mMaterial.SetVector("_PointLightPenumbra", new Vector3(4.0f, 8.0f, 32.0f));
 
         Shader.SetGlobalMatrix("_WorldToViewMatrix", this.WorldToView);
         Shader.SetGlobalMatrix("_ViewToWorldMatrix", this.ViewToWorld);
@@ -111,9 +113,9 @@ public class LightParams : MonoBehaviour
         this.mBuffer.GetTemporaryRT(flipSM, -1, -1, 0, FilterMode.Point, RenderTextureFormat.RHalf, RenderTextureReadWrite.Linear);
         this.mBuffer.GetTemporaryRT(flopSM, -1, -1, 0, FilterMode.Point, RenderTextureFormat.RHalf, RenderTextureReadWrite.Linear);
 
-        this.mBuffer.Blit(source, flipSM, this.mMaterial, 0);
-        this.mBuffer.Blit(flipSM, flopSM, this.mMaterial, 3);
-        this.mBuffer.Blit(flopSM, flipSM, this.mMaterial, 4);
+        this.mBuffer.Blit(source, flipSM, this.mMaterial, 3);
+        //this.mBuffer.Blit(flipSM, flopSM, this.mMaterial, 3);
+        //this.mBuffer.Blit(flopSM, flipSM, this.mMaterial, 4);
         this.mBuffer.Blit(flipSM, target);
 
         this.mBuffer.ReleaseTemporaryRT(target);

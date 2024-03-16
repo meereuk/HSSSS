@@ -34,8 +34,6 @@ Shader "Hidden/HSSSS/Deferred Shading"
             #pragma multi_compile ___ _BAKED_THICKNESS
             // soft shadows options
             #pragma multi_compile ___ _PCF_ON
-            // contact shadow
-            //#pragma multi_compile ___ _SSCS_ON
 
             #include "Assets/HSSSS/Lighting/StandardSkin.cginc"
             #include "Assets/HSSSS/Framework/Deferred.cginc"
@@ -45,6 +43,10 @@ Shader "Hidden/HSSSS/Deferred Shading"
                 uniform RWTexture2D<float> _SpecularBufferG : register(u2);
                 uniform RWTexture2D<float> _SpecularBufferB : register(u3);
             #endif
+
+            uniform float4 _CameraGBufferTexture3_TexelSize;
+
+            #define _TexelSize _CameraGBufferTexture3_TexelSize
 
             // RGB to YCoCg color space
             static const half3x3 EncodeRGB = {
@@ -74,7 +76,8 @@ Shader "Hidden/HSSSS/Deferred Shading"
 
                     else
                     {
-                        uint2 coord = UnityPixelSnap(i.pos);
+                        //uint2 coord = UnityPixelSnap(i.pos);
+                        uint2 coord = round((s.screenUv - 0.5f * _TexelSize.xy) * _TexelSize.zw);
 
                         _SpecularBufferR[coord] += specular.r;
                         _SpecularBufferG[coord] += specular.g;

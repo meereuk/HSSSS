@@ -69,7 +69,7 @@ uniform SamplerState sampler_SSGIFlopSpecularBuffer;
 uniform float4 _SSGIFlopSpecularBuffer_TexelSize;
 
 #ifndef _SSGINumSample
-    #define _SSGINumSample 4
+    #define _SSGINumSample 2
 #endif
 
 #ifndef _SSGINumStride
@@ -397,7 +397,7 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
     ray.vp = SampleViewPosition(IN.uv);
     ray.vn = SampleViewNormal(IN.uv);
 
-    ray.len = _SSGIRayLength * (noise.x + 0.5f);
+    ray.len = _SSGIRayLength * mad(noise.x, 0.8f, 0.6f);
     ray.f0 = gbuffer1.xyz;
 
     // beckmann roughness to bllinn-phong exponent
@@ -408,65 +408,95 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
 
     ray.t = (noise.y + 0.5f) *_SSGIMeanDepth;
 
-    if (-ray.vp.z > _SSGIFadeDepth)
+    if (-ray.vp.z > _SSGIFadeDepth) discard;
+
+    half3 diffuse = 0.0h;
+    half3 specular = 0.0h;
+
+    float offset = noise.z;
+    float slice = FULL_PI / _SSGINumSample;
+
+    for (float iter = 0.01f; iter < 128; iter += 1.0f)
     {
-        return;
+        float phi = 2.4f * (iter + noise.z - 0.01f);
+        float radius = ray.len * sqrt((iter + 0.49f) / 128.0f);
+
+        float4 pdir = float4(cos(phi), sin(phi), 0.0f, 0.0f);
+
+        float3 proj = dot(ray.vn, vdir) * vdir + dot(ray.vn, pdir.xyz) * pdir.xyz;
+        float gamma = clamp(acos(normalize(proj).z) * sign(dot(proj, pdir.xyz)), -HALF_PI, HALF_PI);
+
+        float4 vp = ray.vp + radius * pdir;
+        float4 sp = mul(unity_CameraProjection, float4(vp.xyz, 1.0f));
+        float2 uv = sp.xy / sp.w * 0.5f + 0.5f;
+
+        float4 ir = SampleIrradianceBufferLOD(uv, 3);
+
+        sp = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
+        vp = mul(_ClipToViewMatrix, sp);
+        vp = float4(vp.xyz * ir.w / vp.w, 1.0f);
+
+        float r = distance(ray.vp.xyz, vp.xyz);
+        r = min(1.0f, 1 / r);
+        r *= r;
+
+        half3 ldir = normalize(vp.xyz - ray.vp.xyz);
+        half3 hdir = normalize(ldir + vdir);
+        half ndotl = saturate(dot(ray.vn, ldir));
+        half ndoth = saturate(dot(ray.vn, hdir));
+        half ldoth = saturate(dot(ldir, hdir));
+
+        ir.xyz *= ndotl;
+        ir.xyz *= r;
+
+        ir.xyz *= ray.len * ray.len;
+
+        diffuse += ir.xyz / 64.0f;
+        specular += ir.xyz * FSchlick(ray.f0, ldoth) * DBlinn(ray.a, ndoth) * 0.25h / 64.0f;
     }
 
-    else
+/*
+    for (float iter = 0.5f; iter < _SSGINumSample; iter += 1.0f)
     {
-        half3 diffuse = 0.0h;
-        half3 specular = 0.0h;
+        float4 pdir = 0.0f;
+        sincos((iter - offset) * slice, pdir.y, pdir.x);
 
-        float slice = FULL_PI / _SSGINumSample;
-        float offset = noise.z;
+        float3 proj = dot(ray.vn, vdir) * vdir + dot(ray.vn, pdir.xyz) * pdir.xyz;
+        float gamma = clamp(acos(normalize(proj).z) * sign(dot(proj, pdir.xyz)), -HALF_PI, HALF_PI);
 
-        for (float iter = 0.5h; iter < _SSGINumSample; iter += 1.0f)
-        {
-            float2x2 rotation = {
-                { cos((iter - offset) * slice), -sin((iter - offset) * slice) },
-                { sin((iter - offset) * slice),  cos((iter - offset) * slice) }
-            };
+        ray.tan = tan(float2(-gamma, gamma));
 
-            float4 dir = 0.0h;
+        float2x4 vp = {
+            mad( pdir, ray.len, ray.vp),
+            mad(-pdir, ray.len, ray.vp)
+        };
 
-            dir.xy = normalize(ray.vn.xy);
-            dir.xy = mul(rotation, dir.xy);
-            //sincos((iter - offset) * slice, dir.y, dir.x);
+        float2x4 sp = {
+            mul(unity_CameraProjection, vp[0]),
+            mul(unity_CameraProjection, vp[1])
+        };
 
-            ray.tan = GetInitialTangent(ray.vn, dir);
+        ray.uv[1] = sp[0].xy / sp[0].w * 0.5f + 0.5f;
+        ray.uv[2] = sp[1].xy / sp[1].w * 0.5f + 0.5f;
 
-            float2x4 vp = {
-                mad( dir, ray.len, ray.vp),
-                mad(-dir, ray.len, ray.vp)
-            };
+        half3 d;
+        half3 s;
 
-            float2x4 sp = {
-                mul(unity_CameraProjection, vp[0]),
-                mul(unity_CameraProjection, vp[1])
-            };
+        HorizonTrace(ray, d, s);
 
-            ray.uv[1] = sp[0].xy / sp[0].w * 0.5f + 0.5f;
-            ray.uv[2] = sp[1].xy / sp[1].w * 0.5f + 0.5f;
-
-            half3 d;
-            half3 s;
-
-            HorizonTrace(ray, d, s);
-
-            diffuse += d;
-            specular += s;
-        }
-
-        diffuse = clamp(diffuse / _SSGINumSample, 0.0h, 8.0h);
-        specular = clamp(specular / _SSGINumSample, 0.0h, 8.0h);
-
-        mrt0 = half4(diffuse, GetLuminance(diffuse));
-        mrt1 = half4(specular, GetLuminance(specular));
-
-        mrt0.w *= mrt0.w;
-        mrt1.w *= mrt1.w;
+        diffuse += d;
+        specular += s;
     }
+*/
+
+    //diffuse = clamp(diffuse / _SSGINumSample, 0.0h, 8.0h);
+    //specular = clamp(specular / _SSGINumSample, 0.0h, 8.0h);
+
+    mrt0 = half4(diffuse, GetLuminance(diffuse));
+    mrt1 = half4(specular, GetLuminance(specular));
+
+    mrt0.w *= mrt0.w;
+    mrt1.w *= mrt1.w;
 }
 
 void BilateralBlur(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET1)

@@ -14,7 +14,8 @@ uniform sampler3D _BlueNoise;
 
 #ifndef SHADOWS_OFF
 uniform uint _FrameCount;
-uniform uint _SparseRendering;
+uniform bool _SparseRendering;
+uniform bool _DirectOcclusion;
 
 uniform float _SlopeBiasScale;
 uniform float3 _DirLightPenumbra;
@@ -38,6 +39,8 @@ uniform float4x4 _ShadowProjMatrix;
 	uniform SamplerState sampler_MainTex;
 #endif
 
+uniform half _SSDOLightApatureScale;
+uniform sampler2D _SSDOBentNormalTexture;
 uniform sampler2D _CameraGBufferTexture2;
 uniform float4 _CameraDepthTexture_TexelSize;
 #define TexelSize _CameraDepthTexture_TexelSize
@@ -104,7 +107,7 @@ inline void SampleCoordinate(float2 uv, out float4 wpos, out float depth)
 }
 
 #if defined(POINT) || defined(SPOT) || defined (DIRECTIONAL)
-half2 SamplePCFShadows(float3 vec, float2 uv, float depth, float ndotl)
+half2 SamplePCFShadows(float3 vec, float2 uv, float depth, float3 nrm, float ndotl)
 {
 	// initialize shadow coordinate and depth
 	#if defined(POINT)
@@ -118,9 +121,10 @@ half2 SamplePCFShadows(float3 vec, float2 uv, float depth, float ndotl)
 
 	// slope-based bias
 	#if defined(POINT) || defined(SPOT)
-		float bias = saturate(1.0f - 0.01f * _SlopeBiasScale);
-		pixelDepth = pixelDepth * lerp(bias, 1.0f, ndotl);
+		float bias = 0.001f * _SlopeBiasScale;
+		//pixelDepth = pixelDepth - bias;
 	#endif
+
 
 	// penumbra sliders
 	// x: blocker search radius (in cm)
@@ -142,6 +146,8 @@ half2 SamplePCFShadows(float3 vec, float2 uv, float depth, float ndotl)
 	#elif defined(DIRECTIONAL)
 		float3x3 tbn = GramSchmidtMatrix(uv, _LightDir.xyz);
 	#endif
+
+	tbn = GramSchmidtMatrix(uv, nrm);
 
 	///////////////////////////////////
 	// percentage-closer soft shadow //
@@ -205,10 +211,13 @@ half2 SamplePCFShadows(float3 vec, float2 uv, float depth, float ndotl)
 		float3 sampleCoord = mad(disc, penumbra, vec.xyz);
 
 		#if defined(POINT)
-			shadow.r += step(pixelDepth, texCUBE(_MainTex, sampleCoord).x);
+			pixelDepth = length(sampleCoord) * _LightPositionRange.w;
+			shadow.r += step(pixelDepth - bias, texCUBE(_MainTex, sampleCoord).x);
 		#elif defined(SPOT)
-			shadow.r += step(pixelDepth, tex2D(_MainTex, GetShadowCoordinate(sampleCoord).xy).x);
+			pixelDepth = GetShadowCoordinate(sampleCoord).z;
+			shadow.r += step(pixelDepth - bias, tex2D(_MainTex, GetShadowCoordinate(sampleCoord).xy).x);
 		#elif defined(DIRECTIONAL)
+			pixelDepth = GetShadowCoordinate(sampleCoord, cascade.x).z;
 			shadow.r += step(pixelDepth.x, tex2D(_CascadeShadowMap, GetShadowCoordinate(sampleCoord, cascade.x).xy).x);
 		#endif
 	}
@@ -248,14 +257,33 @@ half frag_shadow (v2f_img i) : SV_TARGET
 	half shadow = 0.0f;
 
 	#if defined(POINT)
-		shadow = SamplePCFShadows(wpos.xyz - _LightPos.xyz, uv, depth, ndotl);
+		shadow = SamplePCFShadows(wpos.xyz - _LightPos.xyz, uv, depth, normal, ndotl);
 	#elif defined(SPOT) || defined(DIRECTIONAL)
-		shadow = SamplePCFShadows(wpos.xyz, uv, depth, ndotl);
+		shadow = SamplePCFShadows(wpos.xyz, uv, depth, normal, ndotl);
 	#endif
 
-	//float fadeDist = UnityDeferredComputeFadeDistance(wpos.xyz, depth);
-	//float fade = fadeDist * _LightShadowData.z + _LightShadowData.w;
-	//fade = saturate(fade);
+	if (_DirectOcclusion)
+    {
+        half4 ao = tex2D(_SSDOBentNormalTexture, uv);
+        // bent normal
+        ao.xyz = normalize(mad(ao.xyz, 2.0h, -1.0h));
+
+        half4 angle;
+
+        // light apature
+        angle.x = atan(_SSDOLightApatureScale);
+        // occlusion apature
+        angle.y = acos(sqrt(1.0h - ao.w));
+        // absolute angle difference
+        angle.z = abs(angle.x - angle.y);
+        // angle between bentnormal and reflection vector
+        angle.w = acos(dot(ao.xyz, normalize(_LightPos.xyz - wpos.xyz)));
+
+        half intersection = smoothstep(0.0h, 1.0h, 1.0h - saturate((angle.w - angle.z) / (angle.x + angle.y - angle.z)));
+        half occlusion = lerp(0.0h, intersection, saturate((angle.y - 0.1h) * 5.0h));
+
+		shadow = min(shadow, occlusion);
+    }
 	return shadow;
 #endif
 }

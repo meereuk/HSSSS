@@ -53,6 +53,127 @@ Shader "HSSSS/Human/Skin"
         _EdgeLength ("EdgeLength", Range(2, 50)) = 2
     }
 
+    // tessellation + microdetails
+    SubShader
+    {
+        CGINCLUDE
+            #define A_TESSELLATION_ON
+            #define _TESSELLATIONMODE_COMBINED
+        ENDCG
+
+        Tags
+        {
+            "Queue" = "Geometry" 
+            "RenderType" = "Opaque"
+            "IgnoreProjector" = "True"
+            "PerformanceChecks" = "False"
+        }
+
+        LOD 450
+
+        Pass
+        {
+            Name "FORWARD" 
+            Tags { "LightMode" = "ForwardBase" }
+
+            CGPROGRAM
+            #pragma target 5.0
+            #pragma only_renderers d3d11
+        
+            #pragma multi_compile_fwdbase
+            #pragma multi_compile_fog
+
+            #pragma hull aHullShader
+            #pragma vertex aVertexTessellationShader
+            #pragma domain aDomainShader
+            #pragma fragment aFragmentShader
+        
+            #define UNITY_PASS_FORWARDBASE
+        
+            #include "Assets/HSSSS/Definitions/Skin.cginc"
+            #include "Assets/HSSSS/Passes/ForwardBase.cginc"
+            ENDCG
+        }
+    
+        Pass
+        {
+            Name "FORWARD_DELTA"
+            Tags { "LightMode" = "ForwardAdd" }
+        
+            Blend One One
+            ZWrite Off
+
+            CGPROGRAM
+            #pragma target 5.0
+            #pragma only_renderers d3d11
+        
+            #pragma multi_compile_fwdadd_fullshadows
+            #pragma multi_compile_fog
+
+            #pragma hull aHullShader
+            #pragma vertex aVertexTessellationShader
+            #pragma domain aDomainShader
+            #pragma fragment aFragmentShader
+
+            #define UNITY_PASS_FORWARDADD
+
+            #include "Assets/HSSSS/Definitions/Skin.cginc"
+            #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
+            ENDCG
+        }
+    
+        Pass
+        {
+            Name "SHADOWCASTER"
+            Tags { "LightMode" = "ShadowCaster" }
+        
+            CGPROGRAM
+            #pragma target 5.0
+            #pragma only_renderers d3d11
+        
+            #pragma multi_compile_shadowcaster
+
+            #pragma hull aHullShader
+            #pragma vertex aVertexTessellationShader
+            #pragma domain aDomainShader
+            #pragma fragment aFragmentShader
+        
+            #define UNITY_PASS_SHADOWCASTER
+        
+            #include "Assets/HSSSS/Definitions/Skin.cginc"
+            #include "Assets/HSSSS/Passes/Shadow.cginc"
+            ENDCG
+        }
+    
+        Pass
+        {
+            Name "DEFERRED"
+            Tags { "LightMode" = "Deferred" }
+
+            CGPROGRAM
+            #pragma target 5.0
+            #pragma only_renderers d3d11
+        
+            #pragma multi_compile ___ UNITY_HDR_ON
+            #pragma multi_compile LIGHTMAP_OFF LIGHTMAP_ON
+            #pragma multi_compile DIRLIGHTMAP_OFF DIRLIGHTMAP_COMBINED DIRLIGHTMAP_SEPARATE
+            #pragma multi_compile DYNAMICLIGHTMAP_OFF DYNAMICLIGHTMAP_ON
+        
+            #pragma hull aHullShader
+            #pragma vertex aVertexTessellationShader
+            #pragma domain aDomainShader
+            #pragma fragment aFragmentShader
+        
+            #define UNITY_PASS_DEFERRED
+            #define _MICRODETAILS_ON
+        
+            #include "Assets/HSSSS/Definitions/Skin.cginc"
+            #include "Assets/HSSSS/Passes/Deferred.cginc"
+            ENDCG
+        }
+    }
+
+    // tessellation
     SubShader
     {
         CGINCLUDE
@@ -171,6 +292,112 @@ Shader "HSSSS/Human/Skin"
         }
     }
 
+    // microdetails
+    SubShader
+    {
+        Tags
+        {
+            "Queue" = "Geometry" 
+            "RenderType" = "Opaque"
+        }
+
+        LOD 350
+
+        Pass
+        {
+            Name "FORWARD" 
+            Tags { "LightMode" = "ForwardBase" }
+
+            CGPROGRAM
+            #pragma target 5.0
+            #pragma only_renderers d3d11
+        
+            #pragma multi_compile_fwdbase
+            #pragma multi_compile_fog
+
+            #pragma vertex aVertexShader
+            #pragma fragment aFragmentShader
+        
+            #define UNITY_PASS_FORWARDBASE
+        
+            #include "Assets/HSSSS/Definitions/Skin.cginc"
+            #include "Assets/HSSSS/Passes/ForwardBase.cginc"
+            ENDCG
+        }
+    
+        Pass
+        {
+            Name "FORWARD_DELTA"
+            Tags { "LightMode" = "ForwardAdd" }
+        
+            Blend One One
+            ZWrite Off
+
+            CGPROGRAM
+            #pragma target 5.0
+            #pragma only_renderers d3d11
+        
+            #pragma multi_compile_fwdadd_fullshadows
+            #pragma multi_compile_fog
+        
+            #pragma vertex aVertexShader
+            #pragma fragment aFragmentShader
+
+            #define UNITY_PASS_FORWARDADD
+
+            #include "Assets/HSSSS/Definitions/Skin.cginc"
+            #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
+            ENDCG
+        }
+    
+        Pass
+        {
+            Name "SHADOWCASTER"
+            Tags { "LightMode" = "ShadowCaster" }
+        
+            CGPROGRAM
+            #pragma target 5.0
+            #pragma only_renderers d3d11
+        
+            #pragma multi_compile_shadowcaster
+
+            #pragma vertex aVertexShader
+            #pragma fragment aFragmentShader
+        
+            #define UNITY_PASS_SHADOWCASTER
+        
+            #include "Assets/HSSSS/Definitions/Skin.cginc"
+            #include "Assets/HSSSS/Passes/Shadow.cginc"
+            ENDCG
+        }
+
+        Pass
+        {
+            Name "DEFERRED"
+            Tags { "LightMode" = "Deferred" }
+
+            CGPROGRAM
+            #pragma target 5.0
+            #pragma only_renderers d3d11
+
+            #pragma multi_compile ___ UNITY_HDR_ON
+            #pragma multi_compile LIGHTMAP_OFF LIGHTMAP_ON
+            #pragma multi_compile DIRLIGHTMAP_OFF DIRLIGHTMAP_COMBINED DIRLIGHTMAP_SEPARATE
+            #pragma multi_compile DYNAMICLIGHTMAP_OFF DYNAMICLIGHTMAP_ON
+
+            #pragma vertex aVertexShader
+            #pragma fragment aFragmentShader
+
+            #define UNITY_PASS_DEFERRED
+            #define _MICRODETAILS_ON
+
+            #include "Assets/HSSSS/Definitions/Skin.cginc"
+            #include "Assets/HSSSS/Passes/Deferred.cginc"
+            ENDCG
+        }
+    }
+
+    // basic shader
     SubShader
     {
         Tags

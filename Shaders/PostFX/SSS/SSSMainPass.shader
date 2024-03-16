@@ -104,6 +104,9 @@
             uniform SamplerState sampler_CameraGBufferTexture0;
             uniform SamplerState sampler_CameraReflectionsTexture;
 
+            uniform float4 _MainTex_TexelSize;
+
+            uniform uint _FrameCount;
             uniform bool _BlurAlbedoTexture;
 
             half4 frag(v2f_img IN) : SV_Target
@@ -112,6 +115,9 @@
                 half3 ambient = _CameraReflectionsTexture.Sample(sampler_CameraReflectionsTexture, IN.uv);
                 half4 color = _MainTex.Sample(sampler_MainTex, IN.uv);
 
+                uint2 coord = round((IN.uv - 0.5f * _MainTex_TexelSize.xy) * _MainTex_TexelSize.zw);
+                //uint2 coord = IN.uv * _ScreenParams.xy;
+
                 if (color.w < 1.0h)
                 {
                     return half4(color.xyz + ambient, 1.0h);
@@ -119,7 +125,6 @@
                 
                 else
                 {
-                    uint2 coord = IN.uv * _ScreenParams.xy;
                     half3 specular = half3(_SpecularBufferR[coord], _SpecularBufferG[coord], _SpecularBufferB[coord]);
 
                     half3 div = _BlurAlbedoTexture ? 1.0h : max(albedo, 0.0001h);
@@ -158,6 +163,46 @@
             fixed4 frag(v2f_img IN) : SV_Target
             {
                 return NormalBlur(IN, RandomAxis(IN).yx * float2(1.0f, -1.0f));
+            }
+            ENDCG
+        }
+
+        // pass 6 : checkerboard
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert_img
+            #pragma fragment frag
+
+            #include "UnityCG.cginc"
+            #include "UnityDeferredLibrary.cginc"
+
+            uniform Texture2D _MainTex;
+            uniform SamplerState sampler_MainTex;
+            uniform float4 _MainTex_TexelSize;
+            uniform uint _FrameCount;
+
+            half4 frag(v2f_img IN) : SV_Target
+            {
+                uint2 coord = round((IN.uv - 0.5f * _MainTex_TexelSize.xy) * _MainTex_TexelSize.zw);
+                half4 color = 0.0h;
+
+                if ((coord.x + coord.y) % 2 != _FrameCount % 2)
+                {
+                    color += _MainTex.Sample(sampler_MainTex, IN.uv, int2( 0,  1));
+                    color += _MainTex.Sample(sampler_MainTex, IN.uv, int2( 0, -1));
+                    color += _MainTex.Sample(sampler_MainTex, IN.uv, int2( 1,  0));
+                    color += _MainTex.Sample(sampler_MainTex, IN.uv, int2(-1,  0));
+
+                    color /= 4.0h;
+                }
+
+                else
+                {
+                    color = _MainTex.Sample(sampler_MainTex, IN.uv);
+                }
+
+                return color;
             }
             ENDCG
         }

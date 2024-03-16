@@ -2,27 +2,6 @@
 #define HSSSS_SSRT_CGINC
 
 #include "UnityCG.cginc"
-/*
-struct appdata_mrt
-{
-    float4 pos: POSITION;
-};
-
-struct v2f_mrt
-{
-    float4 cpos: SV_POSITION;
-    float2 uv: TEXCOORD0;
-};
-
-v2f_mrt vert_mrt(appdata_mrt v)
-{
-    v2f_mrt o;
-    o.cpos = float4(v.pos.xy, 0.0, 1.0);
-    o.uv = v.pos.xy * 0.5f + 0.5f;
-    o.uv.y = _ProjectionParams.x < 0.0f ? 1.0f - o.uv.y : o.uv.y;
-    return o;
-}
-*/
 
 uniform Texture2D _MainTex;
 uniform SamplerState sampler_MainTex;
@@ -62,32 +41,6 @@ uniform float4x4 _PrevViewToClipMatrix;
 uniform float4x4 _PrevClipToViewMatrix;
 
 uniform uint _FrameCount;
-
-static const float bayer2x2[4] =
-{
-    0.0 , 0.5 ,
-    0.75, 0.25
-};
-
-static const float bayer4x4[16] =
-{
-    0.    , 0.5   , 0.125 , 0.625 ,
-    0.75  , 0.25  , 0.875 , 0.375 ,
-    0.1875, 0.6875, 0.0625, 0.5625,
-    0.9375, 0.4375, 0.8125, 0.3125
-};
-
-static const float bayer8x8[64] = 
-{
-    0.      , 0.5     , 0.125   , 0.625   , 0.03125 , 0.53125 , 0.15625 , 0.65625 ,
-    0.75    , 0.25    , 0.875   , 0.375   , 0.78125 , 0.28125 , 0.90625 , 0.40625 ,
-    0.1875  , 0.6875  , 0.0625  , 0.5625  , 0.21875 , 0.71875 , 0.09375 , 0.59375 ,
-    0.9375  , 0.4375  , 0.8125  , 0.3125  , 0.96875 , 0.46875 , 0.84375 , 0.34375 ,
-    0.046875, 0.546875, 0.171875, 0.671875, 0.015625, 0.515625, 0.140625, 0.640625,
-    0.796875, 0.296875, 0.921875, 0.421875, 0.765625, 0.265625, 0.890625, 0.390625,
-    0.234375, 0.734375, 0.109375, 0.609375, 0.203125, 0.703125, 0.078125, 0.578125,
-    0.984375, 0.484375, 0.859375, 0.359375, 0.953125, 0.453125, 0.828125, 0.328125
-};
 
 #define FULL_PI 3.14159265359f
 #define HALF_PI 1.57079632679f
@@ -345,77 +298,6 @@ float4 FastArcTan(float4 x)
 {
     float4 t0 = FastArcTanPos(abs(x));
     return (x < 0.0f) ? -t0 : t0;
-}
-
-inline float2 EncodeInterleavedUV(float2 uv, float4 res, uint2 split)
-{
-    uint4 pixel = uint4(uv * res.zw, res.zw);
-    return ((pixel.xy * split) % pixel.zw + (pixel.xy * split) / pixel.zw + 0.5f) * res.xy;
-}
-
-inline float2 DecodeInterleavedUV(float2 uv, float4 res, uint2 split)
-{
-    uint4 pixel = uint4(uv * res.zw, res.zw);
-    split = res.zw / split;
-    return ((pixel.xy * split) % pixel.zw + (pixel.xy * split) / pixel.zw + 0.5f) * res.xy;
-}
-
-inline float2 GetStochasticUV(float2 uv, float4 res, uint2 split)
-{
-    uint4 pixel = uint4(uv * res.zw, res.zw);
-    split = res.zw / split;
-    return (pixel / split + 0.5f) * res.xy * split;
-}
-
-inline float GetInterleavedIdx(float2 uv, uint split)
-{
-    uint idx = split * floor(uv.y * split) + floor(uv.x * split);
-
-    if (split == 2)
-    {
-        return bayer2x2[idx];
-    }
-
-    else if (split == 4)
-    {
-        return bayer4x4[idx];
-    }
-
-    else if (split == 8)
-    {
-        return bayer8x8[idx];
-    }
-
-    else
-    {
-        return 0.0f;
-    }
-}
-
-inline void ClampInterleavedUV(float2 uv, float2 duv, out float2 fwd, out float2 bwd, inout float2 len, uint2 split)
-{
-    fwd = uv + duv;
-    bwd = uv - duv;
-
-    float4 limit = {
-        trunc(uv * split) / split + _MainTex_TexelSize.xy,
-        (trunc(uv * split) + 1.0f) / split - _MainTex_TexelSize.xy
-    };
-
-    float2 fwd_t = clamp(fwd, limit.xy, limit.zw) - uv;
-    float2 bwd_t = clamp(bwd, limit.xy, limit.zw) - uv;
-
-    fwd_t = abs(fwd_t / duv);
-    bwd_t = abs(bwd_t / duv);
-
-    float2 fac = {
-        min(fwd_t.x, fwd_t.y),
-        min(bwd_t.x, bwd_t.y)
-    };
-
-    fwd =  duv * fac.x;
-    bwd = -duv * fac.y;
-    len =  len * fac;
 }
 
 inline half FadeScreenBoundary(float2 uv)

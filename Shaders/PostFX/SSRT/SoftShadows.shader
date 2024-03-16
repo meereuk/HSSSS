@@ -169,7 +169,7 @@ Shader "Hidden/HSSSS/SoftShadows"
                         _MainTex.Sample(sampler_MainTex, uv, int2(-1,  0)).x
                     );
 
-                    shadow = max(min(tex.x, tex.y), min(tex.z, tex.w));
+                    shadow = min(min(tex.x, tex.y), min(tex.z, tex.w));
                 }
 
                 else
