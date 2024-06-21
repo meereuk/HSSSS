@@ -69,7 +69,7 @@ uniform SamplerState sampler_SSGIFlopSpecularBuffer;
 uniform float4 _SSGIFlopSpecularBuffer_TexelSize;
 
 #ifndef _SSGINumSample
-    #define _SSGINumSample 2
+    #define _SSGINumSample 32
 #endif
 
 #ifndef _SSGINumStride
@@ -81,6 +81,8 @@ uniform float4 _SSGIFlopSpecularBuffer_TexelSize;
 #ifndef KERNEL_STEP
     #define KERNEL_STEP 1
 #endif
+
+#define beta 2.0f
 
 static const int2 neighbors[KERNEL_TAPS] = 
 {
@@ -115,22 +117,22 @@ struct ray
 
 inline float4 SampleIrradianceBufferLOD(float2 uv, uint lod)
 {
-    if (lod == 4)
+    if (lod > 3)
     {
         return _HierachicalIrradianceBuffer4.Sample(sampler_HierachicalIrradianceBuffer4, uv);
     }
 
-    else if (lod == 3)
+    else if (lod > 2)
     {
         return _HierachicalIrradianceBuffer3.Sample(sampler_HierachicalIrradianceBuffer3, uv);
     }
 
-    else if (lod == 2)
+    else if (lod > 1)
     {
         return _HierachicalIrradianceBuffer2.Sample(sampler_HierachicalIrradianceBuffer2, uv);
     }
 
-    else if (lod == 1)
+    else if (lod > 0)
     {
         return _HierachicalIrradianceBuffer1.Sample(sampler_HierachicalIrradianceBuffer1, uv);
     }
@@ -369,13 +371,29 @@ float4 GBufferPrePass(v2f_img IN): SV_TARGET
 
 float4 GBufferDownSample(v2f_img IN): SV_TARGET
 {
+    float3x4 ilum = {
+        _MainTex.GatherRed  (sampler_MainTex, IN.uv),
+        _MainTex.GatherGreen(sampler_MainTex, IN.uv),
+        _MainTex.GatherBlue (sampler_MainTex, IN.uv)
+    };
+
+    float4 z = _MainTex.GatherAlpha(sampler_MainTex, IN.uv);
+
+    float4 gbuffer = {
+        max(max(ilum[0].x, ilum[0].y), max(ilum[0].z, ilum[0].w)),
+        max(max(ilum[1].x, ilum[1].y), max(ilum[1].z, ilum[1].w)),
+        max(max(ilum[2].x, ilum[2].y), max(ilum[2].z, ilum[2].w)),
+        dot(z, 0.25f)
+    };
+    
+/*
     float4 gbuffer = {
         dot(_MainTex.GatherRed  (sampler_MainTex, IN.uv), 0.25h),
         dot(_MainTex.GatherGreen(sampler_MainTex, IN.uv), 0.25h),
         dot(_MainTex.GatherBlue (sampler_MainTex, IN.uv), 0.25h),
         dot(_MainTex.GatherAlpha(sampler_MainTex, IN.uv), 0.25h)
     };
-
+*/
     return gbuffer;
 }
 
@@ -416,30 +434,93 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
     float offset = noise.z;
     float slice = FULL_PI / _SSGINumSample;
 
-    for (float iter = 0.01f; iter < 128; iter += 1.0f)
-    {
-        float phi = 2.4f * (iter + noise.z - 0.01f);
-        float radius = ray.len * sqrt((iter + 0.49f) / 128.0f);
+    float theta[8];
+    float div[8];
 
+    for (uint idx = 0; idx < 4; idx ++)
+    {
+        float phi = FULL_PI * 0.25f * (float) idx;
         float4 pdir = float4(cos(phi), sin(phi), 0.0f, 0.0f);
 
         float3 proj = dot(ray.vn, vdir) * vdir + dot(ray.vn, pdir.xyz) * pdir.xyz;
         float gamma = clamp(acos(normalize(proj).z) * sign(dot(proj, pdir.xyz)), -HALF_PI, HALF_PI);
 
+        float2 bf = { exp(-beta * gamma), exp( beta * gamma) };
+
+        theta[idx    ] = -gamma * bf.x;
+        theta[idx + 4] =  gamma * bf.y;
+
+        div[idx    ] = bf.x;
+        div[idx + 4] = bf.y;
+    }
+
+    float power = max(1.0f, _SSGIStepPower);
+
+    for (float iter = 0.01f; iter < _SSGINumSample; iter += 1.0f)
+    {
+        // poisson disc angle
+        float phi = 2.4f * (iter - 0.01f) + 2.0f * noise.z * FULL_PI;
+        // poisson disc radius
+        float radius = sqrt((iter + 0.49f) / _SSGINumSample);
+        radius = ray.len * pow(radius, power);
+        // poisson disc direction
+        float4 pdir = float4(cos(phi), sin(phi), 0.0f, 0.0f);
+
+        // horizon index
+        float rad = phi / FULL_PI + 0.0625f;
+        rad = rad * 4.0f;
+        uint idx = uint(rad) % 8;
+
+        //float3 proj = dot(ray.vn, vdir) * vdir + dot(ray.vn, pdir.xyz) * pdir.xyz;
+        //float gamma = clamp(acos(normalize(proj).z) * sign(dot(proj, pdir.xyz)), -HALF_PI, HALF_PI);
+
+        // view space, screen space, uv space
         float4 vp = ray.vp + radius * pdir;
         float4 sp = mul(unity_CameraProjection, float4(vp.xyz, 1.0f));
         float2 uv = sp.xy / sp.w * 0.5f + 0.5f;
 
-        float4 ir = SampleIrradianceBufferLOD(uv, 3);
+        uv += _HierachicalIrradianceBuffer2_TexelSize.xy * pdir.xy;
 
+        // sample irradiance
+        uint lod = uint(iter / 8.0f);
+
+        uv += lod == 0 ? _HierachicalIrradianceBuffer0_TexelSize.xy * pdir.xy : 0.0f;
+        uv += lod == 1 ? _HierachicalIrradianceBuffer1_TexelSize.xy * pdir.xy : 0.0f;
+        uv += lod == 2 ? _HierachicalIrradianceBuffer2_TexelSize.xy * pdir.xy : 0.0f;
+        uv += lod == 3 ? _HierachicalIrradianceBuffer3_TexelSize.xy * pdir.xy : 0.0f;
+        uv += lod >= 4 ? _HierachicalIrradianceBuffer4_TexelSize.xy * pdir.xy : 0.0f;
+
+        float4 ir = SampleIrradianceBufferLOD(uv, lod);
+
+        // frustum clipping
+        bool frustum = uv.x <= 1.0f;
+        frustum = frustum && 0.0f <= uv.x;
+        frustum = frustum && uv.y <= 1.0f;
+        frustum = frustum && 0.0f <= uv.y;
+        ir.xyz = frustum ? ir.xyz : 0.0f;
+
+        // recalculate view space
         sp = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
         vp = mul(_ClipToViewMatrix, sp);
         vp = float4(vp.xyz * ir.w / vp.w, 1.0f);
 
+        // horizon shadow
+        float dz = (vp.z - ray.vp.z) / distance(vp.xy, ray.vp.xy);
+
+        float horizon = theta[idx] / div[idx];
+
+        float bf = exp(beta * dz);
+        theta[idx] += dz * bf;
+        div[idx] += bf;
+
+        ir.xyz *= step(horizon, dz);
+
+        // distance attenuation
         float r = distance(ray.vp.xyz, vp.xyz);
         r = min(1.0f, 1 / r);
         r *= r;
 
+        // brdf
         half3 ldir = normalize(vp.xyz - ray.vp.xyz);
         half3 hdir = normalize(ldir + vdir);
         half ndotl = saturate(dot(ray.vn, ldir));
@@ -449,48 +530,14 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
         ir.xyz *= ndotl;
         ir.xyz *= r;
 
-        ir.xyz *= ray.len * ray.len;
+        ir.xyz *= pow(ray.len, 1.0f / power);
 
-        diffuse += ir.xyz / 64.0f;
-        specular += ir.xyz * FSchlick(ray.f0, ldoth) * DBlinn(ray.a, ndoth) * 0.25h / 64.0f;
+        diffuse += ir.xyz;
+        specular += ir.xyz * FSchlick(ray.f0, ldoth) * DBlinn(ray.a, ndoth) * 0.25h;
     }
 
-/*
-    for (float iter = 0.5f; iter < _SSGINumSample; iter += 1.0f)
-    {
-        float4 pdir = 0.0f;
-        sincos((iter - offset) * slice, pdir.y, pdir.x);
-
-        float3 proj = dot(ray.vn, vdir) * vdir + dot(ray.vn, pdir.xyz) * pdir.xyz;
-        float gamma = clamp(acos(normalize(proj).z) * sign(dot(proj, pdir.xyz)), -HALF_PI, HALF_PI);
-
-        ray.tan = tan(float2(-gamma, gamma));
-
-        float2x4 vp = {
-            mad( pdir, ray.len, ray.vp),
-            mad(-pdir, ray.len, ray.vp)
-        };
-
-        float2x4 sp = {
-            mul(unity_CameraProjection, vp[0]),
-            mul(unity_CameraProjection, vp[1])
-        };
-
-        ray.uv[1] = sp[0].xy / sp[0].w * 0.5f + 0.5f;
-        ray.uv[2] = sp[1].xy / sp[1].w * 0.5f + 0.5f;
-
-        half3 d;
-        half3 s;
-
-        HorizonTrace(ray, d, s);
-
-        diffuse += d;
-        specular += s;
-    }
-*/
-
-    //diffuse = clamp(diffuse / _SSGINumSample, 0.0h, 8.0h);
-    //specular = clamp(specular / _SSGINumSample, 0.0h, 8.0h);
+    diffuse /= _SSGINumSample;
+    specular /= _SSGINumSample;
 
     mrt0 = half4(diffuse, GetLuminance(diffuse));
     mrt1 = half4(specular, GetLuminance(specular));

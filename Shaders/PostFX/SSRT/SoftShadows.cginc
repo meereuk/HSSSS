@@ -1,8 +1,6 @@
 #ifndef HSSSS_SOFTSHADOWS_CGINC
 #define HSSSS_SOFTSHADOWS_CGINC
 
-#pragma exclude_renderers gles
-
 #include "UnityCG.cginc"
 #include "UnityDeferredLibrary.cginc"
 
@@ -26,12 +24,13 @@ uniform float4x4 _WorldToViewMatrix;
 uniform float4x4 _ViewToWorldMatrix;
 uniform float4x4 _ViewToClipMatrix;
 uniform float4x4 _ClipToViewMatrix;
-uniform float4x4 _ShadowProjMatrix;
 
 #if defined(POINT)
     uniform samplerCUBE_float _MainTex;
 #elif defined(SPOT)
     uniform sampler2D_float _MainTex;
+	uniform float4 _ShadowDepthParams;
+	uniform float4x4 _ShadowProjMatrix;
 #elif defined(DIRECTIONAL)
     uniform sampler2D_float _CascadeShadowMap;
 #else
@@ -84,17 +83,27 @@ inline uint2 GetCascadeIndex(float depth)
 	return uint2(idx, min(idx + 1, 3));
 }
 
-inline float3 GetShadowCoordinate(float3 wpos)
+#if defined(POINT)
+inline float4 GetShadowCoordinate(float3 wpos)
 {
-	float4 coord = mul(_ShadowProjMatrix, float4(wpos, 1.0f));
-	return coord.xyz / coord.w;
-}
+	float4 vec = {
+		normalize(wpos - _LightPos.xyz),
+		distance(wpos, _LightPos.xyz)
+	};
 
-inline float3 GetShadowCoordinate(float3 wpos, uint cascade)
-{
-	float4 coord = mul(unity_World2Shadow[cascade], float4(wpos, 1.0f));
-	return coord.xyz;
+	return vec;
 }
+#elif defined(SPOT)
+inline float4 GetShadowCoordinate(float3 wpos)
+{
+	return mul(_ShadowProjMatrix, float4(wpos, 1.0f));
+}
+#elif defined(DIRECTIONAL)
+inline float4 GetShadowCoordinate(float3 wpos, uint cascade)
+{
+	return mul(unity_World2Shadow[cascade], float4(wpos, 1.0f));
+}
+#endif
 
 inline void SampleCoordinate(float2 uv, out float4 wpos, out float depth)
 {
@@ -107,24 +116,27 @@ inline void SampleCoordinate(float2 uv, out float4 wpos, out float depth)
 }
 
 #if defined(POINT) || defined(SPOT) || defined (DIRECTIONAL)
-half2 SamplePCFShadows(float3 vec, float2 uv, float depth, float3 nrm, float ndotl)
+half2 SamplePCFShadows(float3 wpos, float2 uv, float depth, float3 nrm, float ndotl)
 {
 	// initialize shadow coordinate and depth
 	#if defined(POINT)
-		float pixelDepth = length(vec) * _LightPositionRange.w;
+		float pixelDepth = distance(wpos, _LightPos.xyz);
 	#elif defined(SPOT)
-		float pixelDepth = GetShadowCoordinate(vec).z;
+		float pixelDepth = GetShadowCoordinate(wpos).z / GetShadowCoordinate(wpos).w;
+		pixelDepth = 1.0f / (_ShadowDepthParams.z * pixelDepth + _ShadowDepthParams.w);
 	#elif defined(DIRECTIONAL)
 		uint2 cascade = GetCascadeIndex(depth);
-		float2 pixelDepth = float2(GetShadowCoordinate(vec, cascade.x).z, GetShadowCoordinate(vec, cascade.y).z);
+		float2 pixelDepth = {
+			GetShadowCoordinate(wpos, cascade.x).z,
+			GetShadowCoordinate(wpos, cascade.y).z
+		};
+		float2 depthScale = {
+			GetShadowCoordinate(wpos + _LightDir, cascade.x).z,
+			GetShadowCoordinate(wpos + _LightDir, cascade.y).z
+		};
+		depthScale = abs(depthScale - pixelDepth);
+		pixelDepth = pixelDepth / depthScale;
 	#endif
-
-	// slope-based bias
-	#if defined(POINT) || defined(SPOT)
-		float bias = 0.001f * _SlopeBiasScale;
-		//pixelDepth = pixelDepth - bias;
-	#endif
-
 
 	// penumbra sliders
 	// x: blocker search radius (in cm)
@@ -140,14 +152,10 @@ half2 SamplePCFShadows(float3 vec, float2 uv, float depth, float3 nrm, float ndo
 
 	// gram-schmidt process
 	#if defined(POINT)
-		float3x3 tbn = GramSchmidtMatrix(uv, normalize(vec));
-	#elif defined(SPOT)
-		float3x3 tbn = GramSchmidtMatrix(uv, _LightDir.xyz);
-	#elif defined(DIRECTIONAL)
+		float3x3 tbn = GramSchmidtMatrix(uv, wpos - _LightPos.xyz);
+	#elif defined (SPOT) || defined(DIRECTIONAL)
 		float3x3 tbn = GramSchmidtMatrix(uv, _LightDir.xyz);
 	#endif
-
-	tbn = GramSchmidtMatrix(uv, nrm);
 
 	///////////////////////////////////
 	// percentage-closer soft shadow //
@@ -160,9 +168,10 @@ half2 SamplePCFShadows(float3 vec, float2 uv, float depth, float3 nrm, float ndo
 		// fixed sized penumbra
 		float penumbra = radius.z;
 		// thicc-fucking-thickness
-		shadow.g = 100.0h;
+		shadow.y = 100.0h;
 	#else
-		float casterCount = 0;
+		float penumbra = 0.0f;
+		float casterCount = 0.0f;
 		float casterDepth = 0.0f;
 
 		// blocker search loop
@@ -170,14 +179,21 @@ half2 SamplePCFShadows(float3 vec, float2 uv, float depth, float3 nrm, float ndo
 		for (uint i = 0; i < PCF_NUM_TAPS; i ++)
 		{
 			float3 disc = mul(PoissonDisc(i, PCF_NUM_TAPS), tbn);
-			float3 sampleCoord = mad(disc, radius.x, vec);
+			float3 sampleCoord = mad(disc, radius.x, wpos);
+			float sampleDepth = 0.0f;
 
 			#if defined(POINT)
-				float sampleDepth = texCUBE(_MainTex, sampleCoord).x;
+				float4 shadowCoord = GetShadowCoordinate(sampleCoord);
+				sampleDepth = texCUBE(_MainTex, shadowCoord.xyz);
+				sampleDepth = sampleDepth / _LightPositionRange.w;
 			#elif defined(SPOT)
-				float sampleDepth = tex2D(_MainTex, GetShadowCoordinate(sampleCoord).xy).x;
+				float4 shadowCoord = GetShadowCoordinate(sampleCoord);
+				sampleDepth = tex2Dproj(_MainTex, shadowCoord);
+				sampleDepth = 1.0f / (_ShadowDepthParams.z * sampleDepth + _ShadowDepthParams.w);
 			#elif defined(DIRECTIONAL)
-				float sampleDepth = tex2D(_CascadeShadowMap, GetShadowCoordinate(sampleCoord, cascade.x).xy).x;
+				float4 shadowCoord = GetShadowCoordinate(sampleCoord, cascade.x);
+				sampleDepth = tex2D(_CascadeShadowMap, shadowCoord.xy);
+				sampleDepth = sampleDepth / depthScale.x;
 			#endif
 
 			if (sampleDepth < pixelDepth.x)
@@ -191,51 +207,62 @@ half2 SamplePCFShadows(float3 vec, float2 uv, float depth, float3 nrm, float ndo
 
 		// penumbra size
 		#if defined(DIRECTIONAL)
-			float penumbra = max(radius.z, radius.y * (pixelDepth.x - casterDepth));
+			penumbra = max(radius.z, radius.y * (pixelDepth.x - casterDepth));
 		#elif defined(POINT) || defined(SPOT)
-			float penumbra = max(radius.z, radius.y * (pixelDepth.x - casterDepth) / casterDepth);
+			penumbra = max(radius.z, radius.y * (pixelDepth.x - casterDepth) / casterDepth);
 		#endif
 
 		// thickness calculation
-		shadow.g = max(0.0f, pixelDepth.x - casterDepth);
+		shadow.y = max(0.0f, pixelDepth.x - casterDepth);
 	#endif
 
 	/////////////////////////////////
 	// percentage closer filtering //
 	/////////////////////////////////
 
+	#if defined(POINT) || defined(SPOT)
+		pixelDepth -= lerp(0.01f, 0.00f, ndotl) * _SlopeBiasScale;
+	#endif
+
 	[unroll]
 	for (uint j = 0; j < PCF_NUM_TAPS; j ++)
 	{
 		float3 disc = mul(PoissonDisc(j, PCF_NUM_TAPS), tbn);
-		float3 sampleCoord = mad(disc, penumbra, vec.xyz);
+		float3 sampleCoord = mad(disc, penumbra, wpos);
+		float shadowDepth = 0.0f;
 
 		#if defined(POINT)
-			pixelDepth = length(sampleCoord) * _LightPositionRange.w;
-			shadow.r += step(pixelDepth - bias, texCUBE(_MainTex, sampleCoord).x);
+			float4 shadowCoord = GetShadowCoordinate(sampleCoord);
+			shadowDepth = texCUBE(_MainTex, shadowCoord.xyz);
+			shadowDepth = shadowDepth / _LightPositionRange.w;
 		#elif defined(SPOT)
-			pixelDepth = GetShadowCoordinate(sampleCoord).z;
-			shadow.r += step(pixelDepth - bias, tex2D(_MainTex, GetShadowCoordinate(sampleCoord).xy).x);
+			float4 shadowCoord = GetShadowCoordinate(sampleCoord);
+			shadowDepth = tex2Dproj(_MainTex, shadowCoord);
+			shadowDepth = 1.0f / (_ShadowDepthParams.z * shadowDepth + _ShadowDepthParams.w);
 		#elif defined(DIRECTIONAL)
-			pixelDepth = GetShadowCoordinate(sampleCoord, cascade.x).z;
-			shadow.r += step(pixelDepth.x, tex2D(_CascadeShadowMap, GetShadowCoordinate(sampleCoord, cascade.x).xy).x);
+			float4 shadowCoord = GetShadowCoordinate(sampleCoord, cascade.x);
+			shadowDepth = tex2D(_CascadeShadowMap, shadowCoord.xy);
+			shadowDepth = shadowDepth / depthScale.x;
 		#endif
+
+		shadow.x += step(pixelDepth, shadowDepth);
 	}
 
 	shadow.x = saturate(shadow.x / PCF_NUM_TAPS);
 
-	return shadow.x;
+	return shadow;
 }
 #endif
 #endif
 
-half frag_shadow (v2f_img i) : SV_TARGET
+half2 frag_shadow (v2f_img i) : SV_TARGET
 {
 #ifdef SHADOWS_OFF
 	return 1.0h;
 #else
 	float2 uv = i.uv;
 
+	// checkerboard rendering
 	if (_SparseRendering)
 	{
 		uint2 coord = round((uv - 0.5f * TexelSize.xy) * TexelSize.zw);
@@ -254,14 +281,15 @@ half frag_shadow (v2f_img i) : SV_TARGET
 	normal = normalize(mad(normal, 2.0h, -1.0h));
 	float ndotl = saturate(dot(normal, normalize(_LightPos.xyz - wpos.xyz)));
 
-	half shadow = 0.0f;
+	half2 shadow = 0.0f;
 
 	#if defined(POINT)
-		shadow = SamplePCFShadows(wpos.xyz - _LightPos.xyz, uv, depth, normal, ndotl);
+		shadow = SamplePCFShadows(wpos.xyz, uv, depth, normal, ndotl);
 	#elif defined(SPOT) || defined(DIRECTIONAL)
 		shadow = SamplePCFShadows(wpos.xyz, uv, depth, normal, ndotl);
 	#endif
 
+/*
 	if (_DirectOcclusion)
     {
         half4 ao = tex2D(_SSDOBentNormalTexture, uv);
@@ -284,6 +312,8 @@ half frag_shadow (v2f_img i) : SV_TARGET
 
 		shadow = min(shadow, occlusion);
     }
+*/
+
 	return shadow;
 #endif
 }

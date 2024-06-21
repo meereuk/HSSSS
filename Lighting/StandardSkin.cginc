@@ -8,25 +8,25 @@
 half4 _DeferredSkinParams;
 
 #if !defined(_SCREENSPACE_SSS)
-    sampler2D _DeferredBlurredNormalBuffer;
-    sampler2D _DeferredSkinLut;
+    uniform sampler2D _DeferredBlurredNormalBuffer;
+    uniform sampler2D _DeferredSkinLut;
 #endif
 
 #if defined(_FACEWORKS_TYPE2)
-    sampler2D _DeferredShadowLut;
-    half2 _DeferredShadowParams;
+    uniform sampler2D _DeferredShadowLut;
+    uniform half2 _DeferredShadowParams;
 #endif
 
 #if defined(_BAKED_THICKNESS)
-    half3 _DeferredSkinTransmissionAbsorption;
+    uniform half3 _DeferredSkinTransmissionAbsorption;
 #else
-    sampler2D _DeferredTransmissionLut;
-    half _DeferredThicknessBias;
+    uniform sampler2D _DeferredTransmissionLut;
+    uniform half _DeferredThicknessBias;
 #endif
 
-sampler2D _DeferredTransmissionBuffer;
-half3 _DeferredSkinColorBleedAoWeights;
-half4 _DeferredTransmissionParams;
+uniform sampler2D _DeferredTransmissionBuffer;
+uniform half3 _DeferredSkinColorBleedAoWeights;
+uniform half4 _DeferredTransmissionParams;
 
 void aPreSurface(inout ASurface s)
 {

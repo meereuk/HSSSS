@@ -63,7 +63,9 @@ public class LightParams : MonoBehaviour
         this.ViewToClip = mCamera.projectionMatrix;
         this.ClipToView = this.ViewToClip.inverse;
 
-        this.mMaterial.SetVector("_PointLightPenumbra", new Vector3(4.0f, 8.0f, 32.0f));
+        this.mMaterial.SetVector("_PointLightPenumbra", new Vector3(16.0f, 16.0f, 0.0f));
+        this.mMaterial.SetVector("_SpotLightPenumbra", new Vector3(16.0f, 16.0f, 0.0f));
+        this.mMaterial.SetVector("_DirLightPenumbra", new Vector3(16.0f, 16.0f, 0.0f));
 
         Shader.SetGlobalMatrix("_WorldToViewMatrix", this.WorldToView);
         Shader.SetGlobalMatrix("_ViewToWorldMatrix", this.ViewToWorld);
@@ -85,6 +87,16 @@ public class LightParams : MonoBehaviour
         Matrix4x4 LightView = Matrix4x4.TRS(this.mLight.transform.position, this.mLight.transform.rotation, Vector3.one).inverse;
         Matrix4x4 LightProj = Matrix4x4.Perspective(this.mLight.spotAngle, 1, this.mLight.shadowNearPlane, this.mLight.range);
 
+        float near = this.mLight.shadowNearPlane;
+        float far = this.mLight.range;
+
+        Vector4 Params = new Vector4(
+            1.0f - far / near,
+            far / near,
+            1.0f / far - 1.0f / near,
+            1.0f / near
+        );
+
         Matrix4x4 m = LightClip * LightProj;
 
         m[0, 2] *= -1;
@@ -94,6 +106,7 @@ public class LightParams : MonoBehaviour
 
         if (this.mMaterial)
         {
+            this.mMaterial.SetVector("_ShadowDepthParams", Params);
             this.mMaterial.SetMatrix("_ShadowProjMatrix", m * LightView);
         }
     }
@@ -109,11 +122,11 @@ public class LightParams : MonoBehaviour
 
         this.mBuffer = new CommandBuffer() { name = "HSSSS.ScreenSpaceShadow" };
         this.mBuffer.SetShadowSamplingMode(source, ShadowSamplingMode.RawDepth);
-        this.mBuffer.GetTemporaryRT(target, -1, -1, 0, FilterMode.Point, RenderTextureFormat.RHalf, RenderTextureReadWrite.Linear);
-        this.mBuffer.GetTemporaryRT(flipSM, -1, -1, 0, FilterMode.Point, RenderTextureFormat.RHalf, RenderTextureReadWrite.Linear);
-        this.mBuffer.GetTemporaryRT(flopSM, -1, -1, 0, FilterMode.Point, RenderTextureFormat.RHalf, RenderTextureReadWrite.Linear);
+        this.mBuffer.GetTemporaryRT(target, -1, -1, 0, FilterMode.Point, RenderTextureFormat.RGHalf, RenderTextureReadWrite.Linear);
+        this.mBuffer.GetTemporaryRT(flipSM, -1, -1, 0, FilterMode.Point, RenderTextureFormat.RGHalf, RenderTextureReadWrite.Linear);
+        this.mBuffer.GetTemporaryRT(flopSM, -1, -1, 0, FilterMode.Point, RenderTextureFormat.RGHalf, RenderTextureReadWrite.Linear);
 
-        this.mBuffer.Blit(source, flipSM, this.mMaterial, 3);
+        this.mBuffer.Blit(source, flipSM, this.mMaterial, 7);
         //this.mBuffer.Blit(flipSM, flopSM, this.mMaterial, 3);
         //this.mBuffer.Blit(flopSM, flipSM, this.mMaterial, 4);
         this.mBuffer.Blit(flipSM, target);

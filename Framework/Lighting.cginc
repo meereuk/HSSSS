@@ -33,6 +33,9 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
     sheen *= specularLight;
     specular *= specularLight;
     diffuse *= diffuseLight;
+
+    half3 sssColor = saturate(s.albedo * s.albedo + 0.1h);
+    sssColor = 0.1h * sssColor / aLuminance(sssColor);
     
     // standard
     if (s.scatteringMask < 0.1h)
@@ -64,8 +67,6 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
         half at = s.beckmannRoughness * (1.0h + anisotropy);
         half ab = s.beckmannRoughness * (1.0h - anisotropy);
 
-        half3 sssColor = 0.25h * (s.albedo + 0.25h) / aLuminance(s.albedo + 0.25h);
-
         diffuse *= saturate((d.NdotLm + 0.5h) / 2.25h);
         diffuse *= saturate(sssColor + d.NdotL);
         specular *= DGGXAniso(at, ab, TdotH, BdotH, d.NdotH);
@@ -77,7 +78,7 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
     {
         // energy conserved wrap diffuse
         diffuse *= saturate((d.NdotLm + 0.5h) / 2.25h);
-        diffuse *= saturate(normalize(s.albedo + 0.5h) + d.NdotL);
+        diffuse *= saturate(sssColor + d.NdotL);
         specular = sheen;
     }
 
