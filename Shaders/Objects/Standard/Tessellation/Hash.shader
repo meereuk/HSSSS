@@ -86,7 +86,7 @@ Shader "HSSSS/Standard/Tessellation/Hash"
             #define UNITY_PASS_FORWARDBASE
             #define _ALPHAHASHED_ON
         
-            #include "Assets/HSSSS/Definitions/Core.cginc"
+            #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
             ENDCG
         }
@@ -114,7 +114,7 @@ Shader "HSSSS/Standard/Tessellation/Hash"
             #define UNITY_PASS_FORWARDADD
             #define _ALPHAHASHED_ON
 
-            #include "Assets/HSSSS/Definitions/Core.cginc"
+            #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
             ENDCG
         }
@@ -137,7 +137,7 @@ Shader "HSSSS/Standard/Tessellation/Hash"
         
             #define UNITY_PASS_SHADOWCASTER
         
-            #include "Assets/HSSSS/Definitions/Core.cginc"
+            #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/Shadow.cginc"
             ENDCG
         }
@@ -164,7 +164,7 @@ Shader "HSSSS/Standard/Tessellation/Hash"
             #define UNITY_PASS_DEFERRED
             #define _ALPHAHASHED_ON
         
-            #include "Assets/HSSSS/Definitions/Core.cginc"
+            #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/Deferred.cginc"
             ENDCG
         }

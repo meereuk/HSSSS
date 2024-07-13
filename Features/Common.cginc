@@ -82,7 +82,7 @@ inline void aSampleTwoColorAlbedo(inout ASurface s)
 inline void aSampleFresnelAlpha(inout ASurface s)
 {
     half NdotV = saturate(dot(s.normalWorld, s.viewDirWorld));
-    s.opacity = lerp(s.opacity, 1.0h, _FresnelAlpha * pow(1.0h - NdotV, 2));
+    s.opacity = lerp(s.opacity, 1.0h, _FresnelAlpha * pow(1.0h - NdotV, 4));
 }
 
 inline void aSampleDetailAlbedo(inout ASurface s)
