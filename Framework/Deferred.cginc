@@ -23,19 +23,19 @@ sampler2D _CameraGBufferTexture2;
 
 uniform sampler2D _ScreenSpaceShadowMap;
 
-inline half SampleShadow(float3 pos, float depth, float fadeDist, float2 uv, half ndotl)
+inline half2 SampleShadow(float3 pos, float depth, float fadeDist, float2 uv, half ndotl)
 {
-    half shadow = 0.0h;
+    half2 shadow = 0.0h;
 
 #ifdef SHADOWS_OFF
     shadow = 1.0h;
 #else
     shadow = tex2D(_ScreenSpaceShadowMap, uv);
-    shadow = lerp(shadow, 1.0h, _LightShadowData.x);
+    shadow.x = lerp(shadow.x, 1.0h, _LightShadowData.x);
 
     float fade = fadeDist * _LightShadowData.z + _LightShadowData.w;
     fade = saturate(fade);
-    shadow = saturate(shadow + fade);
+    shadow.x = saturate(shadow.x + fade);
 #endif
 
     return shadow;

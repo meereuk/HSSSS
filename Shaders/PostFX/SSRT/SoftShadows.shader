@@ -141,7 +141,7 @@ Shader "Hidden/HSSSS/SoftShadows"
             ENDCG
         }
 
-        // pass 9 bilinear interpolation
+        // pass 9 : bilinear interpolation
         Pass
         {
             CGPROGRAM
@@ -179,6 +179,74 @@ Shader "Hidden/HSSSS/SoftShadows"
 
                 return shadow;
             #endif
+            }
+            ENDCG
+        }
+
+        // pass 10 : contact shadow low
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment frag_cshadow
+            #pragma multi_compile ___ SHADOWS_OFF
+            #pragma multi_compile SPOT POINT DIRECTIONAL
+            #define _SSCSNumStride 8
+            #include "SoftShadows.cginc"
+            ENDCG
+        }
+
+        // pass 11 : contact shadow medium
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment frag_cshadow
+            #pragma multi_compile ___ SHADOWS_OFF
+            #pragma multi_compile SPOT POINT DIRECTIONAL
+            #define _SSCSNumStride 16
+            #include "SoftShadows.cginc"
+            ENDCG
+        }
+
+        // pass 12 : contact shadow high
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment frag_cshadow
+            #pragma multi_compile ___ SHADOWS_OFF
+            #pragma multi_compile SPOT POINT DIRECTIONAL
+            #define _SSCSNumStride 24
+            #include "SoftShadows.cginc"
+            ENDCG
+        }
+
+        // pass 13 : contact shadow ultra
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment frag_cshadow
+            #pragma multi_compile ___ SHADOWS_OFF
+            #pragma multi_compile SPOT POINT DIRECTIONAL
+            #define _SSCSNumStride 32
+            #include "SoftShadows.cginc"
+            ENDCG
+        }
+
+        // pass 14 : combine shadow
+        Pass
+        {
+            CGPROGRAM
+            #pragma fragment frag
+            #include "UnityCG.cginc"
+
+            uniform sampler2D _TemporaryFlipShadowMap;
+            uniform sampler2D _TemporaryFlopShadowMap;
+
+            half2 frag (v2f_img i) : SV_TARGET
+            {
+                half2 shadow = tex2D(_TemporaryFlipShadowMap, i.uv);
+                half cshadow = tex2D(_TemporaryFlopShadowMap, i.uv);
+                shadow.x = min(shadow.x, cshadow);
+                return shadow;
             }
             ENDCG
         }

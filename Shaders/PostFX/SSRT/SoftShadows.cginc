@@ -12,8 +12,8 @@ uniform sampler3D _BlueNoise;
 
 #ifndef SHADOWS_OFF
 uniform uint _FrameCount;
-uniform bool _SparseRendering;
-uniform bool _DirectOcclusion;
+//uniform bool _SparseRendering;
+//uniform bool _DirectOcclusion;
 
 uniform float _SlopeBiasScale;
 uniform float3 _DirLightPenumbra;
@@ -255,73 +255,12 @@ half2 SamplePCFShadows(float3 wpos, float2 uv, float depth, float3 nrm, float nd
 #endif
 #endif
 
-void SampleContactShadows(float3 wpos, float3 wdir, float2 uv0, inout half2 shadow)
-{
-#ifndef SHADOWS_OFF
-	float3 noise = SampleNoise(uv0);
-
-	float raylen = 0.10f;
-
-	float4 vpos = mul(_WorldToViewMatrix, float4(wpos, 1.0f));
-	float4 vdir = mul(_WorldToViewMatrix, float4(wdir, 0.0f));
-
-	float4 lpos = raylen * vdir + vpos;
-	float4 spos = mul(_ViewToClipMatrix, float4(lpos.xyz, 1.0f));
-
-	float2 uv1 = spos.xy / spos.w * 0.5f + 0.5f;
-
-	float z0 = -vpos.z - 0.001f;
-	float z1 = -lpos.z;
-
-	float threshold = (z0 - z1) / distance(lpos.xy, vpos.xy);
-	threshold += 0.1f * noise.x;
-
-	float slope = (uv1.y - uv0.y) / (uv1.x - uv0.x);
-	float minStr = min(length(TexelSize.xx * float2(1.0f, slope)),
-            length(TexelSize.yy * float2(1.0f / slope, 1.0f)));
-
-	float str = max(minStr, pow(1.0f / 64.0f, 2));
-	float tangent = -100.0f;
-
-	[unroll]
-	for (uint iter = 0; iter < 64 && str <= 1.0f; iter ++)
-	{
-		str = max(str + minStr, pow((iter + 1.0f) / 64.0f, 2));
-		float2 uv = lerp(uv0, uv1, str);
-
-		float4 sp = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
-		float4 vp = mul(_ClipToViewMatrix, sp);
-		float z = tex2D(_CameraDepthTexture, uv);
-		vp = float4(vp.xyz * Linear01Depth(z) / vp.w, 1.0f);
-		z = -vp.z;
-
-		//float tangent = (z0 - z) / distance(vp.xy, vpos.xy);
-		//sss = tangent > threshold ? sss * 0.5h : sss;
-		tangent = max(tangent, (z0 - z) / distance(vp.xy, vpos.xy));
-	}
-
-	half sss = step(tangent, threshold);
-	//half sss = smoothstep(tangent - 1.0f * noise.x, tangent + 1.0f * noise.x, threshold);
-
-	shadow.x = min(sss, shadow.x);
-#endif
-}
-
 half2 frag_shadow (v2f_img i) : SV_TARGET
 {
 #ifdef SHADOWS_OFF
 	return 1.0h;
 #else
 	float2 uv = i.uv;
-
-	// checkerboard rendering
-	if (_SparseRendering)
-	{
-		uint2 coord = round((uv - 0.5f * TexelSize.xy) * TexelSize.zw);
-		coord.x = coord.y % 2 == _FrameCount % 2 ? 2 * coord.x : 2 * coord.x + 1;
-		uv = ((float2) coord + 0.5f) * TexelSize.xy;
-		if (uv.x > 1.0f) discard;
-	}
 
 	float4 wpos;
 	float depth;
@@ -341,32 +280,129 @@ half2 frag_shadow (v2f_img i) : SV_TARGET
 		shadow = SamplePCFShadows(wpos.xyz, uv, depth, normal, ndotl);
 	#endif
 
-	SampleContactShadows(wpos.xyz, normalize(_LightPos.xyz - wpos.xyz), uv, shadow);
+	return shadow;
+#endif
+}
 
-/*
-	if (_DirectOcclusion)
-    {
-        half4 ao = tex2D(_SSDOBentNormalTexture, uv);
-        // bent normal
-        ao.xyz = normalize(mad(ao.xyz, 2.0h, -1.0h));
+//
+// contact shadows
+//
 
-        half4 angle;
+uniform half _SSCSRayLength;
+uniform half _SSCSDepthBias;
 
-        // light apature
-        angle.x = atan(_SSDOLightApatureScale);
-        // occlusion apature
-        angle.y = acos(sqrt(1.0h - ao.w));
-        // absolute angle difference
-        angle.z = abs(angle.x - angle.y);
-        // angle between bentnormal and reflection vector
-        angle.w = acos(dot(ao.xyz, normalize(_LightPos.xyz - wpos.xyz)));
+#ifndef _SSCSNumStride
+	#define _SSCSNumStride 8
+#endif
 
-        half intersection = smoothstep(0.0h, 1.0h, 1.0h - saturate((angle.w - angle.z) / (angle.x + angle.y - angle.z)));
-        half occlusion = lerp(0.0h, intersection, saturate((angle.y - 0.1h) * 5.0h));
+#ifndef SHADOWS_OFF
+float HorizonTrace(float2 uv0, float2 uv1, float4 vp0)
+{
+	float horizon = -100.0f;
 
-		shadow = min(shadow, occlusion);
-    }
-*/
+	float slope = (uv1.y - uv0.y) / (uv1.x - uv0.x);
+	float minStr = min(length(TexelSize.xx * float2(1.0f, slope)),
+            length(TexelSize.yy * float2(1.0f / slope, 1.0f)));
+
+	float str = max(minStr, pow(1.0f / _SSCSNumStride, 2));
+
+	[unroll]
+	for (uint iter = 0; iter < _SSCSNumStride && str <= 1.0f; iter ++)
+	{
+		str = max(str + minStr, pow((iter + 1.0f) / _SSCSNumStride, 2));
+
+		float2 uv = lerp(uv0, uv1, str);
+		float4 sp = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
+		float4 vp = mul(_ClipToViewMatrix, sp);
+		float z = tex2D(_CameraDepthTexture, uv);
+		vp = float4(vp.xyz * Linear01Depth(z) / vp.w, 1.0f);
+		z = -vp.z;
+
+		horizon = max(horizon, (-vp0.z - _SSCSDepthBias - z) / distance(vp.xy, vp0.xy));
+	}
+
+	return horizon;
+}
+#endif
+
+half SampleSingleCS(float4 vpos, float4 vdir, float2 uv0, float3 noise, float raylen, float radius, float scale)
+{
+#ifdef SHADOWS_OFF
+	return 1.0h;
+#else
+	vdir.xy = vdir.xy + float2(-vdir.y, vdir.x) * radius * scale * mad(noise.y, 2.0f, -1.0f);
+	vdir.xyz = normalize(vdir.xyz);
+
+	float4 lpos = raylen * vdir + vpos;
+	float4 spos = mul(_ViewToClipMatrix, float4(lpos.xyz, 1.0f));
+
+	float2 uv1 = spos.xy / spos.w * 0.5f + 0.5f;
+
+	float horizon = HorizonTrace(uv0, uv1, vpos);
+
+	float z0 = -vpos.z - _SSCSDepthBias;
+	float z1 = -lpos.z;
+
+	float threshold = (z0 - z1) / distance(lpos.xy, vpos.xy);
+	threshold += radius * mad(noise.z, 2.0f, -1.0f);
+
+	return step(horizon, threshold);
+#endif
+}
+
+half SampleContactShadows(float3 wpos, float3 wdir, float2 uv0)
+{
+#ifdef SHADOWS_OFF
+	return 1.0h;
+#else
+	float3 noise = SampleNoise(uv0);
+	float raylen = _SSCSRayLength * (noise.x + 0.5f);
+	float4 vpos = mul(_WorldToViewMatrix, float4(wpos, 1.0f));
+	float4 vdir = mul(_WorldToViewMatrix, float4(wdir, 0.0f));
+
+	half shadow = 0.0h;
+
+	float radius = 1.0f;
+
+	#if defined(SPOT)
+		radius = _SpotLightPenumbra.y * 0.01f / distance(_LightPos.xyz, wpos);
+	#elif defined(POINT)
+		radius = _PointLightPenumbra.y * 0.01f / distance(_LightPos.xyz, wpos);
+	#elif defined(DIRECTIONAL)
+		radius = _DirLightPenumbra.y * 0.01f;
+	#endif
+
+
+	shadow += SampleSingleCS(vpos, vdir, uv0, noise, raylen, radius,  1.0000f);
+	shadow += SampleSingleCS(vpos, vdir, uv0, noise, raylen, radius,  0.3333f);
+	shadow += SampleSingleCS(vpos, vdir, uv0, noise, raylen, radius, -0.3333f);
+	shadow += SampleSingleCS(vpos, vdir, uv0, noise, raylen, radius, -1.0000f);
+
+	shadow *= 0.25h;
+
+	return shadow;
+#endif
+}
+
+half frag_cshadow (v2f_img i) : SV_TARGET
+{
+#ifdef SHADOWS_OFF
+	return 1.0h;
+#else
+	float2 uv = i.uv;
+
+	float4 wpos;
+	float depth;
+
+	SampleCoordinate(uv, wpos, depth);
+
+	half shadow = 1.0h;
+
+	#if defined(POINT) || defined(SPOT)
+		shadow = SampleContactShadows(wpos.xyz, normalize(_LightPos.xyz - wpos.xyz), uv);
+	#elif defined(DIRECTIONAL)
+		shadow = SampleContactShadows(wpos.xyz, -_LightDir.xyz, uv);
+	#endif
 
 	return shadow;
 #endif

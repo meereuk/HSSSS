@@ -173,7 +173,7 @@ inline half3 aStandardTransmission
 
         transLight *= weight * aLerpOneTo(d.shadow.r, shadowWeight);
         return d.color * transmissionColor * transLight;
-    #elif defined(_PCSS_ON) && !defined(SHADOWS_OFF)
+    #elif !defined(SHADOWS_OFF)
         half thickness = 2.0f * falloff * max(bias, d.shadow.g);
         half3 attenuation = tex2D(lut, float2(thickness * thickness, 0.5f));
         attenuation = 0.25h * attenuation * weight * saturate(0.3h - dot(s.ambientNormalWorld, d.direction));

@@ -12,7 +12,7 @@ uniform half _SSAORayLength;
 uniform half _SSAOMeanDepth;
 uniform half _SSAOFadeDepth;
 uniform uint _SSAORayStride;
-uniform bool _SSAOUseSparse;
+//uniform bool _SSAOUseSparse;
 
 uniform Texture2D _SSAOFlipRenderTexture;
 uniform Texture2D _SSAOFlopRenderTexture;
@@ -205,14 +205,6 @@ half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
 
     // interleaved uv
     float2 uv = IN.uv;
-
-    if (_SSAOUseSparse)
-    {
-        uint2 coord = round((uv - 0.5f * _MainTex_TexelSize.xy) * _MainTex_TexelSize.zw);
-	    coord.x = coord.y % 2 == _FrameCount % 2 ? 2 * coord.x : 2 * coord.x + 1;
-	    uv = ((float2) coord + 0.5f) * _MainTex_TexelSize.xy;
-        if (uv.x > 1.0f) discard;
-    }
 
     depth = SampleZBufferLOD(uv, 0);
     float4 spos = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
