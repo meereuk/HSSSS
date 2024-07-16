@@ -12,8 +12,7 @@ uniform sampler3D _BlueNoise;
 
 #ifndef SHADOWS_OFF
 uniform uint _FrameCount;
-//uniform bool _SparseRendering;
-//uniform bool _DirectOcclusion;
+uniform bool _DirectOcclusion;
 
 uniform float _SlopeBiasScale;
 uniform float3 _DirLightPenumbra;
@@ -38,8 +37,6 @@ uniform float4x4 _ClipToViewMatrix;
 	uniform SamplerState sampler_MainTex;
 #endif
 
-uniform half _SSDOLightApatureScale;
-uniform sampler2D _SSDOBentNormalTexture;
 uniform sampler2D _CameraGBufferTexture2;
 uniform float4 _CameraDepthTexture_TexelSize;
 #define TexelSize _CameraDepthTexture_TexelSize
@@ -290,21 +287,28 @@ half2 frag_shadow (v2f_img i) : SV_TARGET
 
 uniform half _SSCSRayLength;
 uniform half _SSCSDepthBias;
+uniform half _SSCSMeanDepth;
 
 #ifndef _SSCSNumStride
-	#define _SSCSNumStride 8
+	#define _SSCSNumStride 4
 #endif
 
 #ifndef SHADOWS_OFF
-float HorizonTrace(float2 uv0, float2 uv1, float4 vp0)
+half HorizonTrace(float2 uv0, float2 uv1, float4 vp0, float threshold, float radius)
 {
-	float horizon = -100.0f;
-
 	float slope = (uv1.y - uv0.y) / (uv1.x - uv0.x);
 	float minStr = min(length(TexelSize.xx * float2(1.0f, slope)),
             length(TexelSize.yy * float2(1.0f / slope, 1.0f)));
 
 	float str = max(minStr, pow(1.0f / _SSCSNumStride, 2));
+
+	half4 shadow = 1.0h;
+	half4 horizon = {
+		mad(radius, 1.0000f, threshold),
+		mad(radius, 0.3333f, threshold),
+		mad(radius,-0.3333f, threshold),
+		mad(radius,-1.0000f, threshold)
+	};
 
 	[unroll]
 	for (uint iter = 0; iter < _SSCSNumStride && str <= 1.0f; iter ++)
@@ -314,14 +318,22 @@ float HorizonTrace(float2 uv0, float2 uv1, float4 vp0)
 		float2 uv = lerp(uv0, uv1, str);
 		float4 sp = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
 		float4 vp = mul(_ClipToViewMatrix, sp);
-		float z = tex2D(_CameraDepthTexture, uv);
-		vp = float4(vp.xyz * Linear01Depth(z) / vp.w, 1.0f);
-		z = -vp.z;
+		float zf = tex2D(_CameraDepthTexture, uv);
+		vp = float4(vp.xyz * Linear01Depth(zf) / vp.w, 1.0f);
+		zf = -vp.z;
 
-		horizon = max(horizon, (-vp0.z - _SSCSDepthBias - z) / distance(vp.xy, vp0.xy));
+		float zb = zf + _SSCSMeanDepth;
+
+		float hf = (-vp0.z - _SSCSDepthBias - zf) / distance(vp.xy, vp0.xy);
+		float hb = (-vp0.z - _SSCSDepthBias - zb) / distance(vp.xy, vp0.xy);
+
+		shadow.x = hf > horizon.x ? 0.0f : shadow.x;
+		shadow.y = hf > horizon.y ? 0.0f : shadow.y;
+		shadow.z = hf > horizon.z ? 0.0f : shadow.z;
+		shadow.w = hf > horizon.w ? 0.0f : shadow.w;
 	}
 
-	return horizon;
+	return dot(shadow, 0.25h);
 }
 #endif
 
@@ -330,23 +342,19 @@ half SampleSingleCS(float4 vpos, float4 vdir, float2 uv0, float3 noise, float ra
 #ifdef SHADOWS_OFF
 	return 1.0h;
 #else
-	vdir.xy = vdir.xy + float2(-vdir.y, vdir.x) * radius * scale * mad(noise.y, 2.0f, -1.0f);
+	vdir.xy = vdir.xy + float2(-vdir.y, vdir.x) * radius * scale * noise.y;
 	vdir.xyz = normalize(vdir.xyz);
 
 	float4 lpos = raylen * vdir + vpos;
 	float4 spos = mul(_ViewToClipMatrix, float4(lpos.xyz, 1.0f));
 
 	float2 uv1 = spos.xy / spos.w * 0.5f + 0.5f;
-
-	float horizon = HorizonTrace(uv0, uv1, vpos);
-
 	float z0 = -vpos.z - _SSCSDepthBias;
 	float z1 = -lpos.z;
 
 	float threshold = (z0 - z1) / distance(lpos.xy, vpos.xy);
-	threshold += radius * mad(noise.z, 2.0f, -1.0f);
 
-	return step(horizon, threshold);
+	return HorizonTrace(uv0, uv1, vpos, threshold, radius * noise.z);
 #endif
 }
 
@@ -356,7 +364,7 @@ half SampleContactShadows(float3 wpos, float3 wdir, float2 uv0)
 	return 1.0h;
 #else
 	float3 noise = SampleNoise(uv0);
-	float raylen = _SSCSRayLength * (noise.x + 0.5f);
+	float raylen = _SSCSRayLength * mad(noise.x, 0.4f, 0.8f);
 	float4 vpos = mul(_WorldToViewMatrix, float4(wpos, 1.0f));
 	float4 vdir = mul(_WorldToViewMatrix, float4(wdir, 0.0f));
 
@@ -371,7 +379,6 @@ half SampleContactShadows(float3 wpos, float3 wdir, float2 uv0)
 	#elif defined(DIRECTIONAL)
 		radius = _DirLightPenumbra.y * 0.01f;
 	#endif
-
 
 	shadow += SampleSingleCS(vpos, vdir, uv0, noise, raylen, radius,  1.0000f);
 	shadow += SampleSingleCS(vpos, vdir, uv0, noise, raylen, radius,  0.3333f);

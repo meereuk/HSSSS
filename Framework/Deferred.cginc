@@ -31,6 +31,13 @@ inline half2 SampleShadow(float3 pos, float depth, float fadeDist, float2 uv, ha
     shadow = 1.0h;
 #else
     shadow = tex2D(_ScreenSpaceShadowMap, uv);
+
+    #if defined(SPOT)|| defined(POINT)
+        ComputeDirectOcclusion(pos, normalize(_LightPos.xyz - pos), uv, shadow);
+    #elif defined(DIRECTIONAL)
+        ComputeDirectOcclusion(pos, -_LightDir.xyz, uv, shadow);
+    #endif
+
     shadow.x = lerp(shadow.x, 1.0h, _LightShadowData.x);
 
     float fade = fadeDist * _LightShadowData.z + _LightShadowData.w;
@@ -91,7 +98,11 @@ ADirect aDeferredDirect(ASurface s)
     // directional light
     #if defined(DIRECTIONAL) || defined(DIRECTIONAL_COOKIE)
         // directional shadow
-        d.shadow = SampleShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
+        #if defined(_PCF_ON)
+            d.shadow = SampleShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
+        #else
+            d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv);
+        #endif
         lightVector = -_LightDir.xyz;
         
         #if !defined(ALLOY_SUPPORT_REDLIGHTS) && defined(DIRECTIONAL_COOKIE)
@@ -108,7 +119,11 @@ ADirect aDeferredDirect(ASurface s)
 
         // spot light
         #if defined (SPOT)
-            d.shadow = SampleShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
+            #if defined(_PCF_ON)
+                d.shadow = SampleShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
+            #else
+                d.shadow = UnityDeferredComputeShadow(s.positionWorld, fadeDist, s.screenUv);
+            #endif
             
             // light cookie
             float4 uvCookie = mul(_LightMatrix0, float4(s.positionWorld, 1.0f));
@@ -126,7 +141,11 @@ ADirect aDeferredDirect(ASurface s)
 
         // point light
         #if defined (POINT) || defined (POINT_COOKIE)
-            d.shadow = SampleShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
+            #if defined(_PCF_ON)
+                d.shadow = SampleShadow(s.positionWorld, s.viewDepth, fadeDist, s.screenUv, d.NdotL);
+            #else
+                d.shadow = UnityDeferredComputeShadow(-lightVector, fadeDist, s.screenUv);
+            #endif
 
             // light cookie
             #if defined (POINT_COOKIE)

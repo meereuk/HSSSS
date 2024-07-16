@@ -190,7 +190,7 @@ Shader "Hidden/HSSSS/SoftShadows"
             #pragma fragment frag_cshadow
             #pragma multi_compile ___ SHADOWS_OFF
             #pragma multi_compile SPOT POINT DIRECTIONAL
-            #define _SSCSNumStride 8
+            #define _SSCSNumStride 4
             #include "SoftShadows.cginc"
             ENDCG
         }
@@ -202,7 +202,7 @@ Shader "Hidden/HSSSS/SoftShadows"
             #pragma fragment frag_cshadow
             #pragma multi_compile ___ SHADOWS_OFF
             #pragma multi_compile SPOT POINT DIRECTIONAL
-            #define _SSCSNumStride 16
+            #define _SSCSNumStride 8
             #include "SoftShadows.cginc"
             ENDCG
         }
@@ -214,7 +214,7 @@ Shader "Hidden/HSSSS/SoftShadows"
             #pragma fragment frag_cshadow
             #pragma multi_compile ___ SHADOWS_OFF
             #pragma multi_compile SPOT POINT DIRECTIONAL
-            #define _SSCSNumStride 24
+            #define _SSCSNumStride 12
             #include "SoftShadows.cginc"
             ENDCG
         }
@@ -226,7 +226,7 @@ Shader "Hidden/HSSSS/SoftShadows"
             #pragma fragment frag_cshadow
             #pragma multi_compile ___ SHADOWS_OFF
             #pragma multi_compile SPOT POINT DIRECTIONAL
-            #define _SSCSNumStride 32
+            #define _SSCSNumStride 16
             #include "SoftShadows.cginc"
             ENDCG
         }
