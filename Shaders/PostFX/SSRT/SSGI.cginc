@@ -507,13 +507,17 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
         // horizon shadow
         float dz = (vp.z - ray.vp.z) / distance(vp.xy, ray.vp.xy);
 
-        float horizon = theta[idx] / div[idx];
+        float3 horizon = {
+            theta[idx] / div[idx],
+            theta[(idx + 1) % 8] / div[(idx + 1) % 8],
+            theta[(idx + 7) % 8] / div[(idx + 7) % 8],
+        };
+
+        ir.xyz *= 0.5f * step(horizon.x, dz) + 0.25f * step(horizon.y, dz) + 0.25f * step(horizon.z, dz);
 
         float bf = exp(beta * dz);
         theta[idx] += dz * bf;
         div[idx] += bf;
-
-        ir.xyz *= step(horizon, dz);
 
         // distance attenuation
         float r = distance(ray.vp.xyz, vp.xyz);
@@ -529,7 +533,6 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
 
         ir.xyz *= ndotl;
         ir.xyz *= r;
-
         ir.xyz *= pow(ray.len, 1.0f / power);
 
         diffuse += ir.xyz;
@@ -538,6 +541,11 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
 
     diffuse /= _SSGINumSample;
     specular /= _SSGINumSample;
+
+    half fade = smoothstep(0.9 * _SSGIFadeDepth, _SSGIFadeDepth, -ray.vp.z);
+
+    diffuse = lerp(diffuse, 0.0h, fade);
+    specular = lerp(specular, 0.0h, fade);
 
     mrt0 = half4(diffuse, GetLuminance(diffuse));
     mrt1 = half4(specular, GetLuminance(specular));
@@ -654,6 +662,12 @@ inline half4 CollectGI(v2f_img IN) : SV_TARGET
 {
     half4 diffuse, specular;
     SampleFlopBuffer(IN.uv, diffuse, specular);
+
+    float depth = LinearEyeDepth(SampleZBuffer(IN.uv));
+
+    diffuse = depth > _SSGIFadeDepth ? 0.0h : diffuse;
+    specular = depth > _SSGIFadeDepth ? 0.0h : specular;
+
     half4 albedo = SampleGBuffer0(IN.uv);
     half4 direct = SampleGBuffer3(IN.uv);
 

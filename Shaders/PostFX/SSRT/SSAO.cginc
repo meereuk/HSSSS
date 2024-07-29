@@ -12,7 +12,7 @@ uniform half _SSAORayLength;
 uniform half _SSAOMeanDepth;
 uniform half _SSAOFadeDepth;
 uniform uint _SSAORayStride;
-//uniform bool _SSAOUseSparse;
+uniform uint _SSAOSubSample;
 
 uniform Texture2D _SSAOFlipRenderTexture;
 uniform Texture2D _SSAOFlopRenderTexture;
@@ -206,6 +206,22 @@ half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
     // interleaved uv
     float2 uv = IN.uv;
 
+    if (_SSAOSubSample == 1)
+    {
+        uint2 coord = round((uv - 0.5f * _MainTex_TexelSize.xy) * _MainTex_TexelSize.zw);
+	    coord.x = coord.y % 2 == _FrameCount % 2 ? 2 * coord.x : 2 * coord.x + 1;
+        uv = ((float2) coord + 0.5f) * _MainTex_TexelSize.xy;
+        if (uv.x > 1.0f) discard;
+    }
+
+    else if (_SSAOSubSample == 2)
+    {
+        uint2 coord = round((uv - 0.5f * _MainTex_TexelSize.xy) * _MainTex_TexelSize.zw);
+        coord = 2 * coord + uint2((_FrameCount % 4) / 2, (_FrameCount % 4) % 2);
+	    uv = ((float2) coord + 0.5f) * _MainTex_TexelSize.xy;
+        if (uv.x > 1.0f || uv.y > 1.0f) discard;
+    }
+
     depth = SampleZBufferLOD(uv, 0);
     float4 spos = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
     vpos = mul(_ClipToViewMatrix, spos);
@@ -217,7 +233,10 @@ half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
     half3 vnrm = mul(_WorldToViewMatrix, wnrm);
     half3 vdir = half3(0.0h, 0.0h, 1.0h);
 
-    if (-vpos.z > _SSAOFadeDepth) discard;
+    if (-vpos.z > _SSAOFadeDepth)
+    {
+        return half4(mad(wnrm, 0.5h, 0.5h), 1.0h);
+    }
 
     float3 noise = SampleNoise(uv);
 
@@ -271,9 +290,14 @@ half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
         ao.xyz += normalize(vdir * cos(bentAngle) + pdir.xyz * sin(bentAngle)) * occlusion;
     }
 
-    ao.w = saturate(ao.w / _SSAONumSample);
-    ao.w = pow(ao.w, _SSAOIntensity);
+    half fade = smoothstep(0.9 * _SSAOFadeDepth, _SSAOFadeDepth, -vpos.z);
 
+    ao.w = saturate(ao.w / _SSAONumSample);
+    ao.w = pow(lerp(_SSAOLightBias, 1.0h, ao.w), _SSAOIntensity);
+    //ao.w = pow(ao.w, _SSAOIntensity);
+    ao.w = lerp(ao.w, 1.0h, fade);
+
+    ao.xyz = lerp(ao.xyz, vnrm.xyz, fade);
     ao.xyz = normalize(ao.xyz);
     ao.xyz = mul(_ViewToWorldMatrix, ao.xyz);
     ao.xyz = mad(ao.xyz, 0.5h, 0.5h);
@@ -285,43 +309,150 @@ inline half4 DecodeAO(v2f_img IN) : SV_TARGET
 {
     float2 uv = IN.uv;
     uint2 coord = round((uv - 0.5f * _MainTex_TexelSize.xy) * _MainTex_TexelSize.zw);
-    if ((coord.x + coord.y) % 2 != _FrameCount % 2) return 0.0h;
-    coord.x = coord.x / 2;
-    uv = ((float2) coord + 0.5f) * _MainTex_TexelSize.xy;
 
-    return SampleTexel(uv);
+    if (_SSAOSubSample == 1)
+    {
+        if ((coord.x + coord.y) % 2 != _FrameCount % 2)
+        {
+            return 0.0h;
+        }
+
+        else
+        {
+            coord.x = coord.x / 2;
+            uv = ((float2) coord + 0.5f) * _MainTex_TexelSize.xy;
+
+            return SampleTexel(uv);
+        }
+    }
+
+    else if (_SSAOSubSample == 2)
+    {
+        uint2 offset = uint2((_FrameCount % 4) / 2, (_FrameCount % 4) % 2);
+
+        if (coord.x % 2 == offset.x && coord.y % 2 == offset.y)
+        {
+            coord = (coord - offset) / 2;
+            uv = ((float2) coord + 0.5f) * _MainTex_TexelSize.xy;
+            return SampleTexel(uv);
+        }
+
+        else
+        {
+            return 0.0h;
+        }
+    }
+
+    else
+    {
+        return SampleTexel(uv);
+    }
 }
 
 inline half4 Interpolate(v2f_img IN) : SV_TARGET
 {
     float2 uv = IN.uv;
     uint2 coord = round((uv - 0.5f * _MainTex_TexelSize.xy) * _MainTex_TexelSize.zw);
-
     half4 ao = 0.0h;
 
-    if ((coord.x + coord.y) % 2 != _FrameCount % 2)
+    if (_SSAOSubSample == 1)
     {
-        half4 tex;
+        if ((coord.x + coord.y) % 2 == _FrameCount % 2)
+        {
+            ao = SampleTexel(uv);
+        }
 
-        tex = SampleTexel(uv, int2( 1,  0));
-        tex.xyz = mad(tex.xyz, 2.0h, -1.0h);
-        ao += tex;
+        else
+        {
+            half4x4 tex = {
+                SampleTexel(uv, int2(-1,  0)),
+                SampleTexel(uv, int2( 1,  0)),
+                SampleTexel(uv, int2( 0, -1)),
+                SampleTexel(uv, int2( 0,  1))
+            };
 
-        tex = SampleTexel(uv, int2( 0,  1));
-        tex.xyz = mad(tex.xyz, 2.0h, -1.0h);
-        ao += tex;
+            float4 z = {
+                LinearEyeDepth(SampleZBuffer(uv, int2(-1,  0))),
+                LinearEyeDepth(SampleZBuffer(uv, int2( 1,  0))),
+                LinearEyeDepth(SampleZBuffer(uv, int2( 0, -1))),
+                LinearEyeDepth(SampleZBuffer(uv, int2( 0,  1)))
+            };
 
-        tex = SampleTexel(uv, int2(-1,  0));
-        tex.xyz = mad(tex.xyz, 2.0h, -1.0h);
-        ao += tex;
+            z -= LinearEyeDepth(SampleZBuffer(uv));
 
-        tex = SampleTexel(uv, int2( 0, -1));
-        tex.xyz = mad(tex.xyz, 2.0h, -1.0h);
-        ao += tex;
+            half4 ao0 = abs(z.x) < abs(z.y) ? tex[0] : tex[1];
+            half4 ao1 = abs(z.z) < abs(z.w) ? tex[2] : tex[3];
 
-        ao.xyz = normalize(ao.xyz);
-        ao.xyz = mad(ao.xyz, 0.5h, 0.5h);
-        ao.w /= 4.0h;
+            ao = min(abs(z.x), abs(z.y)) < min(abs(z.z), abs(z.w)) ? ao0 : ao1;
+        }
+    }
+
+    else if (_SSAOSubSample == 2)
+    {
+        uint2 offset = uint2((_FrameCount % 4) / 2, (_FrameCount % 4) % 2);
+
+        if (coord.x % 2 == offset.x && coord.y % 2 == offset.y)
+        {
+            ao = SampleTexel(uv);
+        }
+
+        else if (coord.x % 2 != offset.x && coord.y % 2 == offset.y)
+        {
+            half2x4 tex = {
+                SampleTexel(uv, int2(-1, 0)),
+                SampleTexel(uv, int2( 1, 0))
+            };
+
+            float2 z = {
+                LinearEyeDepth(SampleZBuffer(uv, int2(-1, 0))),
+                LinearEyeDepth(SampleZBuffer(uv, int2( 1, 0)))
+            };
+
+            z -= LinearEyeDepth(SampleZBuffer(uv));
+
+            ao = abs(z.x) < abs(z.y) ? tex[0] : tex[1];
+        }
+
+        else if (coord.x % 2 == offset.x && coord.y % 2 != offset.y)
+        {
+            half2x4 tex = {
+                SampleTexel(uv, int2(0, -1)),
+                SampleTexel(uv, int2(0,  1))
+            };
+
+            float2 z = {
+                LinearEyeDepth(SampleZBuffer(uv, int2(0, -1))),
+                LinearEyeDepth(SampleZBuffer(uv, int2(0,  1)))
+            };
+
+            z -= LinearEyeDepth(SampleZBuffer(uv));
+
+            ao = abs(z.x) < abs(z.y) ? tex[0] : tex[1];
+        }
+
+        else
+        {
+            half4x4 tex = {
+                SampleTexel(uv, int2(-1, -1)),
+                SampleTexel(uv, int2( 1, -1)),
+                SampleTexel(uv, int2(-1,  1)),
+                SampleTexel(uv, int2( 1,  1))
+            };
+
+            float4 z = {
+                LinearEyeDepth(SampleZBuffer(uv, int2(-1, -1))),
+                LinearEyeDepth(SampleZBuffer(uv, int2( 1, -1))),
+                LinearEyeDepth(SampleZBuffer(uv, int2(-1,  1))),
+                LinearEyeDepth(SampleZBuffer(uv, int2( 1,  1)))
+            };
+
+            z -= LinearEyeDepth(SampleZBuffer(uv));
+
+            half4 ao0 = abs(z.x) < abs(z.y) ? tex[0] : tex[1];
+            half4 ao1 = abs(z.z) < abs(z.w) ? tex[2] : tex[3];
+
+            ao = min(abs(z.x), abs(z.y)) < min(abs(z.z), abs(z.w)) ? ao0 : ao1;
+        }
     }
 
     else
@@ -336,14 +467,20 @@ inline half4 ApplyOcclusionToGBuffer0(v2f_img IN) : SV_TARGET
 {
     half ao = SampleFlip(IN.uv).a;
     half4 color = SampleTexel(IN.uv);
-    return half4(color.rgb, min(color.a, ao));
+
+    float depth = LinearEyeDepth(SampleZBuffer(IN.uv));
+    half4 result = depth > _SSAOFadeDepth ? color : half4(color.rgb, min(color.a, ao));
+    return result;
 }
 
 inline half4 ApplyOcclusionToGBuffer3(v2f_img IN) : SV_TARGET
 {
     half ao = SampleFlip(IN.uv).a;
     half4 color = SampleTexel(IN.uv);
-    return half4(color.rgb * ao, color.a);
+
+    float depth = LinearEyeDepth(SampleZBuffer(IN.uv));
+    half4 result = depth > _SSAOFadeDepth ? color : half4(color.rgb * ao, color.a);
+    return result;
 }
 
 inline half4 ApplySpecularOcclusion(v2f_img IN) : SV_TARGET
@@ -382,9 +519,8 @@ inline half4 ApplySpecularOcclusion(v2f_img IN) : SV_TARGET
 
     half4 color = SampleTexel(IN.uv);
 
-    return half4(color.rgb * intersection, color.a);
-
-    return intersection * SampleTexel(IN.uv);
+    half4 result = depth > _SSAOFadeDepth ? color : half4(color.rgb * intersection, color.a);
+    return result;
 }
 
 inline half4 SpatialDenoiser(v2f_img IN) : SV_TARGET
@@ -393,6 +529,11 @@ inline half4 SpatialDenoiser(v2f_img IN) : SV_TARGET
     float depth;
 
     SampleCoordinates(IN.uv, vpos, wpos, depth);
+
+    if (depth > _SSAOFadeDepth)
+    {
+        return SampleTexel(IN.uv);
+    }
 
     // normal
     half3 wnrm = SampleGBuffer2(IN.uv);

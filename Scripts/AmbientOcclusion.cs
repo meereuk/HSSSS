@@ -119,8 +119,8 @@ public class AmbientOcclusion : MonoBehaviour
 
         this.aoBuffer.Blit(zbuf, flip, this.mMaterial, 5);
 
-        //this.aoBuffer.Blit(flip, flop, this.mMaterial, 6);
-        //this.aoBuffer.Blit(flop, flip, this.mMaterial, 7);
+        this.aoBuffer.Blit(flip, flop, this.mMaterial, 6);
+        this.aoBuffer.Blit(flop, flip, this.mMaterial, 7);
 
         /*
         this.aoBuffer.Blit(flip, flop, this.mMaterial, 8);
