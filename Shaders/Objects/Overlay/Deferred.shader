@@ -37,6 +37,7 @@
         _EdgeLength ("EdgeLength", Range(2, 50)) = 2
 
         [Space(8)][Header(Transparency)]
+        _Cutoff ("Cutoff", Range(0, 1)) = 0.0
         _FresnelAlpha ("Fresnel Alpha", Range(0, 1)) = 0
     }
 
@@ -86,6 +87,7 @@
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_DEFERRED
+            #define _ALPHATEST_ON
             #define A_FINAL_GBUFFER_ON
             #define A_DECAL_ALPHA_FIRSTPASS
         
@@ -120,6 +122,7 @@
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_DEFERRED
+            #define _ALPHATEST_ON
             #define A_FINAL_GBUFFER_ON
         
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
@@ -166,6 +169,7 @@
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_DEFERRED
+            #define _ALPHATEST_ON
             #define A_FINAL_GBUFFER_ON
             #define A_DECAL_ALPHA_FIRSTPASS
         
@@ -198,6 +202,7 @@
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_DEFERRED
+            #define _ALPHATEST_ON
             #define A_FINAL_GBUFFER_ON
         
             #include "Assets/HSSSS/Definitions/Overlay.cginc"

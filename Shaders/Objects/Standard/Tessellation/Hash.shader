@@ -42,6 +42,7 @@ Shader "HSSSS/Standard/Tessellation/Hash"
         _Thickness ("ThicknessMap", 2D) = "white" {}
 
         _Hash ("Hash", Range(0, 1)) = 0
+        _Cutoff ("Cutoff", Range(0, 1)) = 0.0
         _FuzzBias ("FuzzBias", Range(0, 1)) = 0.0
         _BlueNoise ("Blue Noise", 3D) = "black" {}
         _FresnelAlpha ("Fresnel Alpha", Range(0, 1)) = 0
@@ -136,6 +137,7 @@ Shader "HSSSS/Standard/Tessellation/Hash"
             #pragma fragment aFragmentShader
         
             #define UNITY_PASS_SHADOWCASTER
+            #define _ALPHATEST_ON
         
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/Shadow.cginc"

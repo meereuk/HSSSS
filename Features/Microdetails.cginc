@@ -1,4 +1,6 @@
 #ifndef HSSSS_FEATURES_MICRODETAILS
+// Upgrade NOTE: excluded shader from OpenGL ES 2.0 because it uses non-square matrices
+#pragma exclude_renderers gles
 #define HSSSS_FEATURES_MICRODETAILS
 
 #include "Assets/HSSSS/Framework/Surface.cginc"
@@ -81,7 +83,7 @@ inline void aSampleMicroTangent(inout ASurface s)
             _DetailNormalMapScale_3
         };
 
-        intensity *= pow(s.NdotV, 4);
+        intensity *= pow(s.NdotV, 2);
         
         s.ambientOcclusion = s.ambientOcclusion * lerp(1.0h, dot(pore, weight), intensity.x);
         s.normalWorld = A_NORMAL_WORLD(s, s.normalTangent);

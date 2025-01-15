@@ -49,8 +49,12 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
     else if (s.scatteringMask < 0.4h)
     {
         half3 halfvector = normalize(d.direction + s.viewDirWorld);
+
+        half frac = s.normalWorld.y * s.normalWorld.y;
+
+        half3 bitangent = normalize(lerp(half3(0.0h, 1.0h, 0.0h), half3(1.0h, 0.0h, 0.0h), frac));
+        bitangent = normalize(bitangent - s.normalWorld * dot(s.normalWorld, bitangent));        
         
-        half3 bitangent = normalize(half3(0.0h, 1.0h, 0.0h) - s.normalWorld * s.normalWorld.y);
         half3 tangent = normalize(cross(s.normalWorld, bitangent));
 
         half TdotH = dot(tangent, halfvector);

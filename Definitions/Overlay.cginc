@@ -15,6 +15,8 @@ void aSurface(inout ASurface s)
 {
     aSampleAlbedo(s);
     aSampleEmission(s);
+    aSampleFresnelAlpha(s);
+    aSampleAlphaClip(s);
     aSampleTransmission(s);
     aSampleScattering(s);
     aSampleSpecGloss(s);
@@ -28,8 +30,6 @@ void aSurface(inout ASurface s)
     aSampleBumpTangent(s);
     aSampleDetailTangent(s);
     aUpdateNormalData(s);
-    aSampleFresnelAlpha(s);
-    aSampleAlphaClip(s);
 }
 
 #endif
