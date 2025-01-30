@@ -34,13 +34,23 @@ Shader "Hidden/HSSSS/Deferred Reflections"
 
                 if (s.scatteringMask > 0.1h && s.scatteringMask < 0.4h)
                 {
-                    half3 bitangent = normalize(half3(0.0h, 1.0h, 0.0h) - s.normalWorld * s.normalWorld.y);
+                    half anisotropy = clamp(mad(s.transmission, 2.0h, -1.0h), -1.0h, 1.0h);
+
+                    half frac = s.normalWorld.y * s.normalWorld.y;
+
+                    half3 bitangent = normalize(lerp(half3(0.0h, 1.0h, 0.0h), half3(1.0h, 0.0h, 0.0h), frac * frac));
+                    bitangent = normalize(bitangent - s.normalWorld * dot(s.normalWorld, bitangent));
+
                     half3 tangent = normalize(cross(s.normalWorld, bitangent));
 
-                    half3 anisoTangent = cross(bitangent, s.viewDirWorld);
-                    half3 anisoNormal = normalize(cross(anisoTangent, bitangent));
+                    half3 anisoDirection = anisotropy >= 0.0 ? bitangent : tangent;
 
-                    s.reflectionVectorWorld = reflect(-s.viewDirWorld, anisoNormal);
+                    half3 anisoTangent = cross(anisoDirection, s.viewDirWorld);
+                    half3 anisoNormal = normalize(cross(anisoTangent, anisoDirection));
+
+                    half3 bentNormal = normalize(lerp(s.normalWorld, anisoNormal, abs(anisotropy)));
+
+                    s.reflectionVectorWorld = reflect(-s.viewDirWorld, bentNormal);
                 }
     
                 #if UNITY_SPECCUBE_BOX_PROJECTION

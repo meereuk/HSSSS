@@ -11,7 +11,7 @@ void aSurface(inout ASurface s)
 {
     aSampleAlbedo(s);
     aSampleEmission(s);
-    #if !defined(UNITY_PASS_SHADOWCASTER)
+    #ifndef UNITY_PASS_SHADOWCASTER
         aSampleTransmission(s);
         aSampleScattering(s);
         aSampleSpecGloss(s);
@@ -19,7 +19,7 @@ void aSurface(inout ASurface s)
         aSampleBumpTangent(s);
         aSampleBlendTangent(s);
         aSampleDetailTangent(s);
-        #if defined (_MICRODETAILS_ON)
+        #ifdef _MICRODETAILS_ON
             aSampleMicroTangent(s);
         #else
             aUpdateNormalData(s);

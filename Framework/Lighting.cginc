@@ -52,8 +52,8 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
 
         half frac = s.normalWorld.y * s.normalWorld.y;
 
-        half3 bitangent = normalize(lerp(half3(0.0h, 1.0h, 0.0h), half3(1.0h, 0.0h, 0.0h), frac));
-        bitangent = normalize(bitangent - s.normalWorld * dot(s.normalWorld, bitangent));        
+        half3 bitangent = normalize(lerp(half3(0.0h, 1.0h, 0.0h), half3(1.0h, 0.0h, 0.0h), frac * frac));
+        bitangent = normalize(bitangent - s.normalWorld * dot(s.normalWorld, bitangent));
         
         half3 tangent = normalize(cross(s.normalWorld, bitangent));
 

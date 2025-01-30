@@ -10,7 +10,10 @@
 #include "Assets/HSSSS/Features/Common.cginc"
 #include "Assets/HSSSS/Features/Overlay.cginc"
 #include "Assets/HSSSS/Features/Dissolve.cginc"
-#include "Assets/HSSSS/Features/Microdetails.cginc"
+
+#ifdef _MICRODETAILS_ON
+    #include "Assets/HSSSS/Features/Microdetails.cginc"
+#endif
 
 #include "UnityCG.cginc"
 #include "UnityStandardBRDF.cginc"
