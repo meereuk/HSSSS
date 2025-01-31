@@ -38,6 +38,7 @@ Shader "HSSSS/Human/Eyebrow"
         #define _WORKFLOW_SPECULAR
         #define _VERTEXWRAP_ON
         #define _DISPALPHA_ON
+        #define _FORWARDONLY_OVERLAY
     ENDCG
 
     SubShader

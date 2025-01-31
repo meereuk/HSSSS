@@ -129,7 +129,7 @@ void HorizonTrace(ray ray, inout float4 theta)
     [unroll]
     for (uint iter = 0; iter < _SSAONumStride && str <= 1.0f; iter ++)
     {
-        uint lod = iter * 4 / _SSAONumStride;
+        uint lod = min(iter / 2, 3);
         str = max(str + minStr[lod], pow(((float) iter + 1.0f) / _SSAONumStride, power));
 
         float2x2 uv = {
@@ -152,7 +152,6 @@ void HorizonTrace(ray ray, inout float4 theta)
             SampleZBufferLOD(uv[1], lod)
         };
 
-
         vp[0] = float4(vp[0].xyz * z.x / vp[0].w , 1.0f);
         vp[1] = float4(vp[1].xyz * z.y / vp[1].w , 1.0f);
 
@@ -174,18 +173,16 @@ void HorizonTrace(ray ray, inout float4 theta)
 
         float threshold = atan(sqrt(1.0f - str * str) / str);
 
-        dz.x = lerp(min(dz.x, threshold), theta.z, smoothstep(-threshold, threshold, dz.z));
-        dz.y = lerp(min(dz.y, threshold), theta.w, smoothstep(-threshold, threshold, dz.w));
+        dz.x = lerp(min(dz.x, threshold), theta.z, smoothstep(theta.z, threshold, dz.z));
+        dz.y = lerp(min(dz.y, threshold), theta.w, smoothstep(theta.w, threshold, dz.w));
 
-        sum += dz * exp(beta * dz);
-        div += exp(beta * dz);
-
-        //theta.x = max(theta.x, lerp(dz.x, theta.x, 0.5f * str));
-        //theta.y = max(theta.y, lerp(dz.y, theta.y, 0.5f * str));
+        float2 bf = exp(beta * dz);
+        
+        sum += dz * bf;
+        div += bf;
     }
 
-    sum /= div;
-    theta.xy = sum;
+    theta.xy = sum / div;
 }
 
 inline float ZBufferPrePass(v2f_img IN) : SV_TARGET
@@ -566,7 +563,7 @@ inline half4 SpatialDenoiser(v2f_img IN) : SV_TARGET
         float4 vp = mul(_ClipToViewMatrix, sp);
         vp = float4(vp.xyz * z / vp.w, 1.0f);
 
-        half fac = i == 0 ? 1.0h : pow(dot(dir, normalize(vp.xyz - vpos.xyz)), 2);
+        half fac = i == 0 ? 1.0h : pow(dot(dir, normalize(vp.xyz - vpos.xyz)), 4);
         fac *= kernel[i + 2];
 
         half3 nnn = SampleGBuffer2(IN.uv, offset);
