@@ -467,9 +467,8 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
         float4 pdir = float4(cos(phi), sin(phi), 0.0f, 0.0f);
 
         // horizon index
-        float rad = phi / FULL_PI + 0.0625f;
-        rad = rad * 4.0f;
-        uint idx = uint(rad) % 8;
+        float rad = 4.0f * phi / FULL_PI;
+        uint idx = uint(rad + noise.y) % 8;
 
         //float3 proj = dot(ray.vn, vdir) * vdir + dot(ray.vn, pdir.xyz) * pdir.xyz;
         //float gamma = clamp(acos(normalize(proj).z) * sign(dot(proj, pdir.xyz)), -HALF_PI, HALF_PI);

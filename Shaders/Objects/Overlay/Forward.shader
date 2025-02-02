@@ -75,6 +75,7 @@ Shader "HSSSS/Overlay/Forward"
         
             #define UNITY_PASS_FORWARDBASE
             #define _ALPHABLEND_ON
+            #define _FORWARDONLY_OVERLAY
         
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
@@ -146,6 +147,7 @@ Shader "HSSSS/Overlay/Forward"
         
             #define UNITY_PASS_FORWARDBASE
             #define _ALPHABLEND_ON
+            #define _FORWARDONLY_OVERLAY
         
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"

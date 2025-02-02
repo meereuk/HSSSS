@@ -49,19 +49,19 @@ inline float3 SampleNoise(float2 uv)
 }
 
 // gram-schmidt process
-inline float3x3 GramSchmidtMatrix(float2 uv, float3 axis)
+inline float3x3 GramSchmidtMatrix(float3 axis)
 {
-    float3 jitter = normalize(mad(SampleNoise(uv), 2.0f, -1.0f));
-    float3 tangent = normalize(jitter - axis * dot(jitter, axis));
+	float3 vec = normalize(lerp(float3(1.0f, 0.0f, 0.0f), float3(0.0f, 1.0f, 0.0f), abs(axis.x)));
+    float3 tangent = normalize(vec - axis * dot(vec, axis));
     float3 bitangent = normalize(cross(axis, tangent));
 
     return float3x3(tangent, bitangent, axis);
 }
 
 // posisson disc sampling
-inline float2 PoissonDisc(uint i, uint n)
+inline float2 PoissonDisc(uint i, uint n, float noise)
 {
-	float t = 2.4f * i;
+	float t = 2.4f * i + noise * UNITY_PI;
 	float r = sqrt((i + 0.5f) / n);
 	return float2(r * cos(t), r * sin(t));
 }
@@ -119,7 +119,8 @@ half2 SamplePCFShadows(float3 wpos, float2 uv, float depth, float3 nrm, float nd
 	#if defined(POINT)
 		float pixelDepth = distance(wpos, _LightPos.xyz);
 	#elif defined(SPOT)
-		float pixelDepth = GetShadowCoordinate(wpos).z / GetShadowCoordinate(wpos).w;
+		float4 pixelCoord = GetShadowCoordinate(wpos);
+		float pixelDepth = pixelCoord.z / pixelCoord.w;
 		pixelDepth = 1.0f / (_ShadowDepthParams.z * pixelDepth + _ShadowDepthParams.w);
 	#elif defined(DIRECTIONAL)
 		uint2 cascade = GetCascadeIndex(depth);
@@ -149,15 +150,17 @@ half2 SamplePCFShadows(float3 wpos, float2 uv, float depth, float3 nrm, float nd
 
 	// gram-schmidt process
 	#if defined(POINT)
-		float3x3 tbn = GramSchmidtMatrix(uv, wpos - _LightPos.xyz);
+		float3x3 tbn = GramSchmidtMatrix(wpos - _LightPos.xyz);
 	#elif defined (SPOT) || defined(DIRECTIONAL)
-		float3x3 tbn = GramSchmidtMatrix(uv, _LightDir.xyz);
+		float3x3 tbn = GramSchmidtMatrix(_LightDir.xyz);
 	#endif
 
 	///////////////////////////////////
 	// percentage-closer soft shadow //
 	///////////////////////////////////
 
+	// noise pattern for stochastic sampling
+	float3 noise = SampleNoise(uv);
 	// r: shadow, g: mean z-diff.
 	half2 shadow = {0.0h, 0.0h};
 
@@ -175,7 +178,7 @@ half2 SamplePCFShadows(float3 wpos, float2 uv, float depth, float3 nrm, float nd
 		[unroll]
 		for (uint i = 0; i < PCF_NUM_TAPS; i ++)
 		{
-			float3 disc = mul(PoissonDisc(i, PCF_NUM_TAPS), tbn);
+			float3 disc = mul(PoissonDisc(i, PCF_NUM_TAPS, noise.z), tbn);
 			float3 sampleCoord = mad(disc, radius.x, wpos);
 			float sampleDepth = 0.0f;
 
@@ -218,13 +221,13 @@ half2 SamplePCFShadows(float3 wpos, float2 uv, float depth, float3 nrm, float nd
 	/////////////////////////////////
 
 	#if defined(POINT) || defined(SPOT)
-		pixelDepth -= lerp(0.01f, 0.00f, ndotl) * _SlopeBiasScale;
+		pixelDepth -= lerp(0.01f, 0.00f, ndotl) * _SlopeBiasScale * noise.x;
 	#endif
 
 	[unroll]
 	for (uint j = 0; j < PCF_NUM_TAPS; j ++)
 	{
-		float3 disc = mul(PoissonDisc(j, PCF_NUM_TAPS), tbn);
+		float3 disc = mul(PoissonDisc(j, PCF_NUM_TAPS, noise.z), tbn);
 		float3 sampleCoord = mad(disc, penumbra, wpos);
 		float shadowDepth = 0.0f;
 

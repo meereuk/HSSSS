@@ -36,7 +36,6 @@ Shader "HSSSS/Overlay/Liquid"
 
     CGINCLUDE
         #define _ALPHAPREMULTIPLY_ON
-        #define _FORWARDONLY_OVERLAY
     ENDCG
 
     SubShader
@@ -80,6 +79,7 @@ Shader "HSSSS/Overlay/Liquid"
         
             #define UNITY_PASS_FORWARDBASE
             #define _ALPHAPREMULTIPLY_ON
+            #define _FORWARDONLY_OVERLAY
         
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
@@ -151,6 +151,7 @@ Shader "HSSSS/Overlay/Liquid"
         
             #define UNITY_PASS_FORWARDBASE
             #define _ALPHAPREMULTIPLY_ON
+            #define _FORWARDONLY_OVERLAY
         
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
