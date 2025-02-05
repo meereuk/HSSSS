@@ -44,6 +44,8 @@ uniform uint _FrameCount;
 
 #define FULL_PI 3.14159265359f
 #define HALF_PI 1.57079632679f
+#define HF_PI   1.57079632679f
+#define QR_PI   0.78539816339f
 
 #define s2(a, b)                temp = a; a = min(a, b); b = max(temp, b);
 #define mn3(a, b, c)            s2(a, b); s2(a, c);
@@ -136,7 +138,7 @@ inline half4 SampleGBuffer3(float2 uv, int2 offset)
 //
 inline float3 SampleNoise(float2 uv)
 {
-    float z = (float)(_FrameCount % 64) * 0.015625f + 0.0078125f;
+    float z = (float)(_FrameCount % 16) * 0.015625f + 0.0078125f;
     return _BlueNoise.Sample(sampler_BlueNoise, float3(uv * _ScreenParams.xy * 0.0078125f, z));
 }
 
@@ -156,6 +158,25 @@ inline void SampleCoordinates(float2 uv, out float4 vpos, out float4 wpos, out f
     vpos = float4(vpos.xyz * vdepth / vpos.w, 1.0f);
     // world space
     wpos = mul(_ViewToWorldMatrix, vpos);
+}
+
+//
+// calculating reference uv difference for 1 meter
+//
+inline float2 GetReferenceUvDiff(float4 vpos, float2 uv)
+{
+    float4 vp, sp;
+    float2 uvref;
+
+    vp = float4(1.0f, 0.0f, 0.0f, 0.0f) + vpos;
+    sp = mul(unity_CameraProjection, vp);
+    uvref.x = sp.x / sp.w * 0.5f + 0.5f - uv.x;
+
+    vp = float4(0.0f, 1.0f, 0.0f, 0.0f) + vpos;
+    sp = mul(unity_CameraProjection, vp);
+    uvref.y = sp.y / sp.w * 0.5f + 0.5f - uv.y;
+
+    return uvref;
 }
 
 //

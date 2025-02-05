@@ -415,7 +415,7 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
     ray.vp = SampleViewPosition(IN.uv);
     ray.vn = SampleViewNormal(IN.uv);
 
-    ray.len = _SSGIRayLength * mad(noise.x, 0.8f, 0.6f);
+    ray.len = _SSGIRayLength * mad(noise.x, 0.2f, 0.9f);
     ray.f0 = gbuffer1.xyz;
 
     // beckmann roughness to bllinn-phong exponent
@@ -435,7 +435,7 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
     float slice = FULL_PI / _SSGINumSample;
 
     float theta[8];
-    float div[8];
+    //float div[8];
 
     for (uint idx = 0; idx < 4; idx ++)
     {
@@ -445,66 +445,78 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
         float3 proj = dot(ray.vn, vdir) * vdir + dot(ray.vn, pdir.xyz) * pdir.xyz;
         float gamma = clamp(acos(normalize(proj).z) * sign(dot(proj, pdir.xyz)), -HALF_PI, HALF_PI);
 
-        float2 bf = { exp(-beta * gamma), exp( beta * gamma) };
+        //float2 bf = { exp(-beta * gamma), exp( beta * gamma) };
 
-        theta[idx    ] = -gamma * bf.x;
-        theta[idx + 4] =  gamma * bf.y;
+        theta[idx    ] = -gamma;
+        theta[idx + 4] =  gamma;
 
-        div[idx    ] = bf.x;
-        div[idx + 4] = bf.y;
+        //div[idx    ] = bf.x;
+        //div[idx + 4] = bf.y;
     }
 
-    float power = max(1.0f, _SSGIStepPower);
+    float2 uvref = GetReferenceUvDiff(ray.vp, IN.uv);
 
-    for (float iter = 0.01f; iter < _SSGINumSample; iter += 1.0f)
+    uint power = clamp(_SSGIStepPower, 1, 5);
+
+    float numSample = 1e-6;
+
+    for (uint iter = 0; iter < _SSGINumSample; iter ++)
     {
+        // sample irradiance
+        uint lod = iter / 4;
+
+        float4 TexelSize;
+
+        if (lod > 3)        TexelSize = _HierachicalIrradianceBuffer4_TexelSize;
+        else if (lod > 2)   TexelSize = _HierachicalIrradianceBuffer3_TexelSize;
+        else if (lod > 1)   TexelSize = _HierachicalIrradianceBuffer2_TexelSize;
+        else if (lod > 0)   TexelSize = _HierachicalIrradianceBuffer1_TexelSize;
+        else                TexelSize = _HierachicalIrradianceBuffer0_TexelSize;
+
         // poisson disc angle
-        float phi = 2.4f * (iter - 0.01f) + 2.0f * noise.z * FULL_PI;
+        float phi = 2.4f * (float)iter + 2.0f * noise.z * FULL_PI;
         // poisson disc radius
-        float radius = sqrt((iter + 0.49f) / _SSGINumSample);
-        radius = ray.len * pow(radius, power);
+        float radius = sqrt(((float)iter + 0.5f) / (float)_SSGINumSample);
         // poisson disc direction
         float4 pdir = float4(cos(phi), sin(phi), 0.0f, 0.0f);
 
-        // horizon index
-        float rad = 4.0f * phi / FULL_PI;
-        uint idx = uint(rad + noise.y) % 8;
+        float2 muv = TexelSize.xy * pdir.xy;
 
-        //float3 proj = dot(ray.vn, vdir) * vdir + dot(ray.vn, pdir.xyz) * pdir.xyz;
-        //float gamma = clamp(acos(normalize(proj).z) * sign(dot(proj, pdir.xyz)), -HALF_PI, HALF_PI);
+        float2 duv = uvref * pdir.xy * ray.len * pow(radius, power);
 
-        // view space, screen space, uv space
-        float4 vp = ray.vp + radius * pdir;
-        float4 sp = mul(unity_CameraProjection, float4(vp.xyz, 1.0f));
-        float2 uv = sp.xy / sp.w * 0.5f + 0.5f;
-
-        uv += _HierachicalIrradianceBuffer2_TexelSize.xy * pdir.xy;
-
-        // sample irradiance
-        uint lod = uint(iter / 8.0f);
-
-        uv += lod == 0 ? _HierachicalIrradianceBuffer0_TexelSize.xy * pdir.xy : 0.0f;
-        uv += lod == 1 ? _HierachicalIrradianceBuffer1_TexelSize.xy * pdir.xy : 0.0f;
-        uv += lod == 2 ? _HierachicalIrradianceBuffer2_TexelSize.xy * pdir.xy : 0.0f;
-        uv += lod == 3 ? _HierachicalIrradianceBuffer3_TexelSize.xy * pdir.xy : 0.0f;
-        uv += lod >= 4 ? _HierachicalIrradianceBuffer4_TexelSize.xy * pdir.xy : 0.0f;
-
-        float4 ir = SampleIrradianceBufferLOD(uv, lod);
+        // get sampling uv
+        float2 uv = duv + IN.uv;
 
         // frustum clipping
         bool frustum = uv.x <= 1.0f;
         frustum = frustum && 0.0f <= uv.x;
         frustum = frustum && uv.y <= 1.0f;
         frustum = frustum && 0.0f <= uv.y;
+        bool nearclip = length(duv) > length(muv);
+
+        numSample = frustum && nearclip ? numSample + 1.0f : numSample;
+
+        float4 ir = SampleIrradianceBufferLOD(uv, lod);
         ir.xyz = frustum ? ir.xyz : 0.0f;
+        ir.xyz = numSample ? ir.xyz : 0.0f;
 
         // recalculate view space
-        sp = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
-        vp = mul(_ClipToViewMatrix, sp);
+        float4 sp = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
+        float4 vp = mul(_ClipToViewMatrix, sp);
         vp = float4(vp.xyz * ir.w / vp.w, 1.0f);
 
+        float dz = atan((vp.z - ray.vp.z) / distance(vp.xy, ray.vp.xy));
+
+        // get directional index
+        uint idx = (uint)(phi / (UNITY_PI * 0.25f) + noise.z);
+        idx = idx % 8;
+
+        ir.xyz *= step(theta[idx], dz);
+
+        theta[idx] = max(theta[idx], dz);
+
         // horizon shadow
-        float dz = (vp.z - ray.vp.z) / distance(vp.xy, ray.vp.xy);
+/*
 
         float3 horizon = {
             theta[idx] / div[idx],
@@ -517,10 +529,10 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
         float bf = exp(beta * dz);
         theta[idx] += dz * bf;
         div[idx] += bf;
-
+*/
         // distance attenuation
         float r = distance(ray.vp.xyz, vp.xyz);
-        r = min(1.0f, 1 / r);
+        r = 1 / (r + 1.0f);
         r *= r;
 
         // brdf
@@ -532,14 +544,13 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
 
         ir.xyz *= ndotl;
         ir.xyz *= r;
-        ir.xyz *= pow(ray.len, 1.0f / power);
 
         diffuse += ir.xyz;
         specular += ir.xyz * FSchlick(ray.f0, ldoth) * DBlinn(ray.a, ndoth) * 0.25h;
     }
 
-    diffuse /= _SSGINumSample;
-    specular /= _SSGINumSample;
+    diffuse /= numSample;
+    specular /= numSample;
 
     half fade = smoothstep(0.9 * _SSGIFadeDepth, _SSGIFadeDepth, -ray.vp.z);
 

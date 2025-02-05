@@ -46,7 +46,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             CGPROGRAM
             #pragma vertex vert_img
             #pragma fragment IndirectOcclusion
-            #define _SSAONumStride 24
+            #define _SSAONumStride 16
             #include "SSAO.cginc"
             ENDCG
         }
@@ -57,7 +57,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             CGPROGRAM
             #pragma vertex vert_img
             #pragma fragment IndirectOcclusion
-            #define _SSAONumStride 48
+            #define _SSAONumStride 32
             #include "SSAO.cginc"
             ENDCG
         }
@@ -68,7 +68,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             CGPROGRAM
             #pragma vertex vert_img
             #pragma fragment IndirectOcclusion
-            #define _SSAONumStride 72
+            #define _SSAONumStride 48
             #include "SSAO.cginc"
             ENDCG
         }
@@ -79,7 +79,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             CGPROGRAM
             #pragma vertex vert_img
             #pragma fragment IndirectOcclusion
-            #define _SSAONumStride 96
+            #define _SSAONumStride 64
             #include "SSAO.cginc"
             ENDCG
         }
