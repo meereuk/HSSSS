@@ -138,7 +138,8 @@ inline half4 SampleGBuffer3(float2 uv, int2 offset)
 //
 inline float3 SampleNoise(float2 uv)
 {
-    float z = (float)(_FrameCount % 16) * 0.015625f + 0.0078125f;
+    int time = _FrameCount % 64;
+    float z = 0.015625f * (float)time + 0.0078125f;
     return _BlueNoise.Sample(sampler_BlueNoise, float3(uv * _ScreenParams.xy * 0.0078125f, z));
 }
 

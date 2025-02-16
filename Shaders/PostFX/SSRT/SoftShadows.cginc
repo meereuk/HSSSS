@@ -61,7 +61,7 @@ inline float3x3 GramSchmidtMatrix(float3 axis)
 // posisson disc sampling
 inline float2 PoissonDisc(uint i, uint n, float noise)
 {
-	float t = 2.4f * i + noise * UNITY_PI;
+	float t = 2.4f * i + 2.0f * noise * UNITY_PI;
 	float r = sqrt((i + 0.5f) / n);
 	return float2(r * cos(t), r * sin(t));
 }

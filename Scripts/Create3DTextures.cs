@@ -1,5 +1,6 @@
 using UnityEditor;
 using UnityEngine;
+using System.IO;
 
 public class Create3DTextures : MonoBehaviour
 {
@@ -8,23 +9,36 @@ public class Create3DTextures : MonoBehaviour
     [MenuItem("CreateExamples/3DTexture")]
     static void CreateTexture3D()
     {
-        Texture3D tex3d = new Texture3D(128, 128, 64, TextureFormat.Alpha8, false);
+        int X = 128;
+        int Y = 128;
+        int Z = 64;
 
-        Color[] colors = new Color[128 * 128 * 64];
-        //float[] colors = new float[128 * 128 * 64];
+        Texture3D tex3d = new Texture3D(X, Y, Z, TextureFormat.RGB24, false);
+        Color[] colors = new Color[X * Y * Z];
 
-        for (int z = 0; z < 64; z ++)
+        for (int z = 0; z < Z; z ++)
         {
-            string file = "Assets/HSSSS/Resources/Textures/Jitter/STBN/Grey/stbn_" + z.ToString() + ".png";
-            var img = System.IO.File.ReadAllBytes(file);
-            tex[z] = new Texture2D(128, 128);
-            tex[z].LoadImage(img);
+            string filePath = "Assets/HSSSS/Resources/Textures/Jitter/STBN/RGB/stbn_" + z + ".png";
 
-            for (int y = 0; y < 128; y ++)
+            if (!File.Exists(filePath))
             {
-                for (int x = 0; x < 128; x ++)
+                Debug.LogError("No such file: " + filePath);
+                continue;
+            }
+            
+            byte[] imgData = File.ReadAllBytes(filePath);
+            tex[z] = new Texture2D(X, Y, TextureFormat.RGB24, false, true);
+            tex[z].LoadImage(imgData);
+
+            Color[] slicePixels = tex[z].GetPixels();
+
+            for (int y = 0; y < Y; y ++)
+            {
+                for (int x = 0; x < X; x ++)
                 {
-                    colors[x + y * 128 + z * 128 * 128].r = 1.0f;
+                    int index2D = x + y * X;
+                    int index3D = x + y * X + z * X * Y;
+                    colors[index3D] = slicePixels[index2D];
                 }
             }
         }
