@@ -168,14 +168,5 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             #include "SSAO.cginc"
             ENDCG
         }
-
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment DebugNoise
-            #include "SSAO.cginc"
-            ENDCG
-        }
     }
 }

@@ -46,7 +46,7 @@ uniform float4 _HierachicalZBuffer4_TexelSize;
     #define _SSAONumStride 4
 #endif
 
-#define beta 8.0f
+#define beta 4.0f
 
 struct ray
 {
@@ -133,30 +133,22 @@ inline float ZBufferDownSample(v2f_img IN) : SV_TARGET
     return dot(_MainTex.Gather(sampler_MainTex, IN.uv), 0.25f);
 }
 
-void HorizonTrace(ray ray, inout float4 theta)
+void HorizonTrace(ray ray, inout float4 theta, inout uint mask)
 {
-    float2 duv = ray.dir.xy * _HierachicalZBuffer0_TexelSize.xy;
-    float2 backFace = ray.r * sin(theta.zw);
-
     uint power = max(1, min(4, _SSAORayStride));
 
     float str = 0.0f;
     float minStr = length(ray.dir.xy * _HierachicalZBuffer0_TexelSize.xy) / length(ray.fwd);
-    minStr *= ray.noise.y + 1.0f;
-
-    float2 sum = theta.zw * exp(beta * theta.zw);
-    float2 div = exp(beta * theta.zw);
 
     [unroll]
     for (uint iter = 0; iter < _SSAONumStride && str <= 1.0f; iter ++)
     {
         uint mip = min(iter / 2, 4);
-
-        str = max(str + minStr * (1.0f + mip), pow(((float)iter + ray.noise.z) / _SSAONumStride, power));
+        str = max(str + minStr * (1.0f + mip), pow(((float)iter + ray.noise.x) / _SSAONumStride, power));
 
         float2x2 uv = {
             mad(ray.fwd, str, ray.org),
-            mad(ray.fwd, str, ray.org)
+            mad(ray.bwd, str, ray.org)
         };
 
         float2x4 sp = {
@@ -190,22 +182,30 @@ void HorizonTrace(ray ray, inout float4 theta)
         dz -= ray.vp.z;
         dz.zw -= ray.t;
 
-        float2 threshold = ray.r.xx * ray.r.xx - r.xy * r.xy;
-        threshold = sqrt(max(0.0f, threshold));
-        dz.xy = min(dz.xy, threshold);
+        // horizon angle
+        float4 horizon = atan(dz / r.xyxy);
 
-        float2 horizon = atan(dz.xy / r.xy);
-        float2 bf = exp(beta * horizon);
+        // hemisphere threshold
+        float threshold = atan(sqrt(1.0f - str * str) / str);
+        horizon = min(horizon, threshold);
 
-        sum += horizon * bf;
-        div += bf;
-        //theta.xy = max(theta.xy, horizon);
-        //float2 mix = smoothstep(backFace, ray.r.xx, dz.zw);
-        //horizon = lerp(horizon, theta.zw, mix);
-        //theta.xy = ray.r.xx > r ? max(theta.xy, horizon) : theta.xy;
+        // visibility bitmask
+        horizon = clamp(horizon - theta.xyxy, 0.0f, UNITY_PI);
+
+        // 32-bit length
+        float segment = UNITY_PI / 32.0f;
+        uint4 index = (uint4)(horizon / segment.xxxx);
+        uint4 visibility = 0xFFFFFFFFu << index;
+
+        // backward direction
+        visibility.yw = reversebits(visibility.yw);
+        // backface visibility
+        visibility.zw = ~visibility.zw;
+
+        // update visibility mask
+        visibility.xy = visibility.xy | visibility.zw;
+        mask = mask & (visibility.x & visibility.y);
     }
-
-    theta.xy = sum / div;
 }
 
 half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
@@ -255,19 +255,16 @@ half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
     ray.org = uv;
     ray.noise = noise;
 
-    ray.r = max(_SSAORayLength, 0.001f) * mad(noise.x, 0.4f, 0.8f);
-    ray.t = max(_SSAOMeanDepth, 0.001f) * mad(noise.y, 0.4f, 0.8f);
+    ray.r = max(_SSAORayLength, 0.001f) * mad(noise.x, 0.2f, 0.9f);
+    ray.t = max(_SSAOMeanDepth, 0.001f) * mad(noise.y, 0.2f, 0.9f);
 
     float slice = UNITY_PI / _SSAONumSample;
     half4 ao = 0.0h;
-
-    //for (float iter = 0.5f; iter < _SSAONumSample; iter += 1.0f)
-    for (uint iter = 0; iter < _SSAONumSample; iter ++)
+    
+    for (float iter = 0.5f; iter < _SSAONumSample; iter += 1.0f)
     {
         ray.dir = 0.0f;
-        float phi = (float)iter * slice + noise.z * UNITY_PI;
-        //sincos((iter - noise.z) * slice, ray.dir.y, ray.dir.x);
-        sincos(phi, ray.dir.y, ray.dir.x);
+        sincos(slice * (iter - noise.z), ray.dir.y, ray.dir.x);
         float4 spos = mul(unity_CameraProjection, mad(ray.r, ray.dir, vpos));
         float2 duv = spos.xy / spos.w * 0.5f + 0.5f - uv;
 
@@ -279,22 +276,15 @@ half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
         float gamma = clamp(acos(normalize(proj).z) * sign(dot(proj, ray.dir.xyz)), -HALF_PI, HALF_PI);
 
         float4 theta = float4(-gamma, gamma, -gamma, gamma);
+        uint mask = 0xFFFFFFFFu;
 
-        HorizonTrace(ray, theta);
+        HorizonTrace(ray, theta, mask);
 
-        theta.x = min(HALF_PI - theta.x, HALF_PI + gamma);
-        theta.y = max(theta.y - HALF_PI, gamma - HALF_PI);
-
-        // ground truth ambient occlusion
-        half occlusion = 0.0h;
-        occlusion += 0.25h * (2.0h * theta.x * sin(gamma) + cos(gamma) - cos(2.0h * theta.x - gamma));
-        occlusion += 0.25h * (2.0h * theta.y * sin(gamma) + cos(gamma) - cos(2.0h * theta.y - gamma));
-        occlusion *= length(proj);
-        ao.w += occlusion;
+        ao.w += (float)countbits(mask) / 32.0f;
 
         // calculate bent normal
         float bentAngle = 0.5h * (theta.x + theta.y);
-        ao.xyz += normalize(vdir * cos(bentAngle) + ray.dir.xyz * sin(bentAngle)) * occlusion;
+        //ao.xyz += normalize(vdir * cos(bentAngle) + ray.dir.xyz * sin(bentAngle)) * occlusion;
     }
 
     half fade = smoothstep(0.9 * _SSAOFadeDepth, _SSAOFadeDepth, -vpos.z);
