@@ -4,7 +4,7 @@
 #define A_SCREEN_UV_ON
 
 #ifdef _FORWARDONLY_OVERLAY
-    uniform sampler2D _SSDOBentNormalTexture;
+    uniform sampler2D _SSAOOcclusionBuffer;
     uniform uint _UseAmbientOcclusion;
 #endif
 
@@ -24,7 +24,7 @@ void aSurface(inout ASurface s)
     #ifdef _FORWARDONLY_OVERLAY
         if (_UseAmbientOcclusion == 1)
         {
-            s.ambientOcclusion *= tex2D(_SSDOBentNormalTexture, s.screenUv).w;
+            s.ambientOcclusion *= tex2D(_SSAOOcclusionBuffer, s.screenUv);
         }
     #endif
     aSampleBumpTangent(s);

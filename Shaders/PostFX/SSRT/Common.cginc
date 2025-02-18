@@ -22,6 +22,9 @@ uniform SamplerState sampler_CameraGBufferTexture2;
 uniform Texture2D _CameraGBufferTexture3;
 uniform SamplerState sampler_CameraGBufferTexture3;
 
+uniform Texture2D _CameraReflectionsTexture;
+uniform SamplerState sampler_CameraReflectionsTexture;
+
 uniform Texture2D _SSGITemporalGIBuffer;
 uniform SamplerState sampler_SSGITemporalGIBuffer;
 
@@ -134,6 +137,19 @@ inline half4 SampleGBuffer3(float2 uv, int2 offset)
 }
 
 //
+// camera reflection buffer
+//
+inline half4 SampleReflection(float2 uv)
+{
+    return _CameraReflectionsTexture.Sample(sampler_CameraReflectionsTexture, uv);
+}
+
+inline half4 SampleReflection(float2 uv, int2 offset)
+{
+    return _CameraReflectionsTexture.Sample(sampler_CameraReflectionsTexture, uv, offset);
+}
+
+//
 // noise
 //
 inline float3 SampleNoise(float2 uv)
@@ -146,6 +162,21 @@ inline float3 SampleNoise(float2 uv)
 //
 // recunstruct position from z-buffer
 //
+inline void SampleCoordinates(float2 uv, out float4 vpos, out float4 wpos)
+{
+    // sample depth first
+    float depth = SampleZBuffer(uv);
+    float vdepth = Linear01Depth(depth);
+    depth = LinearEyeDepth(depth);
+    // screen-space position
+    float4 spos = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0h);
+    // view-space position
+    vpos = mul(_ClipToViewMatrix, spos);
+    vpos = float4(vpos.xyz * vdepth / vpos.w, 1.0f);
+    // world space
+    wpos = mul(_ViewToWorldMatrix, vpos);
+}
+
 inline void SampleCoordinates(float2 uv, out float4 vpos, out float4 wpos, out float depth)
 {
     // sample depth first

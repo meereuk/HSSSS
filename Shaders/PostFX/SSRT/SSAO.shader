@@ -26,21 +26,11 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 1 : zbuffer downsampling
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment ZBufferDownSample
-            #include "SSAO.cginc"
-            ENDCG
-        }
-
         //
         // horizon calculation
         //
 
-        // pass 2 : low
+        // pass 1 : low
         Pass
         {
             CGPROGRAM
@@ -51,7 +41,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 3 : medium
+        // pass 2 : medium
         Pass
         {
             CGPROGRAM
@@ -62,7 +52,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 4 : high
+        // pass 3 : high
         Pass
         {
             CGPROGRAM
@@ -73,7 +63,7 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 5 : ultra
+        // pass 4 : ultra
         Pass
         {
             CGPROGRAM
@@ -84,87 +74,16 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             ENDCG
         }
 
-        // pass 6 : decoding pass
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment DecodeAO
-            #include "SSAO.cginc"
-            ENDCG
-        }
-
-        // pass 7 : bilinear interpolation
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment Interpolate
-            #include "SSAO.cginc"
-            ENDCG
-        }
-
-        // pass 8 : spatio denoiser
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment SpatialDenoiser
-            #include "SSAO.cginc"
-            ENDCG
-        }
-
-        // pass 9 : spatio denoiser
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment SpatialDenoiser
-            #define BLUR_YAXIS
-            #include "SSAO.cginc"
-            ENDCG
-        }
-
         //
         // apply ao
         //
 
-        // pass 10 : ao to GBuffer 0
+        // pass 5 : apply ao mrt
         Pass
         {
             CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment ApplyOcclusionToGBuffer0
-            #include "SSAO.cginc"
-            ENDCG
-        }
-
-        // pass 11 : ao to GBuffer 3
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment ApplyOcclusionToGBuffer3
-            #include "SSAO.cginc"
-            ENDCG
-        }
-
-        // pass 12 : specular occlusion
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment ApplySpecularOcclusion
-            #include "SSAO.cginc"
-            ENDCG
-        }
-
-        // pass 13 : debug
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment DebugAO
+            #pragma vertex vert_mrt
+            #pragma fragment ApplyOcclusionMRT
             #include "SSAO.cginc"
             ENDCG
         }

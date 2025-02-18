@@ -46,15 +46,11 @@ uniform float4 _HierachicalZBuffer4_TexelSize;
     #define _SSAONumStride 4
 #endif
 
-#define beta 8.0f
-
 struct ray
 {
-    float3 vp;
-    float2 org;
-    float2 fwd;
-    float2 bwd;
-    float4 dir;
+    float2 uv;
+    float3 pos;
+    float3 dir;
     float3 noise;
     float r;
     float t;
@@ -133,177 +129,200 @@ inline float ZBufferDownSample(v2f_img IN) : SV_TARGET
     return dot(_MainTex.Gather(sampler_MainTex, IN.uv), 0.25f);
 }
 
-inline void UpdateHorizonAngle(float2 uv, float4 vpos, uint mip, float aoRadius, float aoThickness, float aoThreshold, inout float theta)
+inline float GetMinimumStep(ray ray)
 {
-    float z = SampleZBufferMip(uv, mip);
-    float4 sp = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
-    float4 vp = mul(_ClipToViewMatrix, sp);
-    vp = float4(vp.xyz * z / vp.w , 1.0f);
+    float4 sp = mul(unity_CameraProjection, mad(ray.r, ray.dir, ray.pos));
+    return length(ray.dir.xy * _HierachicalZBuffer0_TexelSize.xy) / length(sp.xy / sp.w * 0.5f + 0.5f - ray.uv);
+}
 
-    float2 dz = {
-        vp.z - vpos.z,
-        vp.z - vpos.z - aoThickness
-    };
+void HorizonTrace(ray ray, inout float4 theta, inout uint mask)
+{
+    uint power = max(1, min(4, _SSAORayStride));
 
-    float r = distance(vp.xy, vpos.xy);
+    float str = 0.0f;
+    float minStr = GetMinimumStep(ray);
 
-    if (aoRadius > r)
+    [unroll]
+    for (uint iter = 0; iter < _SSAONumStride && str < 1.0f; iter ++)
     {
-        float threshold = sqrt(aoRadius * aoRadius - r * r);
-        float h = atan(min(dz.x, threshold) / r);
-        h = lerp(h, theta, smoothstep(aoThreshold, threshold, dz.y));
-        theta = max(h, theta);
+        uint mip = min((iter + 1) / 2, 4);
+        str = max(str + minStr * (1.0f + mip), pow(((float)iter + ray.noise.x) / _SSAONumStride, power));
+
+        //
+        // horizon trace
+        //
+
+        // ray length
+        float len = ray.r * str;
+
+        // sampling position (view space)
+        float2x4 vp = {
+            float4(mad(ray.dir, len, ray.pos), 1.0f),
+            float4(mad(ray.dir,-len, ray.pos), 1.0f),
+        };
+
+        // sampling position (screen space)
+        float2x4 sp = {
+            mul(unity_CameraProjection, vp[0]),
+            mul(unity_CameraProjection, vp[1])
+        };
+
+        // sampling position (uv space)
+        float2x2 uv = {
+            sp[0].xy / sp[0].w * 0.5f + 0.5f,
+            sp[1].xy / sp[1].w * 0.5f + 0.5f
+        };
+
+        // sampled depth
+        float2 z = {
+            SampleZBufferMip(uv[0], mip),
+            SampleZBufferMip(uv[1], mip)
+        };
+
+        // front face position (view space)
+        float2x4 facePos = {
+            mul(_ClipToViewMatrix, float4(mad(uv[0], 2.0f, -1.0f), 1.0f, 1.0f)),
+            mul(_ClipToViewMatrix, float4(mad(uv[1], 2.0f, -1.0f), 1.0f, 1.0f))
+        };
+
+        facePos[0] = float4(facePos[0].xyz * z[0] / facePos[0].w, 1.0f);
+        facePos[1] = float4(facePos[1].xyz * z[1] / facePos[1].w, 1.0f);
+
+        // back face position (view space)
+        float2x4 backPos = facePos;
+        backPos[0].z -= ray.t;
+        backPos[1].z -= ray.t;
+
+        // horizon angle
+        float4 horizon = {
+            dot(normalize(facePos[0].xyz - ray.pos), ray.dir),
+            dot(normalize(facePos[1].xyz - ray.pos),-ray.dir),
+            dot(normalize(backPos[0].xyz - ray.pos), ray.dir),
+            dot(normalize(backPos[1].xyz - ray.pos),-ray.dir)
+        };
+
+        horizon = FastArcCos(horizon);
+
+        horizon = horizon * sign(float4(
+            facePos[0].z - vp[0].z, facePos[1].z - vp[1].z,
+            backPos[0].z - vp[0].z, backPos[1].z - vp[1].z
+        ));
+
+        // hemisphere threshold
+        float threshold = FastArcCos(str);
+        horizon = min(horizon, threshold);
+
+        //
+        // visibility bitmask
+        //
+
+        // clamp horizon angle
+        horizon = clamp(horizon - theta.xyxy, 0.0f, UNITY_PI);
+
+        // 32-bit length
+        float segment = UNITY_PI / 32.0f;
+        uint4 index = (uint4)(horizon / segment.xxxx);
+        uint4 visibility = 0xFFFFFFFFu << (index + 1);
+
+        // backward direction
+        visibility.yw = reversebits(visibility.yw);
+        // backface visibility
+        visibility.zw = ~visibility.zw;
+
+        // update visibility mask
+        visibility.xy = visibility.xy | visibility.zw;
+        mask = mask & (visibility.x & visibility.y);
     }
-
-    /*
-    float h = atan(min(dz.x, aoRadius) / r);
-
-    h = lerp(h, theta, smoothstep(aoThreshold, aoRadius, dz.y));
-    theta = aoRadius > r ? max(h, theta) : theta;
-    */
 }
 
 half4 IndirectOcclusion(v2f_img IN) : SV_TARGET
 {
-    float2 uv = IN.uv;
-
     float4 vpos;
     float depth;
 
-    // view-space coordinate reconstruction
+    // interleaved uv
+    float2 uv = IN.uv;
+
+    if (_SSAOSubSample == 1)
+    {
+        uint2 coord = round((uv - 0.5f * _MainTex_TexelSize.xy) * _MainTex_TexelSize.zw);
+	    coord.x = coord.y % 2 == _FrameCount % 2 ? 2 * coord.x : 2 * coord.x + 1;
+        uv = ((float2) coord + 0.5f) * _MainTex_TexelSize.xy;
+        if (uv.x > 1.0f)
+        {
+            discard;
+        }        
+    }
+
+    else if (_SSAOSubSample == 2)
+    {
+        uint2 coord = round((uv - 0.5f * _MainTex_TexelSize.xy) * _MainTex_TexelSize.zw);
+        coord = 2 * coord + uint2((_FrameCount % 4) / 2, (_FrameCount % 4) % 2);
+	    uv = ((float2) coord + 0.5f) * _MainTex_TexelSize.xy;
+        if (uv.x > 1.0f || uv.y > 1.0f)
+        {
+            discard;
+        }
+    }
+
     depth = SampleZBufferLOD(uv, 0);
     float4 spos = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
     vpos = mul(_ClipToViewMatrix, spos);
     vpos = float4(vpos.xyz * depth / vpos.w, 1.0f);
 
-    // world-space and view-space normals
-    half3 wnrm = SampleGBuffer2(uv);
+    // normal
+    float3 wnrm = SampleGBuffer2(uv);
     wnrm = normalize(mad(wnrm, 2.0f, -1.0f));
-    half3 vnrm = mul(_WorldToViewMatrix, wnrm);
-
-    // view-space view direction
-    half3 vdir = half3(0.0h, 0.0h, 1.0h);
+    float3 vnrm = mul(_WorldToViewMatrix, wnrm);
+    float3 vdir = normalize(-vpos.xyz);
 
     if (-vpos.z > _SSAOFadeDepth)
     {
         discard;
     }
 
-    // noise
     float3 noise = SampleNoise(uv);
 
-    float aoRadius = _SSAORayLength;// * mad(noise.x, 1.0f, 0.5f);
-    float aoThickness = _SSAOMeanDepth * mad(noise.y, 1.0f, 0.5f);
+    ray ray;
+    ray.uv = uv;
+    ray.pos = vpos;
+    ray.noise = noise;
 
-    aoRadius = max(aoRadius, 0.01f);
-    aoThickness = max(aoThickness, 0.01f);
-    //uint power = clamp(_SSAORayStride, 1, 5);
+    ray.r = max(_SSAORayLength, 0.001f) * mad(noise.x, 0.4f, 0.8f);
+    ray.t = max(_SSAOMeanDepth, 0.001f) * mad(noise.y, 0.4f, 0.8f);
 
-    // normal projection
-    float lproj[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    // horizon angle
-    float gamma[8] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-    float theta[8] = { 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f };
-
-    // horizon search (spiral sampling)
-    float4 vp, sp;
-    float2 uvref;
-
-    vp = float4(aoRadius, 0.0f, 0.0f, 0.0f) + vpos;
-    sp = mul(unity_CameraProjection, vp);
-    uvref.x = sp.x / sp.w * 0.5f + 0.5f - uv.x;
-
-    vp = float4(0.0f, aoRadius, 0.0f, 0.0f) + vpos;
-    sp = mul(unity_CameraProjection, vp);
-    uvref.y = sp.y / sp.w * 0.5f + 0.5f - uv.y;
-
-    half4 ao = 1.0f;
-
-    // nomal projection plane & default horizon angle
-    [unroll]
-    for (uint iter = 0; iter < 4; iter ++)
+    float slice = UNITY_PI / _SSAONumSample;
+    half4 ao = 0.0h;
+    
+    for (float iter = 0.5f; iter < _SSAONumSample; iter += 1.0f)
     {
-        float3 pdir = 0.0f;
-        float rad = QR_PI * ((float)iter - noise.x + 0.5f);
-
-        sincos(rad, pdir.y, pdir.x);
+        // sampling direction
+        ray.dir = 0.0f;
+        sincos(slice * (iter - noise.z), ray.dir.y, ray.dir.x);
+        ray.dir = normalize(ray.dir - dot(ray.dir, vdir) * vdir);
 
         // normal projection plane
-        float3 proj = dot(vnrm, vdir) * vdir + dot(vnrm, pdir) * pdir;
-        lproj[iter] = length(proj);
-        
-        gamma[iter] = acos(normalize(proj).z) * sign(dot(proj, pdir));
-        gamma[iter] = clamp(gamma[iter], -HALF_PI, HALF_PI);
+        float3 proj = dot(vnrm, vdir) * vdir + dot(vnrm, ray.dir.xyz) * ray.dir.xyz;
+        float gamma = clamp(FastArcCos(normalize(proj).z) * sign(dot(proj, ray.dir.xyz)), -HALF_PI, HALF_PI);
 
-        gamma[iter + 4] = -gamma[iter];
-        theta[iter    ] = -gamma[iter];
-        theta[iter + 4] = +gamma[iter];
+        float4 theta = float4(-gamma, gamma, -gamma, gamma);
+        uint mask = 0xFFFFFFFFu;
+
+        HorizonTrace(ray, theta, mask);
+
+        ao.w += (float)countbits(mask) / 32.0f;
     }
 
-    // minimum uv stride
-    float2 muv = _HierachicalZBuffer0_TexelSize.xy * mad(noise.x, 7.99f, 0.01f);
+    half fade = smoothstep(0.9 * _SSAOFadeDepth, _SSAOFadeDepth, -vpos.z);
 
-    [unroll]
-    for (iter = 0; iter < 8; iter ++)
-    {
-        float phi = QR_PI * ((float)iter - noise.x + 0.5f);
-        float2 pdir = 0.0f;
-        sincos(phi, pdir.y, pdir.x);
+    ao.w = saturate(ao.w / _SSAONumSample);
+    ao.w = pow(lerp(_SSAOLightBias, 1.0h, ao.w), _SSAOIntensity);
+    ao.w = lerp(ao.w, 1.0h, fade);
 
-        float aoThreshold = -aoRadius * sin(gamma[iter]);
-        float2 duv = muv * pdir;
-
-        UpdateHorizonAngle(mad(duv, 1.0f, uv), vpos, 0, aoRadius, aoThickness, aoThreshold, theta[iter]);
-        UpdateHorizonAngle(mad(duv, 2.0f, uv), vpos, 1, aoRadius, aoThickness, aoThreshold, theta[iter]);
-        UpdateHorizonAngle(mad(duv, 4.0f, uv), vpos, 2, aoRadius, aoThickness, aoThreshold, theta[iter]);
-    }
-
-    // spiral tracing to maximum horizon
-    [unroll]
-    for (iter = 0; iter < _SSAONumStride; iter ++)
-    {
-        uint mip = iter / 2 + 3;
-
-        // vogel disc sampling
-        float t = 2.4f * (float)iter + 4.0f * noise.x * UNITY_PI;
-        float r = sqrt(((float)iter + 0.5f) / (float)_SSAONumStride);
-        r = pow(r, _SSAORayStride);
-
-        float2 pdir = 0.0f;
-        sincos(t, pdir.y, pdir.x);
-
-        // get directional index
-        uint idx = (uint)(t / (UNITY_PI * 0.25f) + noise.x) % 8;
-        idx = idx % 8;
-
-        float2 duv = pdir * (r * uvref + 8.0f * muv);
-        float aoThreshold = -aoRadius * sin(gamma[idx]);
-        UpdateHorizonAngle(uv + duv, vpos, mip, aoRadius, aoThickness, aoThreshold, theta[idx]);
-    }
-
-    // gtao function
-    [unroll]
-    for (iter = 0; iter < 4; iter ++)
-    {
-        float2 t = {theta[iter], theta[iter + 4]};
-        float g = gamma[iter];
-
-        t.x = min(HALF_PI - t.x, HALF_PI + g);
-        t.y = max(t.y - HALF_PI, g - HALF_PI);
-
-        // visibility calculation
-        half vis = 0.0h;
-        vis += 0.25f * (2.0f * t.x * sin(g) + cos(g) - cos(2.0f * t.x - g));
-        vis += 0.25f * (2.0f * t.y * sin(g) + cos(g) - cos(2.0f * t.y - g));
-
-        ao.w += vis * lproj[iter];
-    }
-
+    ao.xyz = lerp(ao.xyz, vnrm.xyz, fade);
     ao.xyz = normalize(ao.xyz);
     ao.xyz = mul(_ViewToWorldMatrix, ao.xyz);
-    ao.xyz = mad(ao.xyz, 0.5f, 0.5f);
-    ao.w = saturate(ao.w * 0.25f);
-    ao.w = pow(lerp(_SSAOLightBias, 1.0f, ao.w), _SSAOIntensity);
+    ao.xyz = mad(ao.xyz, 0.5h, 0.5h);
 
     return ao;
 }
@@ -493,6 +512,7 @@ inline half4 ApplySpecularOcclusion(v2f_img IN) : SV_TARGET
     float4 vpos;
     float4 wpos;
 
+/*
     SampleCoordinates(IN.uv, vpos, wpos, depth);
 
     float3 vdir = mul(_ViewToWorldMatrix, float4(0.0f, 0.0f, 1.0f, 0.0f));
@@ -515,7 +535,7 @@ inline half4 ApplySpecularOcclusion(v2f_img IN) : SV_TARGET
     angle.z = abs(angle.x - angle.y);
     // angle between bentnormal and reflection vector
     angle.w = FastArcCos(dot(ao.xyz, reflect(-vdir, wnrm)));
-    //angle.w = acos(dot(ao.xyz, light));
+    //angle.w = FastArcCos(dot(ao.xyz, light));
 
     half intersection = smoothstep(0.0h, 1.0h, 1.0h - saturate((angle.w - angle.z) / (angle.x + angle.y - angle.z)));
     half occlusion = lerp(0.0h, intersection, saturate((angle.y - 0.1h) * 5.0h));
@@ -524,6 +544,8 @@ inline half4 ApplySpecularOcclusion(v2f_img IN) : SV_TARGET
 
     half4 result = depth > _SSAOFadeDepth ? color : half4(color.rgb * intersection, color.a);
     return result;
+*/
+    return SampleTexel(IN.uv);
 }
 
 inline half4 SpatialDenoiser(v2f_img IN) : SV_TARGET
@@ -633,6 +655,12 @@ inline half4 SpatialDenoiser(v2f_img IN) : SV_TARGET
 inline half4 DebugAO(v2f_img IN) : SV_TARGET
 {
     return SampleTexel(IN.uv).w;
+}
+
+inline half4 DebugNoise(v2f_img IN) : SV_TARGET
+{
+    half3 noise = SampleNoise(IN.uv);
+    return half4(noise * noise, 1.0f);
 }
 
 #endif
