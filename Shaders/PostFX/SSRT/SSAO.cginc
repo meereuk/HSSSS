@@ -14,7 +14,6 @@ uniform half _SSAOFadeDepth;
 uniform uint _SSAORayStride;
 uniform uint _SSAOSubSample;
 
-uniform Texture2D<int4> _SSAOMaskRenderTexture;
 uniform Texture2D<float> _HierarchicalZBuffer0;
 uniform Texture2D<float> _HierarchicalZBuffer1;
 uniform Texture2D<float> _HierarchicalZBuffer2;
@@ -26,6 +25,9 @@ uniform SamplerState sampler_HierarchicalZBuffer1;
 uniform SamplerState sampler_HierarchicalZBuffer2;
 uniform SamplerState sampler_HierarchicalZBuffer3;
 uniform SamplerState sampler_HierarchicalZBuffer4;
+
+uniform Texture2D _SSAOMaskRenderTexture;
+uniform SamplerState sampler_SSAOMaskRenderTexture;
 
 uniform float4 _HierarchicalZBuffer0_TexelSize;
 uniform float4 _HierarchicalZBuffer1_TexelSize;
@@ -53,9 +55,9 @@ struct ray
 };
 
 
-inline uint4 SampleMask(float2 uv)
+inline float4 SampleMask(float2 uv)
 {
-    return asuint(_SSAOMaskRenderTexture.Load(int3(uv * _ScreenParams.xy, 0)));
+    return _SSAOMaskRenderTexture.Sample(sampler_SSAOMaskRenderTexture, uv);
 }
 
 inline uint GetZBufferLOD(uint iter)
@@ -104,6 +106,32 @@ inline float DecodeVisibility(uint mask)
     return sum / div;
 }
 
+inline float4 DecodeVisibility(float3 vdir, float3 pdir, float theta, uint mask)
+{
+    float4 vec = 0.0f;
+    float  div = 0.0f;
+
+    [unroll]
+    for (uint index = 0; index < 32; index ++)
+    {
+        float2 angle = { (float)index, (float)index + 1.0f };
+        angle = angle * UNITY_PI / 32.0f;
+
+        float light = cos(angle.x) - cos(angle.y);
+        uint visible = (mask >> index) & 1u;
+        vec.w += light * (float)visible;
+        div += light;
+
+        float phi = 0.5f * (angle.x + angle.y) + theta;
+
+        vec.xyz += normalize(cos(phi) * pdir + sin(phi) * vdir) * (float)visible;
+    }
+
+    vec.w /= div;
+    return vec;
+}
+
+/*
 inline float DecodeVisibility(uint4 mask)
 {
     float sum = 0.0f;
@@ -123,18 +151,19 @@ inline float DecodeVisibility(uint4 mask)
 
     return sum / div;
 }
+*/
 
-void HorizonTrace(ray ray, inout float4 theta, inout uint mask)
+void HorizonTrace(ray ray, float2 theta, inout uint mask)
 {
     uint power = max(1, min(4, _SSAORayStride));
 
     float str = 0.0f;
-    float minStr = GetMinimumStep(ray);
+    float minStr = GetMinimumStep(ray) * (ray.noise.x + 1.0f);
 
     [unroll]
     for (uint iter = 0; iter < _SSAONumStride && str < 1.0f; iter ++)
     {
-        uint mip = min(iter / 2, 4);
+        uint mip = min(iter, 4);
         str = max(str + minStr * pow(2, mip), pow(((float)iter + ray.noise.x) / _SSAONumStride, power));
 
         //
@@ -232,13 +261,14 @@ inline float ZBufferPrePass(v2f_img IN) : SV_TARGET
     return Linear01Depth(SampleZBuffer(IN.uv));
 }
 
-int4 IndirectOcclusion(v2f_img IN) : SV_TARGET
+float4 IndirectOcclusion(v2f_img IN) : SV_TARGET
 {
     float4 vpos;
     float depth;
 
     float2 uv = IN.uv;
 
+    // position
     depth = SampleZBufferMip(uv, 0);
     float4 spos = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
     vpos = mul(_ClipToViewMatrix, spos);
@@ -270,9 +300,12 @@ int4 IndirectOcclusion(v2f_img IN) : SV_TARGET
 
     float slice = UNITY_PI / _SSAONumSample;
 
-    int4 visibility;
+    float div = 0.0f;
+    float4 ao = 0.0f;
+
+    uint2 coord = uint2(uv * _ScreenParams.xy);
     
-    for (uint iter = 0; iter < _SSAONumSample; iter ++)
+    for (uint iter = (coord.x + coord.y) % 2; iter < _SSAONumSample; iter += 2)
     {
         // sampling direction
         ray.dir = 0.0f;
@@ -280,21 +313,38 @@ int4 IndirectOcclusion(v2f_img IN) : SV_TARGET
         ray.dir = normalize(ray.dir - dot(ray.dir, vdir) * vdir);
 
         // normal projection plane
+        // project to view direction-sample direction plane
         float3 proj = dot(vnrm, vdir) * vdir + dot(vnrm, ray.dir.xyz) * ray.dir.xyz;
-        float gamma = clamp(FastArcCos(normalize(proj).z) * sign(dot(proj, ray.dir.xyz)), -HALF_PI, HALF_PI);
+        float gamma = clamp(FastArcCos(dot(normalize(proj), vdir)) * sign(dot(proj, ray.dir.xyz)), -HALF_PI, HALF_PI);
 
-        float4 theta = float4(-gamma, gamma, -gamma, gamma);
+        float2 theta = { -gamma, gamma };
         uint mask = 0xFFFFFFFFu;
 
         HorizonTrace(ray, theta, mask);
 
-        visibility[iter] = asint(mask);
+        float4 vec = DecodeVisibility(vdir, ray.dir.xyz, theta.x, mask);
+
+        ao.xyz += vec.xyz;
+        ao.w += vec.w * length(proj);
+        div += length(proj);
+        
+        /*
+        inline float4 DecodeVisibility(float3 vdir, float3 pdir, float theta, uint mask)
+
+        ao += length(proj) * DecodeVisibility(mask);
+        div += length(proj);
+        */
     }
 
-    return visibility;
+    ao.xyz = normalize(ao.xyz);
+    ao.xyz = mul(_ViewToWorldMatrix, ao.xyz);
+    ao.xyz = mad(ao.xyz, 0.5f, 0.5f);
+    ao.w  = saturate(ao.w / div);
+
+    return ao;
 }
 
-inline void ApplyOcclusionMRT(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1:SV_TARGET1, out half mrt2:SV_TARGET2)
+inline void ApplyOcclusionMRT(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1:SV_TARGET1)
 {
     float4 vpos, wpos;
 
@@ -304,13 +354,14 @@ inline void ApplyOcclusionMRT(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 
     wnrm = normalize(mad(wnrm, 2.0f, -1.0f));
     float3 vnrm = mul(_WorldToViewMatrix, wnrm);
     float3 vdir = normalize(-vpos.xyz);
-
-    uint4 mask = SampleMask(IN.uv);
+    
+    half4 mask = SampleMask(IN.uv);
     half4 diffuse = SampleGBuffer3(IN.uv);
     half4 specular = SampleReflection(IN.uv);
 
     if (-vpos.z < _SSAOFadeDepth)
     {
+        /*
         //
         // diffuse occlusion
         //
@@ -334,6 +385,7 @@ inline void ApplyOcclusionMRT(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 
         index = dot(rdir, planeX) > 0.0f ? index : (4 - index) % 4;
 
         half so = DecodeVisibility(mask[index]);
+        */
 
         // normal projection plane
         /*
@@ -346,6 +398,9 @@ inline void ApplyOcclusionMRT(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 
         half so = (half)((mask[index] >> idx) & 1u);
         */
 
+        half ao = mask.w;
+        half so = mask.w;
+
         half fade = smoothstep(0.8f * _SSAOFadeDepth, _SSAOFadeDepth, -vpos.z);
 
         ao = pow(lerp(_SSAOLightBias, 1.0h, ao), _SSAOIntensity);
@@ -356,14 +411,12 @@ inline void ApplyOcclusionMRT(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 
 
         mrt0 = half4(diffuse.xyz * ao, diffuse.w);
         mrt1 = half4(specular.xyz * so, specular.w);
-        mrt2 = ao;
     }
 
     else
     {
         mrt0 = diffuse;
         mrt1 = specular;
-        mrt2 = 1.0f;
     }
 }
 

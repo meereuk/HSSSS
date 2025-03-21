@@ -8,7 +8,7 @@
 
 uniform uint _UseDirectOcclusion;
 uniform half _SSDOLightApatureScale;
-uniform sampler2D _SSDOBentNormalTexture;
+uniform sampler2D _SSAOMaskRenderTexture;
 
 inline float FastSqrt(float x)
 {
@@ -135,7 +135,7 @@ inline void ComputeDirectOcclusion(float3 wpos, float3 ldir, float2 uv, inout ha
 #if defined(SHADOWS_CUBE) || defined(SHADOWS_DEPTH) || defined(SHADOWS_SCREEN)
     if (_UseDirectOcclusion > 0)
     {
-        half4 ao = tex2D(_SSDOBentNormalTexture, uv);
+        half4 ao = tex2D(_SSAOMaskRenderTexture, uv);
         // bent normal
         ao.xyz = normalize(mad(ao.xyz, 2.0h, -1.0h));
 
