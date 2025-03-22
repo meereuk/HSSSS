@@ -51,24 +51,11 @@ struct ray
     float3 noise;
     float r;
     float t;
-
 };
-
 
 inline float4 SampleMask(float2 uv)
 {
     return _SSAOMaskRenderTexture.Sample(sampler_SSAOMaskRenderTexture, uv);
-}
-
-inline uint GetZBufferLOD(uint iter)
-{
-    uint lod = 0;
-
-    lod = iter > 1 ? 1 : lod;
-    lod = iter > 2 ? 2 : lod;
-    lod = iter > 4 ? 3 : lod;
-
-    return lod;
 }
 
 inline float SampleZBufferMip(float2 uv, uint mip)
@@ -130,28 +117,6 @@ inline float4 DecodeVisibility(float3 vdir, float3 pdir, float theta, uint mask)
     vec.w /= div;
     return vec;
 }
-
-/*
-inline float DecodeVisibility(uint4 mask)
-{
-    float sum = 0.0f;
-    float div = 0.0f;
-
-    [unroll]
-    for (uint index = 0; index < 32; index ++)
-    {
-        float2 angle = { (float)index, (float)index + 1.0f };
-        angle = angle * UNITY_PI / 32.0f;
-
-        float light = cos(angle.x) - cos(angle.y);
-        uint4 visible = (mask >> index) & 1u;
-        sum += light * dot((float4)visible, 0.25f);
-        div += light;
-    }
-
-    return sum / div;
-}
-*/
 
 void HorizonTrace(ray ray, float2 theta, inout uint mask)
 {
@@ -304,8 +269,20 @@ float4 IndirectOcclusion(v2f_img IN) : SV_TARGET
     float4 ao = 0.0f;
 
     uint2 coord = uint2(uv * _ScreenParams.xy);
+
+    #if defined(_SSAOSubSample_1)
+        uint i0 = (coord.x + coord.y) % 2;
+        uint di = 2;
+    #elif defined(_SSAOSubSample_2)
+        uint i0 = (coord.x % 2) + 2 * (coord.y % 2);
+        uint di = 4;
+    #else
+        uint i0 = 0;
+        uint di = 1;
+    #endif
     
-    for (uint iter = (coord.x + coord.y) % 2; iter < _SSAONumSample; iter += 2)
+    [unroll]
+    for (uint iter = i0; iter < _SSAONumSample; iter += di)
     {
         // sampling direction
         ray.dir = 0.0f;

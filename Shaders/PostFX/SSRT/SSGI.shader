@@ -26,61 +26,51 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             ENDCG
         }
 
-        // pass 1 : g-buffer downsampling
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment GBufferDownSample
-            #include "SSGI.cginc"
-            ENDCG
-        }
-
-        // pass 2 : low
+        // pass 1 : low
         Pass
         {
             CGPROGRAM
             #pragma vertex vert_mrt
             #pragma fragment IndirectDiffuse
-            #define _SSGINumSample 128
+            #define _SSGINumStride 4
             #include "SSGI.cginc"
             ENDCG
         }
 
-        // pass 3 : medium
+        // pass 2 : medium
         Pass
         {
             CGPROGRAM
             #pragma vertex vert_mrt
             #pragma fragment IndirectDiffuse
-            #define _SSGINumSample 192
+            #define _SSGINumStride 8
             #include "SSGI.cginc"
             ENDCG
         }
 
-        // pass 4 : high
+        // pass 3 : high
         Pass
         {
             CGPROGRAM
             #pragma vertex vert_mrt
             #pragma fragment IndirectDiffuse
-            #define _SSGINumSample 256
+            #define _SSGINumStride 12
             #include "SSGI.cginc"
             ENDCG
         }
 
-        // pass 5 : ultra
+        // pass 4 : ultra
         Pass
         {
             CGPROGRAM
             #pragma vertex vert_mrt
             #pragma fragment IndirectDiffuse
-            #define _SSGINumSample 320
+            #define _SSGINumStride 16
             #include "SSGI.cginc"
             ENDCG
         }
 
-        // pass 6 : temporal filter
+        // pass 5 : temporal filter
         Pass
         {
             CGPROGRAM
@@ -90,7 +80,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             ENDCG
         }
 
-        // pass 7 : pre blur
+        // pass 6 : pre blur
         Pass
         {
             CGPROGRAM
@@ -102,7 +92,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             ENDCG
         }
 
-        // pass 8 : main blur
+        // pass 7 : main blur
         Pass
         {
             CGPROGRAM
@@ -113,7 +103,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             ENDCG
         }
 
-        // pass 9 : postpass blur
+        // pass 8 : postpass blur
         Pass
         {
             CGPROGRAM
@@ -125,7 +115,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             ENDCG
         }
 
-        // pass 10 : store history buffer
+        // pass 9 : store history buffer
         Pass
         {
             CGPROGRAM
@@ -135,7 +125,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             ENDCG
         }
 
-        // pass 11 : collect gi
+        // pass 10 : collect gi
         Pass
         {
             CGPROGRAM
@@ -145,7 +135,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             ENDCG
         }
 
-        // pass 12 : blit flip to flop
+        // pass 11 : blit flip to flop
         Pass
         {
             CGPROGRAM
@@ -155,7 +145,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             ENDCG
         }
 
-        // pass 13 : blit flop to flip
+        // pass 12 : blit flop to flip
         Pass
         {
             CGPROGRAM
@@ -165,7 +155,7 @@ Shader "Hidden/HSSSS/GlobalIllumination"
             ENDCG
         }
 
-        // pass 14 : debug
+        // pass 13 : debug
         Pass
         {
             CGPROGRAM
