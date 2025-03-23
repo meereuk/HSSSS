@@ -190,7 +190,7 @@ inline half3 aStandardTransmission
 // thin layer transmittance for clothes
 inline half3 aThinTransmission(ADirect d, ASurface s, half weight)
 {
-    half attenuation = 0.5h * weight * saturate(0.3h - dot(s.ambientNormalWorld, d.direction));
+    half attenuation = 0.1f * weight * saturate(0.3f - dot(s.ambientNormalWorld, d.direction));
     return d.color * attenuation * d.shadow.r;
 }
 

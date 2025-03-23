@@ -55,7 +55,9 @@ struct ray
 
 inline float4 SampleMask(float2 uv)
 {
-    return _SSAOMaskRenderTexture.Sample(sampler_SSAOMaskRenderTexture, uv);
+    float4 mask = _SSAOMaskRenderTexture.Sample(sampler_SSAOMaskRenderTexture, uv);
+    mask.xyz = normalize(mad(mask.xyz, 2.0f, -1.0f));
+    return mask;
 }
 
 inline float SampleZBufferMip(float2 uv, uint mip)
@@ -298,25 +300,19 @@ float4 IndirectOcclusion(v2f_img IN) : SV_TARGET
         uint mask = 0xFFFFFFFFu;
 
         HorizonTrace(ray, theta, mask);
-
+        
         float4 vec = DecodeVisibility(vdir, ray.dir.xyz, theta.x, mask);
 
         ao.xyz += vec.xyz;
         ao.w += vec.w * length(proj);
         div += length(proj);
-        
-        /*
-        inline float4 DecodeVisibility(float3 vdir, float3 pdir, float theta, uint mask)
-
-        ao += length(proj) * DecodeVisibility(mask);
-        div += length(proj);
-        */
     }
 
     ao.xyz = normalize(ao.xyz);
     ao.xyz = mul(_ViewToWorldMatrix, ao.xyz);
     ao.xyz = mad(ao.xyz, 0.5f, 0.5f);
     ao.w  = saturate(ao.w / div);
+    ao.w = pow(lerp(_SSAOLightBias, 1.0f, ao.w), _SSAOIntensity);
 
     return ao;
 }
@@ -331,6 +327,7 @@ inline void ApplyOcclusionMRT(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 
     wnrm = normalize(mad(wnrm, 2.0f, -1.0f));
     float3 vnrm = mul(_WorldToViewMatrix, wnrm);
     float3 vdir = normalize(-vpos.xyz);
+    vdir = mul(_ViewToWorldMatrix, vdir);
     
     half4 mask = SampleMask(IN.uv);
     half4 diffuse = SampleGBuffer3(IN.uv);
@@ -338,52 +335,32 @@ inline void ApplyOcclusionMRT(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 
 
     if (-vpos.z < _SSAOFadeDepth)
     {
-        /*
         //
         // diffuse occlusion
         //
-        half ao = DecodeVisibility(mask);
+        half ao = mask.w;
 
         // specular occlusion
+        half roughness = saturate(1.0f - SampleGBuffer1(IN.uv).w);
+        roughness *= roughness;
 
-        // reference direction
-        float3 planeX = normalize(float3(1.0f, 0.0f, 0.0f) - vdir.x * vdir);
-        float3 planeY = normalize(float3(0.0f, 1.0f, 0.0f) - vdir.y * vdir);
+        half4 angle;
+        // reflection apature angle
+        angle.x = FastArcCos(exp2(-3.32193f * roughness));
+        // occlusion apature angle
+        angle.y = FastArcCos(FastSqrt(1.0f - ao));
+        // absolute angle difference
+        angle.z = abs(angle.x - angle.y);
+        // angle between bentnormal and reflection vector
+        angle.w = FastArcCos(dot(mask.xyz, reflect(-vdir, wnrm)));
 
-        // reflection vector
-        float3 rvec = normalize(reflect(-vdir, vnrm));
-        // projected reflection vector
-        float3 rdir = normalize(dot(rvec, planeX) * planeX + dot(rvec, planeY) * planeY);
-        // view space occlusion direction
-        //float3 rdir = normalize(float3(rvec.xy, 0.0f));
-        // get visibility index
-        float rad = FastArcCos(dot(rdir, planeY)) * 8.0f / UNITY_PI;
-        uint index = (((uint)rad + 1) / 2) % 4;
-        index = dot(rdir, planeX) > 0.0f ? index : (4 - index) % 4;
+        half intersection = smoothstep(0.0f, 1.0f, 1.0f - saturate((angle.w - angle.z) / (angle.x + angle.y - angle.z)));
+        half so = lerp(0.0f, intersection, saturate((angle.y - 0.1f) * 5.0f));
 
-        half so = DecodeVisibility(mask[index]);
-        */
-
-        // normal projection plane
-        /*
-        float3 proj = dot(vnrm, vdir) * vdir + dot(vnrm, rdir) * rdir;
-        float gamma = clamp(FastArcCos(normalize(proj).z) * sign(dot(proj, rdir)), -HALF_PI, HALF_PI);
-        float theta = acos(dot(rvec, rdir)) * sign(rvec.z - rdir.z);
-        theta = clamp(theta + sign(dot(rdir, planeX)) * gamma, 0.0f, UNITY_PI);
-        uint idx = (uint)(theta * 32.0f / UNITY_PI);
-        idx = dot(rdir, planeX) > 0.0f ? idx : 31 - idx;
-        half so = (half)((mask[index] >> idx) & 1u);
-        */
-
-        half ao = mask.w;
-        half so = mask.w;
-
+        // fade
         half fade = smoothstep(0.8f * _SSAOFadeDepth, _SSAOFadeDepth, -vpos.z);
 
-        ao = pow(lerp(_SSAOLightBias, 1.0h, ao), _SSAOIntensity);
         ao = lerp(ao, 1.0f, fade);
-
-        so = pow(lerp(_SSAOLightBias, 1.0h, so), _SSAOIntensity);
         so = lerp(so, 1.0f, fade);
 
         mrt0 = half4(diffuse.xyz * ao, diffuse.w);
@@ -395,55 +372,6 @@ inline void ApplyOcclusionMRT(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 
         mrt0 = diffuse;
         mrt1 = specular;
     }
-}
-
-inline half4 ApplySpecularOcclusion(v2f_img IN) : SV_TARGET
-{
-    // coordinate
-    float depth;
-    float4 vpos;
-    float4 wpos;
-
-    SampleCoordinates(IN.uv, vpos, wpos, depth);
-
-    uint4 mask = SampleMask(IN.uv);
-    half4 color = SampleTexel(IN.uv);
-
-    return DecodeVisibility(mask) * color;
-
-/*
-    SampleCoordinates(IN.uv, vpos, wpos, depth);
-
-    float3   = mul(_ViewToWorldMatrix, float4(0.0f, 0.0f, 1.0f, 0.0f));
-    //float3 vdir = normalize(_WorldSpaceCameraPos.xyz - wpos.xyz);
-
-    half3 wnrm = SampleGBuffer2(IN.uv).xyz;
-    wnrm = normalize(mad(wnrm, 2.0f, -1.0f));
-
-    half4 ao = SampleFlip(IN.uv);
-
-    half roughness = saturate(1.0h - SampleGBuffer1(IN.uv).w);
-    roughness *= roughness;
-
-    half4 angle;
-    // reflection apature angle
-    angle.x = FastArcCos(exp2(-3.32193h * roughness));
-    // occlusion apature angle
-    angle.y = FastArcCos(FastSqrt(1.0h - ao.w));
-    // absolute angle difference
-    angle.z = abs(angle.x - angle.y);
-    // angle between bentnormal and reflection vector
-    angle.w = FastArcCos(dot(ao.xyz, reflect(-vdir, wnrm)));
-    //angle.w = FastArcCos(dot(ao.xyz, light));
-
-    half intersection = smoothstep(0.0h, 1.0h, 1.0h - saturate((angle.w - angle.z) / (angle.x + angle.y - angle.z)));
-    half occlusion = lerp(0.0h, intersection, saturate((angle.y - 0.1h) * 5.0h));
-
-    half4 color = SampleTexel(IN.uv);
-
-    half4 result = depth > _SSAOFadeDepth ? color : half4(color.rgb * intersection, color.a);
-    return result;
-*/
 }
 
 #endif

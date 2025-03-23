@@ -313,10 +313,12 @@ half HorizonTrace(float2 uv0, float2 uv1, float4 vp0, float threshold, float rad
 		mad(radius,-1.0000f, threshold)
 	};
 
+	float3 noise = SampleNoise(uv0);
+
 	[unroll]
 	for (uint iter = 0; iter < _SSCSNumStride && str <= 1.0f; iter ++)
 	{
-		str = max(str + minStr, pow((iter + 1.0f) / _SSCSNumStride, 2));
+		str = max(str + minStr, pow((iter + noise.x) / _SSCSNumStride, 2));
 
 		float2 uv = lerp(uv0, uv1, str);
 		float4 sp = float4(mad(uv, 2.0f, -1.0f), 1.0f, 1.0f);
@@ -330,10 +332,10 @@ half HorizonTrace(float2 uv0, float2 uv1, float4 vp0, float threshold, float rad
 		float hf = (-vp0.z - _SSCSDepthBias - zf) / distance(vp.xy, vp0.xy);
 		float hb = (-vp0.z - _SSCSDepthBias - zb) / distance(vp.xy, vp0.xy);
 
-		shadow.x = hf > horizon.x ? 0.0f : shadow.x;
-		shadow.y = hf > horizon.y ? 0.0f : shadow.y;
-		shadow.z = hf > horizon.z ? 0.0f : shadow.z;
-		shadow.w = hf > horizon.w ? 0.0f : shadow.w;
+		shadow.x = (hf > horizon.x && hb < horizon.x) ? 0.0f : shadow.x;
+		shadow.y = (hf > horizon.y && hb < horizon.y) ? 0.0f : shadow.y;
+		shadow.z = (hf > horizon.z && hb < horizon.z) ? 0.0f : shadow.z;
+		shadow.w = (hf > horizon.w && hb < horizon.w) ? 0.0f : shadow.w;
 	}
 
 	return dot(shadow, 0.25h);
@@ -367,7 +369,7 @@ half SampleContactShadows(float3 wpos, float3 wdir, float2 uv0)
 	return 1.0h;
 #else
 	float3 noise = SampleNoise(uv0);
-	float raylen = _SSCSRayLength * mad(noise.x, 0.4f, 0.8f);
+	float raylen = _SSCSRayLength;
 	float4 vpos = mul(_WorldToViewMatrix, float4(wpos, 1.0f));
 	float4 vdir = mul(_WorldToViewMatrix, float4(wdir, 0.0f));
 
