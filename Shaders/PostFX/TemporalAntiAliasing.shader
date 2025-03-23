@@ -23,18 +23,6 @@ Shader "Hidden/HSSSS/TemporalAntiAliasing"
 
         uniform half _TemporalMixFactor;
         uniform uint _FrameCount;
-
-        static const half3x3 EncodeRGB = {
-            { 0.25h,  0.50h,  0.25h },
-            { 0.50h,  0.00h, -0.50h },
-            {-0.25h,  0.50h, -0.25h }
-        };
-
-        static const half3x3 DecodeRGB = {
-            {  1.0h,  1.0h, -1.0h },
-            {  1.0h,  0.0h,  1.0h },
-            {  1.0h, -1.0h, -1.0h },
-        };
         ENDCG
         
         // pass 0 : just mix frames
@@ -73,6 +61,20 @@ Shader "Hidden/HSSSS/TemporalAntiAliasing"
                 mix = (coord.x + coord.y) % 2 == _FrameCount % 2 ? 0.0f : mix;
 
                 return half4(lerp(current, history, mix), 1.0h);
+            }
+            ENDCG
+        }
+
+        Pass
+        {
+            CGPROGRAM
+            #pragma target 5.0
+            #pragma vertex vert_img
+            #pragma fragment frag_img
+
+            half4 frag_img(v2f_img IN) : SV_TARGET
+            {
+                return _MainTex.Sample(sampler_MainTex, IN.uv);
             }
             ENDCG
         }

@@ -1,4 +1,11 @@
-sampler2D _MainTex;
+uniform Texture2D _MainTex;
+uniform SamplerState sampler_MainTex;
+
+uniform half3 _AgXSaturation;
+uniform half3 _AgXOffset;
+uniform half3 _AgXSlope;
+uniform half3 _AgXPower;
+uniform half _AgXGamma;
 
 float3 AgxDefaultContrastApprox(float3 x)
 {
@@ -24,7 +31,7 @@ float3 Agx(float3 val)
 
     // unity?
     float min_ev = -12.47393f;
-    float max_ev =  0.526069f;
+    float max_ev =  4.026069f;
 
     // input transform
     val = mul(val, agx_mat);
@@ -50,6 +57,9 @@ float3 AgxEotf(float3 val)
     
     val = mul(val, agx_mat_inv);
 
+    // srgb
+    val = pow(val, _AgXGamma);
+
     return val;
 }
 
@@ -57,35 +67,17 @@ float3 AgxLook(float3 val)
 {
     float3 lw = float3(0.2126f, 0.7152f, 0.0722f);
     float luma = dot(val, lw);
-    
-    // default
-    float3 offset = 0.0f;
-    float3 slope = 1.0f;
-    float3 power = 1.0f;
-    float sat = 1.0f;
-    
-#if AGX_LOOK == 1
-    // golden Look
-    slope = float3(1.0f, 0.9f, 0.5f);
-    power = float3(0.8f, 0.8f, 0.8f);
-    sat = 0.8f;
-#elif AGX_LOOK == 2
-    // punchy Look
-    slope = float3(1.00f, 1.00f, 1.00f);
-    power = float3(1.35f, 1.35f, 1.35f);
-    sat = 1.4f;
-#endif
 
     // ASC CDL
-    val = pow(val * slope + offset, power);
-    return luma + sat * (val - luma);
+    val = pow(val * _AgXSlope + _AgXOffset, _AgXPower);
+    return luma + _AgXSaturation * (val - luma);
 }
 
 half4 frag (v2f_img IN) : SV_Target
 {
-	half4 color = tex2D(_MainTex, IN.uv);
+	half4 color = _MainTex.Sample(sampler_MainTex, IN.uv);
 	color.xyz = Agx(color.xyz);
-	color.xyz = AgxLook(color.xyz);
+    color.xyz = AgxLook(color.xyz);
 	color.xyz = AgxEotf(color.xyz);
 	return color;
 }
