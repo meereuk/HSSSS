@@ -183,5 +183,16 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             #include "SSAO.cginc"
             ENDCG
         }
+
+        // pass 14 : apply ao mrt (multibounce ao)
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert_mrt
+            #pragma fragment ApplyOcclusionMRT
+            #define _MULTIBOUNCE_OCCLUSION
+            #include "SSAO.cginc"
+            ENDCG
+        }
     }
 }

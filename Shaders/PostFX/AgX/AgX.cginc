@@ -1,11 +1,11 @@
 uniform Texture2D _MainTex;
 uniform SamplerState sampler_MainTex;
 
-uniform half3 _AgXSaturation;
 uniform half3 _AgXOffset;
 uniform half3 _AgXSlope;
 uniform half3 _AgXPower;
 uniform half _AgXGamma;
+uniform half _AgXSaturation;
 
 float3 AgxDefaultContrastApprox(float3 x)
 {

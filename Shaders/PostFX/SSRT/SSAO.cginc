@@ -363,7 +363,20 @@ inline void ApplyOcclusionMRT(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 
         ao = lerp(ao, 1.0f, fade);
         so = lerp(so, 1.0f, fade);
 
+        // multi-bounce occlusion
+    #ifdef _MULTIBOUNCE_OCCLUSION
+        half3 albedo = SampleGBuffer0(IN.uv).xyz;
+
+        half3 a =  2.0404f * albedo - 0.3324f;
+        half3 b = -4.7951f * albedo + 0.6417f;
+        half3 c =  2.7552f * albedo + 0.6903f;
+
+        half3 vis = max(ao, mad(mad(ao, a, b), ao, c) * ao);
+
+        mrt0 = half4(diffuse.xyz * vis, diffuse.w);
+    #else
         mrt0 = half4(diffuse.xyz * ao, diffuse.w);
+    #endif
         mrt1 = half4(specular.xyz * so, specular.w);
     }
 
