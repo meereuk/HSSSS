@@ -65,6 +65,7 @@ Shader "Hidden/HSSSS/TemporalAntiAliasing"
             ENDCG
         }
 
+        // pass 2 : upside down blit
         Pass
         {
             CGPROGRAM
@@ -74,6 +75,7 @@ Shader "Hidden/HSSSS/TemporalAntiAliasing"
 
             half4 frag_img(v2f_img IN) : SV_TARGET
             {
+                float2 uv = float2(IN.uv.x, 1.0f - IN.uv.y);
                 return _MainTex.Sample(sampler_MainTex, IN.uv);
             }
             ENDCG

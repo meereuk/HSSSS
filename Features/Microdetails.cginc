@@ -37,7 +37,7 @@ float4 tex2DStochastic(sampler2D tex, float2 uv, float4x3 bw, float2 dx, float2 
             mul(tex2D(tex, uv + hash2D2D(bw[2].xy), dx, dy), bw[3].z);
 }
 
-#if defined(_MICRODETAILS_ON)
+#ifdef _MICRODETAILS_ON
     A_SAMPLER2D(_DetailNormalMap_2);
     A_SAMPLER2D(_DetailNormalMap_3);
     A_SAMPLER2D(_DetailSkinPoreMap);
@@ -48,75 +48,67 @@ float4 tex2DStochastic(sampler2D tex, float2 uv, float4x3 bw, float2 dx, float2 
 
 inline void aSampleMicroTangent(inout ASurface s)
 {
-    #if defined(_MICRODETAILS_ON)
-        half3 weight = abs(s.normalWorld) - 0.2h;
-        weight = max(weight, 0.0h);
-        weight = pow(weight, half3(3.0h, 3.0h, 3.0h));
-        weight = weight / dot(weight, 1.0h);
+#ifdef _MICRODETAILS_ON
+    half3 weight = abs(s.normalWorld) - 0.2h;
+    weight = max(weight, 0.0h);
+    weight = pow(weight, half3(3.0h, 3.0h, 3.0h));
+    weight = weight / dot(weight, 1.0h);
 
-        float3x2 uv = {
-            A_TRANSFORM_SCROLL(_DetailSkinPoreMap, s.positionWorld.zy),
-            A_TRANSFORM_SCROLL(_DetailSkinPoreMap, s.positionWorld.xz),
-            A_TRANSFORM_SCROLL(_DetailSkinPoreMap, s.positionWorld.xy)
-        };
-        
-        float4x3 bw0;
-        float4x3 bw1;
-        float4x3 bw2;
+    float3x2 uv = {
+        A_TRANSFORM_SCROLL(_DetailSkinPoreMap, s.positionWorld.zy),
+        A_TRANSFORM_SCROLL(_DetailSkinPoreMap, s.positionWorld.xz),
+        A_TRANSFORM_SCROLL(_DetailSkinPoreMap, s.positionWorld.xy)
+    };
 
-        float3x2 dx;
-        float3x2 dy;
+    float4x3 bw[3];
 
-        GetStochasticUv(uv[0], bw0, dx[0], dy[0]);
-        GetStochasticUv(uv[1], bw1, dx[1], dy[1]);
-        GetStochasticUv(uv[2], bw2, dx[2], dy[2]);
+    float3x2 dx;
+    float3x2 dy;
+    
+    GetStochasticUv(uv[0], bw[0], dx[0], dy[0]);
+    GetStochasticUv(uv[1], bw[1], dx[1], dy[1]);
+    GetStochasticUv(uv[2], bw[2], dx[2], dy[2]);
 
-        half3 pore = {
-            tex2DStochastic(_DetailSkinPoreMap, uv[0], bw0, dx[0], dy[0]).r,
-            tex2DStochastic(_DetailSkinPoreMap, uv[1], bw1, dx[1], dy[1]).r,
-            tex2DStochastic(_DetailSkinPoreMap, uv[2], bw2, dx[2], dy[2]).r
-        };
+    half3 pore = {
+        tex2DStochastic(_DetailSkinPoreMap, uv[0], bw[0], dx[0], dy[0]).r,
+        tex2DStochastic(_DetailSkinPoreMap, uv[1], bw[1], dx[1], dy[1]).r,
+        tex2DStochastic(_DetailSkinPoreMap, uv[2], bw[2], dx[2], dy[2]).r
+    };
 
-        half3 intensity = {
-            _PoreOcclusionStrength,
-            _DetailNormalMapScale_2,
-            _DetailNormalMapScale_3
-        };
+    half3 intensity = {
+        _PoreOcclusionStrength,
+        _DetailNormalMapScale_2,
+        _DetailNormalMapScale_3
+    };
 
-        intensity *= pow(s.NdotV, 2);
-        
-        s.ambientOcclusion = s.ambientOcclusion * lerp(1.0h, dot(pore, weight), intensity.x);
-        s.normalWorld = A_NORMAL_WORLD(s, s.normalTangent);
+    intensity *= pow(s.NdotV, 2);
 
-        half3x3 tangent;
+    //
+    // pore occlusion
+    //
+    s.ambientOcclusion = s.ambientOcclusion * lerp(1.0h, dot(pore, weight), intensity.x);
 
-        tangent[0] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_2, uv[0], bw0, dx[0], dy[0]), intensity.y);
-        tangent[1] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_2, uv[1], bw1, dx[1], dy[1]), intensity.y);
-        tangent[2] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_2, uv[2], bw2, dx[2], dy[2]), intensity.y);
+    //
+    // detail normal
+    //
+    half3x3 tangent;
 
-        tangent[0] = half3(0.0h, tangent[0].y, tangent[0].x);
-        tangent[1] = half3(tangent[1].x, 0.0h, tangent[1].y);
-        tangent[2] = half3(tangent[2].x, tangent[2].y, 0.0h);
+    // normal #2
+    tangent[0] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_2, uv[0], bw[0], dx[0], dy[0]), intensity.y);
+    tangent[1] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_2, uv[1], bw[1], dx[1], dy[1]), intensity.y);
+    tangent[2] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_2, uv[2], bw[2], dx[2], dy[2]), intensity.y);
 
-        s.normalWorld = s.normalWorld + mul(weight, tangent);
-        
-        tangent[0] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_3, uv[0], bw0, dx[0], dy[0]), intensity.z);
-        tangent[1] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_3, uv[1], bw1, dx[1], dy[1]), intensity.z);
-        tangent[2] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_3, uv[2], bw2, dx[2], dy[2]), intensity.z);
+    s.normalTangent = BlendNormals(s.normalTangent, normalize(mul(weight, tangent)));
 
-        tangent[0] = half3(0.0h, tangent[0].y, tangent[0].x);
-        tangent[1] = half3(tangent[1].x, 0.0h, tangent[1].y);
-        tangent[2] = half3(tangent[2].x, tangent[2].y, 0.0h);
+    // normal #3
+    tangent[0] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_3, uv[0], bw[0], dx[0], dy[0]), intensity.z);
+    tangent[1] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_3, uv[1], bw[1], dx[1], dy[1]), intensity.z);
+    tangent[2] = UnpackScaleNormal(tex2DStochastic(_DetailNormalMap_3, uv[2], bw[2], dx[2], dy[2]), intensity.z);
 
-        s.normalWorld = s.normalWorld + mul(weight, tangent);
-        s.normalWorld = normalize(s.normalWorld);
+    s.normalTangent = BlendNormals(s.normalTangent, normalize(mul(weight, tangent)));
 
-        s.ambientNormalWorld = s.normalWorld;
-
-        aUpdateViewData(s);
-    #else
-        aUpdateNormalData(s);
-    #endif
+    s.normalWorld = A_NORMAL_WORLD(s, s.normalTangent);
+#endif
 }
 
 #endif

@@ -21,9 +21,8 @@ void aSurface(inout ASurface s)
         aSampleDetailTangent(s);
         #ifdef _MICRODETAILS_ON
             aSampleMicroTangent(s);
-        #else
-            aUpdateNormalData(s);
         #endif
+        aUpdateNormalData(s);
     #endif
 }
 
