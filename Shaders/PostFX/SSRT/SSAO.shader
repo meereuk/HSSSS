@@ -194,5 +194,64 @@ Shader "Hidden/HSSSS/AmbientOcclusion"
             #include "SSAO.cginc"
             ENDCG
         }
+
+        //
+        // debug ao
+        //
+
+        // pass 15 : debug ao
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert_img
+            #pragma fragment frag
+            #include "SSAO.cginc"
+
+            half4 frag(v2f_img IN) : SV_TARGET
+            {
+                return half4(SampleMask(IN.uv).www, 1.0f);
+            }
+            ENDCG
+        }
+
+        // pass 15 : debug ao (multibounce ao)
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert_img
+            #pragma fragment frag
+            #include "SSAO.cginc"
+
+            half4 frag(v2f_img IN) : SV_TARGET
+            {
+                half ao = SampleMask(IN.uv).w;
+
+                half3 albedo = SampleGBuffer0(IN.uv).xyz;
+
+                half3 a =  2.0404f * albedo - 0.3324f;
+                half3 b = -4.7951f * albedo + 0.6417f;
+                half3 c =  2.7552f * albedo + 0.6903f;
+
+                half3 vis = max(ao, mad(mad(ao, a, b), ao, c) * ao);
+
+                return half4(vis, 1.0f);
+            }
+            ENDCG
+        }
+
+        // pass 17 : debug bent normal
+        Pass
+        {
+            CGPROGRAM
+            #pragma vertex vert_img
+            #pragma fragment frag
+            #include "SSAO.cginc"
+
+            half4 frag(v2f_img IN) : SV_TARGET
+            {
+                return half4(mad(SampleMask(IN.uv).xyz, 0.5f, 0.5f), 1.0f);
+            }
+            ENDCG
+        }
     }
 }

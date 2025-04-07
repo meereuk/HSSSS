@@ -166,45 +166,5 @@
             }
             ENDCG
         }
-
-        // pass 6 : checkerboard
-        Pass
-        {
-            CGPROGRAM
-            #pragma vertex vert_img
-            #pragma fragment frag
-
-            #include "UnityCG.cginc"
-            #include "UnityDeferredLibrary.cginc"
-
-            uniform Texture2D _MainTex;
-            uniform SamplerState sampler_MainTex;
-            uniform float4 _MainTex_TexelSize;
-            uniform uint _FrameCount;
-
-            half4 frag(v2f_img IN) : SV_Target
-            {
-                uint2 coord = round((IN.uv - 0.5f * _MainTex_TexelSize.xy) * _MainTex_TexelSize.zw);
-                half4 color = 0.0h;
-
-                if ((coord.x + coord.y) % 2 != _FrameCount % 2)
-                {
-                    color += _MainTex.Sample(sampler_MainTex, IN.uv, int2( 0,  1));
-                    color += _MainTex.Sample(sampler_MainTex, IN.uv, int2( 0, -1));
-                    color += _MainTex.Sample(sampler_MainTex, IN.uv, int2( 1,  0));
-                    color += _MainTex.Sample(sampler_MainTex, IN.uv, int2(-1,  0));
-
-                    color /= 4.0h;
-                }
-
-                else
-                {
-                    color = _MainTex.Sample(sampler_MainTex, IN.uv);
-                }
-
-                return color;
-            }
-            ENDCG
-        }
     }
 }

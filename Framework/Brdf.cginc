@@ -61,6 +61,13 @@ inline half DGGX(half a, half NdotH)
     return clampInfinite(a2 / (denom * denom));
 }
 
+inline half DGGX(half a, half NdotH, half threshold)
+{
+    half a2 = a * a;
+    half denom = aLerpOneTo(a2, NdotH * NdotH);
+    return clamp(a2 / (denom * denom), 0.0f, threshold);
+}
+
 inline half DGGXAniso(half at, half ab, half TdotH, half BdotH, half NdotH)
 {
     half a2 = at * ab;
@@ -87,6 +94,15 @@ inline half VSmith(half a, half NdotV, half NdotL)
     half lambdaL = NdotV * sqrt((NdotL - a2 * NdotL) * NdotL + a2);
     return clampInfinite(0.5h / (lambdaV + lambdaL));
 }
+
+inline half VSmith(half a, half NdotV, half NdotL, half threshold)
+{
+    half a2 = a * a;
+    half lambdaV = NdotL * sqrt((NdotV - a2 * NdotV) * NdotV + a2);
+    half lambdaL = NdotV * sqrt((NdotL - a2 * NdotL) * NdotL + a2);
+    return clamp(0.5h / (lambdaV + lambdaL), 0.0f, threshold);
+}
+
 
 inline half VSmithAniso(half at, half ab, half TdotV, half BdotV, half TdotL, half BdotL, half NdotV, half NdotL)
 {

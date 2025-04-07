@@ -105,8 +105,9 @@ struct ray
     float3 noise;
     float r;
     float t;
-    //
+    // specular f0
     float3 f0;
+    // beckmann roughness
     float a;
 };
 
@@ -324,8 +325,10 @@ void HorizonTrace(ray ray, float2 theta, inout uint mask, inout float3 diffuse, 
         ));
 
         // hemisphere threshold
+        /*
         float threshold = FastArcCos(str);
         horizon = min(horizon, threshold);
+        */
 
         //
         // visibility bitmask
@@ -336,6 +339,7 @@ void HorizonTrace(ray ray, float2 theta, inout uint mask, inout float3 diffuse, 
 
         // 32-bit length
         float segment = UNITY_PI / 32.0f;
+        // horizon index
         uint4 index = (uint4)(horizon / segment.xxxx);
         uint4 visibility = 0xFFFFFFFFu << (index + 1);
 
@@ -379,22 +383,32 @@ void HorizonTrace(ray ray, float2 theta, inout uint mask, inout float3 diffuse, 
             saturate(dot(ldir[1], hdir[1]))
         };
 
+        // screen bound
+        float2 screenBound = 1.0f;
+
+        screenBound.x = uv[0].x > 1.0f || uv[0].x < 0.0f || uv[0].y > 1.0f || uv[0].y < 0.0f ? 0.0f : 1.0f;
+        screenBound.y = uv[1].x > 1.0f || uv[1].x < 0.0f || uv[1].y > 1.0f || uv[1].y < 0.0f ? 0.0f : 1.0f;
+
         // ndotl attenuation
         ir[0].xyz *= ndotl.x;
         ir[1].xyz *= ndotl.y;
 
         // shadow attenuation
-        ir[0].xyz *= (float)countbits(visibility.x & mask) / 32.0f;
-        ir[1].xyz *= (float)countbits(visibility.y & mask) / 32.0f;
+        ir[0].xyz *= (float)countbits((~visibility.x) & mask) / 32.0f;
+        ir[1].xyz *= (float)countbits((~visibility.y) & mask) / 32.0f;
 
         // brdf
-        diffuse += ir[0].xyz;
-        diffuse += ir[1].xyz;
+        diffuse += ir[0].xyz * screenBound.x;
+        diffuse += ir[1].xyz * screenBound.y;
 
         // specular
+        /*
         specular += ir[0].xyz * ray.f0 * pow(ndoth.x, 1.0f / ray.a);
         specular += ir[1].xyz * ray.f0 * pow(ndoth.y, 1.0f / ray.a);
-
+        */
+        specular += ir[0].xyz * DGGX(ray.a, ndoth.x, 1.0f) * VSmith(ray.a, ndotv, ndotl.x, 1.0f) * FSchlick(ray.f0, ldoth.x);
+        specular += ir[1].xyz * DGGX(ray.a, ndoth.y, 1.0f) * VSmith(ray.a, ndotv, ndotl.y, 1.0f) * FSchlick(ray.f0, ldoth.y);
+        
         // update visibility mask
         visibility.xy = visibility.xy | visibility.zw;
         mask = mask & (visibility.x & visibility.y);
@@ -452,10 +466,7 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
 
     float4 gbuffer1 = SampleGBuffer1(IN.uv);
     ray.f0 = gbuffer1.xyz;
-    // beckmann roughness to bllinn-phong exponent
-    // http://simonstechblog.blogspot.com/2011/12/microfacet-brdf.html
-    ray.a = lerp(0.99f, _SSGIRoughness, gbuffer1.w);
-    ray.a = ray.a * ray.a;
+    ray.a = lerp(1.0f, _SSGIRoughness, gbuffer1.w);
     ray.a = ray.a * ray.a;
 
     float slice = UNITY_PI / _SSGINumSample;
@@ -463,7 +474,7 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
     float3 diffuse = 0.0f;
     float3 specular = 0.0f;
 
-    [unroll]
+    //[unroll]
     for (uint iter = 0; iter < _SSGINumSample; iter ++)
     {
         // sampling direction
