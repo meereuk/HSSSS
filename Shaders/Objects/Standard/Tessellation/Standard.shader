@@ -9,7 +9,7 @@ Shader "HSSSS/Standard/Tessellation/Standard"
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Main Color", Color) = (1,1,1,1)
 
-        _ColorMask ("Color Mask", 2D) = "black" {}
+        _Colormask ("Color Mask", 2D) = "black" {}
         _Color_3 ("Secondary Color", Color) = (1,1,1,1)
 
         _DetailAlbedoMap ("Detail Albedo", 2D) = "white" {}

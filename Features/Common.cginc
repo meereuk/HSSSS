@@ -22,7 +22,7 @@
     s.baseTiling = TEX##_ST.xy;
 
 A_SAMPLER2D(_MainTex);
-A_SAMPLER2D(_ColorMask);
+A_SAMPLER2D(_Colormask);
 A_SAMPLER2D(_DetailAlbedoMap);
 
 A_SAMPLER2D(_EmissionMap);
@@ -74,7 +74,7 @@ inline void aSampleAlbedo(inout ASurface s)
 inline void aSampleTwoColorAlbedo(inout ASurface s)
 {
     half4 tex = tex2D(_MainTex, s.baseUv);
-    half mask = tex2D(_ColorMask, A_TRANSFORM_UV_SCROLL(s, _ColorMask)).g;
+    half mask = tex2D(_Colormask, A_TRANSFORM_UV_SCROLL(s, _Colormask)).g;
     s.baseColor = lerp(_Color.rgb, _Color_3.rgb, mask) * tex.rgb;
     s.opacity = lerp(_Color.a, _Color_3.a, mask) * tex.a;
 }

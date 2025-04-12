@@ -9,7 +9,7 @@ Shader "HSSSS/Standard/Tessellation/Hash"
         _MainTex ("Main Texture", 2D) = "white" {}
         _Color ("Main Color", Color) = (1,1,1,1)
 
-        _ColorMask ("Color Mask", 2D) = "black" {}
+        _Colormask ("Color Mask", 2D) = "black" {}
         _Color_3 ("Secondary Color", Color) = (1,1,1,1)
 
         _DetailAlbedoMap ("Detail Albedo", 2D) = "white" {}
@@ -86,6 +86,7 @@ Shader "HSSSS/Standard/Tessellation/Hash"
         
             #define UNITY_PASS_FORWARDBASE
             #define _ALPHAHASHED_ON
+            #define _WORKFLOW_SPECULAR
         
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
@@ -114,6 +115,7 @@ Shader "HSSSS/Standard/Tessellation/Hash"
 
             #define UNITY_PASS_FORWARDADD
             #define _ALPHAHASHED_ON
+            #define _WORKFLOW_SPECULAR
 
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
@@ -165,6 +167,7 @@ Shader "HSSSS/Standard/Tessellation/Hash"
         
             #define UNITY_PASS_DEFERRED
             #define _ALPHAHASHED_ON
+            #define _WORKFLOW_SPECULAR
         
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/Deferred.cginc"

@@ -69,6 +69,7 @@ Shader "HSSSS/Overlay/Hash"
         
             #define UNITY_PASS_FORWARDBASE
             #define _ALPHAHASHED_ON
+            #define _WORKFLOW_SPECULAR
         
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardBase.cginc"
@@ -95,6 +96,7 @@ Shader "HSSSS/Overlay/Hash"
 
             #define UNITY_PASS_FORWARDADD
             #define _ALPHAHASHED_ON
+            #define _WORKFLOW_SPECULAR
 
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/ForwardAdd.cginc"
@@ -142,6 +144,7 @@ Shader "HSSSS/Overlay/Hash"
 
             #define UNITY_PASS_DEFERRED
             #define _ALPHAHASHED_ON
+            #define _WORKFLOW_SPECULAR
 
             #include "Assets/HSSSS/Definitions/Overlay.cginc"
             #include "Assets/HSSSS/Passes/Deferred.cginc"

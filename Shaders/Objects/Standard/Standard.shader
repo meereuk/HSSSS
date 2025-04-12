@@ -10,7 +10,7 @@ Shader "HSSSS/Standard/Standard"
         _Color ("Main Color", Color) = (1,1,1,1)
 
         [Space(8)][Header(ColorMask)]
-        _ColorMask ("Color Mask", 2D) = "black" {}
+        _Colormask ("Color Mask", 2D) = "black" {}
         _Color_3 ("Secondary Color", Color) = (1,1,1,1)
 
         [Space(8)][Header(DetailAlbedo)]
