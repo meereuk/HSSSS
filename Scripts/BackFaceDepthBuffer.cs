@@ -10,16 +10,12 @@ public class BackFaceDepthBuffer : MonoBehaviour
     private Shader mShader;
 	private RenderTexture mTexture;
 
+    private GameObject mObject;
+
 	public void OnEnable()
 	{
         this.SetUpDepthCamera();
-        this.mShader = Shader.Find("Hidden/BackFaceDepth");
-
-        this.mTexture = new RenderTexture(
-            Screen.currentResolution.width, Screen.currentResolution.height,
-            0, RenderTextureFormat.Depth, RenderTextureReadWrite.Linear);
-
-        this.mTexture.Create();
+        this.mShader = Shader.Find("HSSSS/TangentRenderer");
     }
 
 	public void OnDisable()
@@ -36,27 +32,52 @@ public class BackFaceDepthBuffer : MonoBehaviour
         if (this.mCamera && this.mainCamera)
         {
             this.UpdateDepthCamera();
-            
         }
     }
 
     void LateUpdate()
     {
+    }
+
+    void OnPreCull()
+    {
+        this.mTexture = RenderTexture.GetTemporary(
+            Screen.currentResolution.width, Screen.currentResolution.height,
+            16, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+
+/*
+        this.mTexture = new RenderTexture(
+            Screen.currentResolution.width, Screen.currentResolution.height,
+            0, RenderTextureFormat.ARGB32, RenderTextureReadWrite.Linear);
+
+        this.mTexture.Create();
+*/
+
         this.CaptureDepth();
+    }
+
+    private void OnRenderImage(RenderTexture source, RenderTexture destination)
+    {
+        Graphics.Blit(this.mTexture, destination);
+        RenderTexture.ReleaseTemporary(this.mTexture);
+        //this.mTexture.Release();
     }
 
 	private void SetUpDepthCamera()
 	{
+        this.mObject = new GameObject("SecondaryCamera");
+        this.mCamera = this.mObject.AddComponent<Camera>();
+
         if (this.mCamera == null)
         {
-            this.mCamera = this.gameObject.AddComponent<Camera>();
+            this.mCamera = new Camera();
         }
 
         this.mCamera.name = "BackFaceDepthCamera";
         this.mCamera.enabled = false;
         this.mCamera.backgroundColor = new Color(0.0f, 0.0f, 0.0f, 0.0f);
         this.mCamera.clearFlags = CameraClearFlags.SolidColor;
-        this.mCamera.renderingPath = RenderingPath.VertexLit;
+        this.mCamera.renderingPath = RenderingPath.Forward;
     }
 
     private void UpdateDepthCamera()
@@ -70,14 +91,8 @@ public class BackFaceDepthBuffer : MonoBehaviour
 
     private void CaptureDepth()
     {
-        /*
-        this.mTexture = RenderTexture.GetTemporary(
-            Screen.currentResolution.width, Screen.currentResolution.height,
-            24, RenderTextureFormat.RFloat, RenderTextureReadWrite.Linear);
-            */
         this.mCamera.targetTexture = this.mTexture;
         this.mCamera.RenderWithShader(this.mShader, "");
         Shader.SetGlobalTexture("_BackFaceDepthBuffer", this.mTexture);
-        //RenderTexture.ReleaseTemporary(this.mTexture);
     }
 }

@@ -68,8 +68,8 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
 
         half anisotropy = clamp(mad(s.transmission, 2.0h, -1.0h), -1.0h, 1.0h);
 
-        half at = s.beckmannRoughness * (1.0h + anisotropy);
-        half ab = s.beckmannRoughness * (1.0h - anisotropy);
+        half at = s.beckmannRoughness * clamp(1.0h + anisotropy, 0.001f, 1.999f);
+        half ab = s.beckmannRoughness * clamp(1.0h - anisotropy, 0.001f, 1.999f);
 
         diffuse *= saturate((d.NdotLm + 0.5h) / 2.25h);
         diffuse *= saturate(sssColor + d.NdotL);

@@ -48,6 +48,8 @@ struct ray
     float2 uv;
     float3 pos;
     float3 dir;
+    float3 nrm;
+    float3 vdir;
     float3 noise;
     float r;
     float t;
@@ -130,7 +132,7 @@ void HorizonTrace(ray ray, float2 theta, inout uint mask)
     [unroll]
     for (uint iter = 0; iter < _SSAONumStride && str < 1.0f; iter ++)
     {
-        uint mip = min(iter, 4);
+        uint mip = min(iter / 2, 4);
         str = max(str + minStr * pow(2, mip), pow(((float)iter + ray.noise.x) / _SSAONumStride, power));
 
         //
@@ -223,6 +225,32 @@ void HorizonTrace(ray ray, float2 theta, inout uint mask)
     }
 }
 
+inline void SampleInOneDirection(uint iter, ray ray, inout float4 ao, inout float div)
+{
+    float slice = UNITY_PI / _SSAONumSample;
+
+    // sampling direction
+    ray.dir = 0.0f;
+    sincos(slice * ((float)iter + 0.5f - ray.noise.z), ray.dir.x, ray.dir.y);
+    ray.dir = normalize(ray.dir - dot(ray.dir, ray.vdir) * ray.vdir);
+
+    // normal projection plane
+    // project to view direction-sample direction plane
+    float3 proj = dot(ray.nrm, ray.vdir) * ray.vdir + dot(ray.nrm, ray.dir.xyz) * ray.dir.xyz;
+    float gamma = clamp(FastArcCos(dot(normalize(proj), ray.vdir)) * sign(dot(proj, ray.dir.xyz)), -HALF_PI, HALF_PI);
+
+    float2 theta = { -gamma, gamma };
+    uint mask = 0xFFFFFFFFu;
+
+    HorizonTrace(ray, theta, mask);
+        
+    float4 vec = DecodeVisibility(ray.vdir, ray.dir.xyz, theta.x, mask);
+
+    ao.xyz += vec.xyz;
+    ao.w += vec.w * length(proj);
+    div += length(proj);
+}
+
 inline float ZBufferPrePass(v2f_img IN) : SV_TARGET
 {
     return Linear01Depth(SampleZBuffer(IN.uv));
@@ -257,6 +285,8 @@ float4 IndirectOcclusion(v2f_img IN) : SV_TARGET
     ray ray;
     ray.uv = uv;
     ray.pos = vpos;
+    ray.nrm = vnrm;
+    ray.vdir = vdir;
     ray.noise = noise;
 
     ray.r = max(_SSAORayLength, 0.001f);
@@ -271,41 +301,19 @@ float4 IndirectOcclusion(v2f_img IN) : SV_TARGET
     float4 ao = 0.0f;
 
     uint2 coord = uint2(uv * _ScreenParams.xy);
+    uint iter = ((coord.x % 2) + 2 * (coord.y % 2) + _FrameCount) % 4;
 
-    #if defined(_SSAOSubSample_1)
-        uint i0 = (coord.x + coord.y) % 2;
-        uint di = 2;
-    #elif defined(_SSAOSubSample_2)
-        uint i0 = (coord.x % 2) + 2 * (coord.y % 2);
-        uint di = 4;
-    #else
-        uint i0 = 0;
-        uint di = 1;
-    #endif
+    SampleInOneDirection(iter, ray, ao, div);
     
-    [unroll]
-    for (uint iter = i0; iter < _SSAONumSample; iter += di)
+    if (_SSAOSubSample < 2)
     {
-        // sampling direction
-        ray.dir = 0.0f;
-        sincos(slice * ((float)iter + 0.5f - noise.z), ray.dir.x, ray.dir.y);
-        ray.dir = normalize(ray.dir - dot(ray.dir, vdir) * vdir);
+        SampleInOneDirection((iter + 2) % 4, ray, ao, div);
+    }
 
-        // normal projection plane
-        // project to view direction-sample direction plane
-        float3 proj = dot(vnrm, vdir) * vdir + dot(vnrm, ray.dir.xyz) * ray.dir.xyz;
-        float gamma = clamp(FastArcCos(dot(normalize(proj), vdir)) * sign(dot(proj, ray.dir.xyz)), -HALF_PI, HALF_PI);
-
-        float2 theta = { -gamma, gamma };
-        uint mask = 0xFFFFFFFFu;
-
-        HorizonTrace(ray, theta, mask);
-        
-        float4 vec = DecodeVisibility(vdir, ray.dir.xyz, theta.x, mask);
-
-        ao.xyz += vec.xyz;
-        ao.w += vec.w * length(proj);
-        div += length(proj);
+    if (_SSAOSubSample < 1)
+    {
+        SampleInOneDirection((iter + 1) % 4, ray, ao, div);
+        SampleInOneDirection((iter + 3) % 4, ray, ao, div);
     }
 
     ao.xyz = normalize(ao.xyz);

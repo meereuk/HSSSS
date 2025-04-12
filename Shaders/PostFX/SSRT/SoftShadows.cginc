@@ -14,6 +14,7 @@ uniform sampler3D _BlueNoise;
 uniform uint _FrameCount;
 uniform bool _DirectOcclusion;
 
+uniform float _ShadowDistance;
 uniform float _SlopeBiasScale;
 uniform float3 _DirLightPenumbra;
 uniform float3 _SpotLightPenumbra;
@@ -136,16 +137,25 @@ half2 SamplePCFShadows(float3 wpos, float2 uv, float depth, float3 nrm, float nd
 		pixelDepth = pixelDepth / depthScale;
 	#endif
 
+	// noise pattern for stochastic sampling
+	float3 noise = SampleNoise(uv);
+
 	// penumbra sliders
 	// x: blocker search radius (in cm)
 	// y: light source radius (in cm)
 	// z: minimum or fixed size penumbra (in mm)
 	#if defined(POINT)
-		float3 radius = float3(0.01f, 0.01f, 0.001f) * _PointLightPenumbra;
+		float3 radius = float3(0.01f, 0.01f, 0.001f);
+		radius *= mad(noise.x, 0.4f, 0.8f);
+		radius *=  _PointLightPenumbra;
 	#elif defined(SPOT)
-		float3 radius = float3(0.01f, 0.01f, 0.001f) * _SpotLightPenumbra;
+		float3 radius = float3(0.01f, 0.01f, 0.001f);
+		radius *= mad(noise.x, 0.4f, 0.8f);
+		radius *= _SpotLightPenumbra;
 	#elif defined(DIRECTIONAL)
-		float3 radius = float3(0.01f, 0.01f, 0.001f) * _DirLightPenumbra;
+		float3 radius = float3(0.01f, 0.01f, 0.001f);
+		radius *= mad(noise.x, 0.4f, 0.8f);
+		radius *= _DirLightPenumbra;
 	#endif
 
 	// gram-schmidt process
@@ -159,8 +169,6 @@ half2 SamplePCFShadows(float3 wpos, float2 uv, float depth, float3 nrm, float nd
 	// percentage-closer soft shadow //
 	///////////////////////////////////
 
-	// noise pattern for stochastic sampling
-	float3 noise = SampleNoise(uv);
 	// r: shadow, g: mean z-diff.
 	half2 shadow = {0.0h, 0.0h};
 
@@ -221,7 +229,7 @@ half2 SamplePCFShadows(float3 wpos, float2 uv, float depth, float3 nrm, float nd
 	/////////////////////////////////
 
 	#if defined(POINT) || defined(SPOT)
-		pixelDepth -= lerp(0.01f, 0.00f, ndotl) * _SlopeBiasScale * noise.x;
+		pixelDepth -= lerp(0.01f, 0.00f, ndotl) * _SlopeBiasScale * noise.y;
 	#endif
 
 	[unroll]
@@ -266,6 +274,11 @@ half2 frag_shadow (v2f_img i) : SV_TARGET
 	float depth;
 
 	SampleCoordinate(uv, wpos, depth);
+
+	if (depth > _ShadowDistance)
+	{
+		discard;
+	}
 
 	// ndotl calculation
 	half3 normal = tex2D(_CameraGBufferTexture2, uv);

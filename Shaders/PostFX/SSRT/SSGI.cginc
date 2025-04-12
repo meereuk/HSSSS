@@ -14,7 +14,9 @@ uniform half _SSGIMeanDepth;
 uniform half _SSGIRoughness;
 uniform half _SSGIFadeDepth;
 uniform half _SSGIMixFactor;
+uniform half _SSGIOcclusion;
 uniform uint _SSGIStepPower;
+uniform uint _SSGIDebugView;
 
 // history buffer
 uniform Texture2D _SSGITemporalDiffuseBuffer;
@@ -82,7 +84,7 @@ uniform float4 _SSGIFlopSpecularBuffer_TexelSize;
     #define KERNEL_STEP 1
 #endif
 
-#define beta 2.0f
+#define SSGI_MAX_VALUE 16.0f
 
 static const int2 neighbors[KERNEL_TAPS] = 
 {
@@ -107,8 +109,10 @@ struct ray
     float t;
     // specular f0
     float3 f0;
-    // beckmann roughness
+    // linear roughness
     float a;
+    // beckmann roughness
+    float b;
 };
 
 inline float GetMinimumStep(ray ray)
@@ -141,10 +145,22 @@ inline void SampleFlipBuffer(float2 uv, out half4 diffuse, out half4 specular)
     specular = _SSGIFlipSpecularBuffer.Sample(sampler_SSGIFlipSpecularBuffer, uv);
 }
 
+inline void SampleFlipBuffer(float2 uv, int2 offset, out half4 diffuse, out half4 specular)
+{
+    diffuse = _SSGIFlipDiffuseBuffer.Sample(sampler_SSGIFlipDiffuseBuffer, uv, offset);
+    specular = _SSGIFlipSpecularBuffer.Sample(sampler_SSGIFlipSpecularBuffer, uv, offset);
+}
+
 inline void SampleFlopBuffer(float2 uv, out half4 diffuse, out half4 specular)
 {
     diffuse = _SSGIFlopDiffuseBuffer.Sample(sampler_SSGIFlopDiffuseBuffer, uv);
     specular = _SSGIFlopSpecularBuffer.Sample(sampler_SSGIFlopSpecularBuffer, uv);
+}
+
+inline void SampleFlopBuffer(float2 uv, int2 offset, out half4 diffuse, out half4 specular)
+{
+    diffuse = _SSGIFlopDiffuseBuffer.Sample(sampler_SSGIFlopDiffuseBuffer, uv, offset);
+    specular = _SSGIFlopSpecularBuffer.Sample(sampler_SSGIFlopSpecularBuffer, uv, offset);
 }
 
 inline float SampleZHistory(float2 uv)
@@ -214,12 +230,6 @@ inline half GetLuminance(half3 color)
     return dot(half3(0.299h, 0.587h, 0.114h), color);
 }
 
-// blinn-phong
-inline half DBlinn(half a2, half NdotH)
-{
-    return clampInfinite(pow(NdotH, 2.0h / a2 - 2.0h) / a2);
-}
-
 inline float2 GetInitialTangent(float3 nrm, float3 dir)
 {
     float3 vec = normalize(dir - nrm * dot(dir, nrm));
@@ -242,6 +252,26 @@ inline half3 SampleViewNormal(float2 uv)
     return mul(_WorldToViewMatrix, vnrm);
 }
 
+inline float DecodeVisibility(uint mask)
+{
+    float sum = 0.0f;
+    float div = 0.0f;
+
+    [unroll]
+    for (uint index = 0; index < 32; index ++)
+    {
+        float2 angle = { (float)index, (float)index + 1.0f };
+        angle = angle * UNITY_PI / 32.0f;
+
+        float light = cos(angle.x) - cos(angle.y);
+        uint visible = (mask >> index) & 1u;
+        sum += light * (float)visible;
+        div += light;
+    }
+
+    return sum / div;
+}
+
 void HorizonTrace(ray ray, float2 theta, inout uint mask, inout float3 diffuse, inout float3 specular)
 {
     uint power = max(1, min(4, _SSGIStepPower));
@@ -250,11 +280,12 @@ void HorizonTrace(ray ray, float2 theta, inout uint mask, inout float3 diffuse, 
     float minStr = GetMinimumStep(ray) * (ray.noise.x + 1.0f);
 
     uint2 pHorizon = {0xFFFFFFFFu, 0xFFFFFFFFu};
+    float2 Ri = {0.0f, 0.0f};
 
     [unroll]
     for (uint iter = 0; iter < _SSGINumStride && str < 1.0f; iter ++)
     {
-        uint mip = min(iter, 4);
+        uint mip = min(iter / 2, 4);
         str = max(str + minStr * pow(2, mip), pow(((float)iter + ray.noise.x) / _SSGINumStride, power));
 
         //
@@ -383,35 +414,56 @@ void HorizonTrace(ray ray, float2 theta, inout uint mask, inout float3 diffuse, 
             saturate(dot(ldir[1], hdir[1]))
         };
 
+        // volume-distance attenuation
+        float2 Rf = {
+            distance(vp[0].xyz, ray.pos),
+            distance(vp[1].xyz, ray.pos)
+        };
+
+        float2 R = {
+            distance(facePos[0].xyz, ray.pos),
+            distance(facePos[1].xyz, ray.pos)
+        };
+
+        float2 va = 0.25f * abs(Rf - Ri) * (Rf + Ri) * (Rf + Ri) / (R * R + 1e-6);
+
+        ir[0].xyz *= va.x;
+        ir[1].xyz *= va.y;
+
+        // pi * pi / 4 ~ 2.4674
+        ir[0].xyz *= 2.4674f;
+        ir[1].xyz *= 2.4674f;
+
         // screen bound
-        float2 screenBound = 1.0f;
+        float2 sb = 1.0f;
+        sb.x = uv[0].x > 0.0f && uv[0].y > 0.0f && 1.0f > uv[0].x && 1.0f > uv[0].y ? 1.0f : 0.0f;
+        sb.y = uv[1].x > 0.0f && uv[1].y > 0.0f && 1.0f > uv[1].x && 1.0f > uv[1].y ? 1.0f : 0.0f;
 
-        screenBound.x = uv[0].x > 1.0f || uv[0].x < 0.0f || uv[0].y > 1.0f || uv[0].y < 0.0f ? 0.0f : 1.0f;
-        screenBound.y = uv[1].x > 1.0f || uv[1].x < 0.0f || uv[1].y > 1.0f || uv[1].y < 0.0f ? 0.0f : 1.0f;
-
-        // ndotl attenuation
-        ir[0].xyz *= ndotl.x;
-        ir[1].xyz *= ndotl.y;
+        ir[0].xyz *= sb.x;
+        ir[1].xyz *= sb.y;
 
         // shadow attenuation
         ir[0].xyz *= (float)countbits((~visibility.x) & mask) / 32.0f;
         ir[1].xyz *= (float)countbits((~visibility.y) & mask) / 32.0f;
 
+        // ndotl attenuation
+        ir[0].xyz *= ndotl.x;
+        ir[1].xyz *= ndotl.y;
+
         // brdf
-        diffuse += ir[0].xyz * screenBound.x;
-        diffuse += ir[1].xyz * screenBound.y;
+        diffuse += ir[0].xyz * aDiffuseBrdf(ray.a, ldoth.x, ndotl.x, ndotv);
+        diffuse += ir[1].xyz * aDiffuseBrdf(ray.a, ldoth.y, ndotl.y, ndotv);
 
         // specular
-        /*
-        specular += ir[0].xyz * ray.f0 * pow(ndoth.x, 1.0f / ray.a);
-        specular += ir[1].xyz * ray.f0 * pow(ndoth.y, 1.0f / ray.a);
-        */
-        specular += ir[0].xyz * DGGX(ray.a, ndoth.x, 1.0f) * VSmith(ray.a, ndotv, ndotl.x, 1.0f) * FSchlick(ray.f0, ldoth.x);
-        specular += ir[1].xyz * DGGX(ray.a, ndoth.y, 1.0f) * VSmith(ray.a, ndotv, ndotl.y, 1.0f) * FSchlick(ray.f0, ldoth.y);
+        specular += ir[0].xyz * DGGX(ray.b, ndoth.x) * VSmith(ray.b, ndotv, ndotl.x) * FSchlick(ray.f0, ldoth.x);
+        specular += ir[1].xyz * DGGX(ray.b, ndoth.y) * VSmith(ray.b, ndotv, ndotl.y) * FSchlick(ray.f0, ldoth.y);
         
         // update visibility mask
         visibility.xy = visibility.xy | visibility.zw;
         mask = mask & (visibility.x & visibility.y);
+
+        //
+        Ri = Rf;
     }
 }
 
@@ -419,14 +471,19 @@ float4 GBufferPrePass(v2f_img IN): SV_TARGET
 {
     half4 diffuse, specular;
     SampleGIHistory(IN.uv, diffuse, specular);
+
     half4 albedo = SampleGBuffer0(IN.uv);
     half4 direct = SampleGBuffer3(IN.uv);
+
     half3 ambient = mad(diffuse.xyz, albedo.xyz, specular.xyz);
+    ambient = clamp(ambient * _SSGISecondary, 0.0f, SSGI_MAX_VALUE);
+
     float depth = Linear01Depth(SampleZBuffer(IN.uv));
-    return half4(mad(ambient, _SSGISecondary, direct.xyz), depth);
+
+    return half4(direct.xyz + ambient, depth);
 }
 
-void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET1)
+void IndirectLighting(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET1)
 {
     float4 vpos;
     float depth;
@@ -445,6 +502,7 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
     float3 vnrm = mul(_WorldToViewMatrix, wnrm);
     float3 vdir = normalize(-vpos.xyz);
 
+    // depth based fade
     if (-vpos.z > _SSGIFadeDepth)
     {
         discard;
@@ -464,17 +522,20 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
     // convert to linear 0-1 depth
     ray.t = saturate((ray.t - _ProjectionParams.y) / (_ProjectionParams.z - _ProjectionParams.y));
 
+    // specular properties
     float4 gbuffer1 = SampleGBuffer1(IN.uv);
     ray.f0 = gbuffer1.xyz;
     ray.a = lerp(1.0f, _SSGIRoughness, gbuffer1.w);
-    ray.a = ray.a * ray.a;
+    ray.b = ray.a * ray.a;
 
+    //
     float slice = UNITY_PI / _SSGINumSample;
     
     float3 diffuse = 0.0f;
     float3 specular = 0.0f;
+    float ao = 0.0f;
+    float div = 0.0f;
 
-    //[unroll]
     for (uint iter = 0; iter < _SSGINumSample; iter ++)
     {
         // sampling direction
@@ -491,19 +552,15 @@ void IndirectDiffuse(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_
         uint mask = 0xFFFFFFFFu;
 
         HorizonTrace(ray, theta, mask, diffuse, specular);
+
+        ao += length(proj) * DecodeVisibility(mask);
+        div += length(proj);
     }
 
-    diffuse  /= _SSGINumSample;
-    specular /= _SSGINumSample;
+    ao = saturate(pow(ao / div, _SSGIOcclusion));
 
-    diffuse  /= _SSGINumStride;
-    specular /= _SSGINumStride;
-
-    mrt0 = half4(diffuse, GetLuminance(diffuse));
-    mrt1 = half4(specular, GetLuminance(specular));
-
-    mrt0.w *= mrt0.w;
-    mrt1.w *= mrt1.w;
+    mrt0 = half4(diffuse, ao);
+    mrt1 = half4(specular, ao);
 }
 
 void BilateralBlur(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET1)
@@ -580,6 +637,63 @@ void BilateralBlur(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TA
     }
 }
 
+void ClampLocalMaximum(float2 uv, out half4 d, out half4 s)
+{
+    half3x3 maxDiffuse = 0.0f;
+    half3x3 maxSpecular = 0.0f;
+
+    half3x3 minDiffuse = 65500.0f;
+    half3x3 minSpecular = 65500.0f;
+
+    half4 diffuse, specular;
+
+    // sample luminance
+    [unroll]
+    for (int x = -1; x < 2; x ++)
+    {
+        for (int y = -1; y < 2; y ++)
+        {
+            SampleFlipBuffer(uv, int2(x, y), diffuse, specular);
+
+            if (aLuminance(diffuse.xyz) >= aLuminance(maxDiffuse[0]))
+            {
+                maxDiffuse[2] = maxDiffuse[1];
+                maxDiffuse[1] = maxDiffuse[0];
+                maxDiffuse[0] = diffuse.xyz;
+            }
+
+            if (aLuminance(specular.xyz) >= aLuminance(maxSpecular[0]))
+            {
+                maxSpecular[2] = maxSpecular[1];
+                maxSpecular[1] = maxSpecular[0];
+                maxSpecular[0] = specular.xyz;
+            }
+
+            if (aLuminance(minDiffuse[0]) >= aLuminance(diffuse.xyz))
+            {
+                minDiffuse[2] = minDiffuse[1];
+                minDiffuse[1] = minDiffuse[0];
+                minDiffuse[0] = diffuse.xyz;
+            }
+
+            if (aLuminance(minSpecular[0]) >= aLuminance(specular.xyz))
+            {
+                minSpecular[2] = minSpecular[1];
+                minSpecular[1] = minSpecular[0];
+                minSpecular[0] = specular.xyz;
+            }
+        }
+    }
+
+    SampleFlipBuffer(uv, diffuse, specular);
+
+    diffuse.xyz = clamp(diffuse.xyz, minDiffuse[1], maxDiffuse[1]);
+    specular.xyz = clamp(specular.xyz, minDiffuse[1], maxSpecular[1]);
+
+    d = diffuse;
+    s = specular;
+}
+
 void TemporalFilter(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET1)
 {
     float4 vpCurrent, wpCurrent;
@@ -593,7 +707,8 @@ void TemporalFilter(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_T
     half4 diffuseCurrent, diffuseHistory;
     half4 specularCurrent, specularHistory;
 
-    SampleFlipBuffer(IN.uv, diffuseCurrent, specularCurrent);
+    //SampleFlipBuffer(IN.uv, diffuseCurrent, specularCurrent);
+    ClampLocalMaximum(IN.uv, diffuseCurrent, specularCurrent);
     SampleGIHistory(uvHistory, diffuseHistory, specularHistory);
 
     half3 normalCurrent = _CameraGBufferTexture2.Sample(sampler_CameraGBufferTexture2, IN.uv);
@@ -612,19 +727,31 @@ void TemporalFilter(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_T
 
 inline half4 CollectGI(v2f_img IN) : SV_TARGET
 {
+    float depth = LinearEyeDepth(SampleZBuffer(IN.uv));
+
+    if (depth > _SSGIFadeDepth)
+    {
+        return SampleTexel(IN.uv);
+    }
+
     half4 diffuse, specular;
     SampleFlopBuffer(IN.uv, diffuse, specular);
 
-    float depth = LinearEyeDepth(SampleZBuffer(IN.uv));
+    half fade = smoothstep(0.8f * _SSGIFadeDepth, _SSGIFadeDepth, depth);
 
-    diffuse = depth > _SSGIFadeDepth ? 0.0h : diffuse;
-    specular = depth > _SSGIFadeDepth ? 0.0h : specular;
+    diffuse = lerp(diffuse, half4(0.0f, 0.0f, 0.0f, 1.0f), fade);
+    specular = lerp(specular, half4(0.0f, 0.0f, 0.0f, 1.0f), fade);
 
     half4 albedo = SampleGBuffer0(IN.uv);
     half4 direct = SampleGBuffer3(IN.uv);
 
+    // ambient occlusion
+    direct.xyz *= diffuse.w;
+
     half3 ambient = mad(diffuse.xyz, albedo.xyz, specular.xyz);
-    return half4(mad(ambient, _SSGIIntensity, direct.xyz), direct.a);
+    ambient = clamp(ambient * _SSGIIntensity, 0.0f, SSGI_MAX_VALUE);
+
+    return half4(direct.xyz + ambient, direct.a);
 }
 
 inline void StoreHistory(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt1: SV_TARGET1, out fixed4 mrt2: SV_TARGET2, out half mrt3: SV_TARGET3)
@@ -646,10 +773,40 @@ inline void BlitFlopToFlip(v2f_mrt IN, out half4 mrt0: SV_TARGET0, out half4 mrt
 
 inline half4 DebugGI(v2f_img IN) : SV_TARGET
 {
-    half4 color = SampleTexel(IN.uv);
-    half illum = GetLuminance(color.xyz);
+    half4 diffuse, specular;
 
-    return color;//color.w - illum * illum;
+    SampleGIHistory(IN.uv, diffuse, specular);
+    half4 albedo = SampleGBuffer0(IN.uv);
+
+    // diffuse
+    if (_SSGIDebugView == 1)
+    {
+        return diffuse * _SSGIIntensity;
+    }
+
+    // specular
+    else if (_SSGIDebugView == 2)
+    {
+        return specular * _SSGIIntensity;
+    }
+
+    // diffuse + specular
+    else if (_SSGIDebugView == 3)
+    {
+        return mad(albedo, diffuse, specular) * _SSGIIntensity;
+    }
+
+    // ambient occlusion
+    else if (_SSGIDebugView = 4)
+    {
+        return diffuse.wwww;
+    }
+
+    // no debug view
+    else
+    {
+        return SampleTexel(IN.uv);
+    }
 }
 
 #endif
