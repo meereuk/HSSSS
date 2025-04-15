@@ -75,7 +75,7 @@ ASurface aDeferredSurface(inout unity_v2f_deferred i)
     s.roughness = 1.0h - gbuffer1.a;
 
     s.normalWorld = normalize(gbuffer2.rgb * 2.0h - 1.0h);
-    s.scatteringMask = 1.0h - gbuffer2.a;
+    s.scatteringMask = round(mad(gbuffer2.a, -3.0f, 3.0f));
 
     s.viewDirWorld = normalize(UnityWorldSpaceViewDir(positionWorld));
     s.beckmannRoughness = aLinearToBeckmannRoughness(s.roughness);

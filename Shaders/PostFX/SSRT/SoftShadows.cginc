@@ -253,7 +253,7 @@ half2 SamplePCFShadows(float3 wpos, float2 uv, float depth, float3 nrm, float nd
 			shadowDepth = shadowDepth / depthScale.x;
 		#endif
 
-		shadow.x += step(pixelDepth, shadowDepth);
+		shadow.x += step(pixelDepth.x, shadowDepth);
 	}
 
 	shadow.x = saturate(shadow.x / PCF_NUM_TAPS);

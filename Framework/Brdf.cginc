@@ -41,10 +41,20 @@ inline half3 aDiffuseBrdf(half roughness, half LdotH, half NdotL, half NdotV)
 {
     half FL = aFresnel(NdotL);
     half FV = aFresnel(NdotV);
-    half Fd90 = 0.5h + (2.0h * LdotH * LdotH * roughness);
+    half Fd90 = 0.5f + (2.0f * LdotH * LdotH * roughness);
     half Fd = aLerpOneTo(Fd90, FL) * aLerpOneTo(Fd90, FV);
 
     return Fd;
+}
+
+inline half3 aSubSurfaceBrdf(half roughness, half LdotH, half NdotL, half NdotV)
+{
+    half FL = aFresnel(NdotL);
+    half FV = aFresnel(NdotV);
+    half Fss90 = LdotH * LdotH * roughness;
+    half Fss = aLerpOneTo(Fss90, FL) * aLerpOneTo(Fss90, FV);
+    half ss =  1.25f * (Fss * (1.0f / (NdotL + NdotV) - 0.5f) + 0.5f);
+    return clampInfinite(ss);
 }
 
 // schlick fresnel

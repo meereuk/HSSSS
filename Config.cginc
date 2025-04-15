@@ -27,4 +27,9 @@
 #define UNITY_SAMPLE_FULL_SH_PER_PIXEL 1
 #endif
 
+#define SHADING_MODEL_STANDARD      0.0f
+#define SHADING_MODEL_ANISOTROPIC   1.0f
+#define SHADING_MODEL_SHEEN         2.0f
+#define SHADING_MODEL_SKIN          3.0f
+
 #endif

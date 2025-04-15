@@ -28,7 +28,7 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
     half3 sheen = DCharlie(s.beckmannRoughness, d.NdotH) * VNeubelt(s.NdotV, d.NdotL) * s.f0;
 
     specular = FSchlick(s.f0, d.LdotH);
-    diffuse = aDiffuseBrdf(s.roughness, d.LdotH, d.NdotL, s.NdotV);
+    diffuse = d.NdotL;
 
     sheen *= specularLight;
     specular *= specularLight;
@@ -36,17 +36,29 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
 
     half3 sssColor = saturate(s.albedo * s.albedo + 0.1h);
     sssColor = 0.1h * sssColor / aLuminance(sssColor);
-    
-    // standard
-    if (s.scatteringMask < 0.1h)
+
+    // skin
+    if (s.scatteringMask == SHADING_MODEL_SKIN)
     {
-        diffuse *= d.NdotL;
+        diffuse *= aDiffuseBrdf(s.roughness, d.LdotH, d.NdotL, s.NdotV);
         specular *= DGGX(s.beckmannRoughness, d.NdotH);
         specular *= VSmith(s.beckmannRoughness, s.NdotV, d.NdotL);
+        specular += sheen;
+
+        return;
+    }
+
+    // sheen
+    else if (s.scatteringMask == SHADING_MODEL_SHEEN)
+    {
+        diffuse *= aSubSurfaceBrdf(s.roughness, d.LdotH, d.NdotL, s.NdotV);
+        specular = sheen;
+
+        return;
     }
 
     // anisotropic
-    else if (s.scatteringMask < 0.4h)
+    else if (s.scatteringMask == SHADING_MODEL_ANISOTROPIC)
     {
         half3 halfvector = normalize(d.direction + s.viewDirWorld);
 
@@ -71,28 +83,21 @@ inline void aStandardDirect(ADirect d, ASurface s, out half3 diffuse, out half3 
         half at = s.beckmannRoughness * clamp(1.0h + anisotropy, 0.001f, 1.999f);
         half ab = s.beckmannRoughness * clamp(1.0h - anisotropy, 0.001f, 1.999f);
 
-        diffuse *= saturate((d.NdotLm + 0.5h) / 2.25h);
-        diffuse *= saturate(sssColor + d.NdotL);
+        diffuse *= aSubSurfaceBrdf(s.roughness, d.LdotH, d.NdotL, s.NdotV);
         specular *= DGGXAniso(at, ab, TdotH, BdotH, d.NdotH);
         specular *= VSmithAniso(at, ab, TdotV, BdotV, TdotL, BdotL, s.NdotV, d.NdotL);
+
+        return;
     }
 
-    // sheen
-    else if (s.scatteringMask < 0.7h)
-    {
-        // energy conserved wrap diffuse
-        diffuse *= saturate((d.NdotLm + 0.5h) / 2.25h);
-        diffuse *= saturate(sssColor + d.NdotL);
-        specular = sheen;
-    }
-
-    // skin
+    // standard
     else
     {
-        diffuse *= d.NdotL;
+        diffuse *= aDiffuseBrdf(s.roughness, d.LdotH, d.NdotL, s.NdotV);
         specular *= DGGX(s.beckmannRoughness, d.NdotH);
         specular *= VSmith(s.beckmannRoughness, s.NdotV, d.NdotL);
-        specular += sheen;
+
+        return;
     }
 }
 

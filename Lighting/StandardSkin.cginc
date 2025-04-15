@@ -57,7 +57,7 @@ void aUnpackGbuffer(inout ASurface s)
         s.ambientNormalWorld = s.normalWorld;
     #else
         s.ambientNormalWorld = mad(tex2D(_DeferredBlurredNormalBuffer, s.screenUv).xyz, 2.0h, -1.0h);
-        s.ambientNormalWorld = s.scatteringMask == 1.0 ? s.ambientNormalWorld : s.normalWorld;
+        s.ambientNormalWorld = s.scatteringMask == SHADING_MODEL_SKIN ? s.ambientNormalWorld : s.normalWorld;
         s.ambientNormalWorld = normalize(lerp(s.normalWorld, s.ambientNormalWorld, _DeferredSkinParams.w));
     #endif
 }
@@ -66,21 +66,8 @@ void aDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
 {
     aStandardDirect(d, s, diffuse, specular);
 
-    // default
-    if (s.scatteringMask < 0.1f)
-    {
-        diffuse = diffuse * s.albedo;
-    }
-
-    // non-skin sss + thin layer transmittance
-    else if (s.scatteringMask < 0.7f)
-    {
-        half3 transmission = aThinTransmission(d, s, _DeferredTransmissionParams.x);
-        diffuse = (diffuse + transmission) * s.albedo;
-    }
-
     // skin
-    else
+    if (s.scatteringMask == SHADING_MODEL_SKIN)
     {
         /////////////////////////
         // pre-integrated brdf //
@@ -118,12 +105,29 @@ void aDirect(ADirect d, ASurface s, out half3 diffuse, out half3 specular)
         #endif
 
         diffuse = (diffuse + transmission) * s.albedo;
+        return;
+    }
+
+    // default
+    else if (s.scatteringMask == SHADING_MODEL_STANDARD)
+    {
+        diffuse = diffuse * s.albedo;
+        return;
+    }
+
+    // non-skin sss + thin layer transmittance
+    else
+    {
+        half3 transmission = aThinTransmission(d, s, _DeferredTransmissionParams.x);
+        diffuse = (diffuse + transmission) * s.albedo;
+        return;
     }
 }
 
 half3 aIndirect(AIndirect i, ASurface s)
 {
     // Color Bleed AO.
+    // scatteringMask = 1.0f because it is g-buffer pass
     if (s.scatteringMask == 1.0h)
     {
         i.diffuse *= pow(s.ambientOcclusion, half3(1.0h, 1.0h, 1.0h) - _DeferredSkinColorBleedAoWeights);

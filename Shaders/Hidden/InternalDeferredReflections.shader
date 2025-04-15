@@ -32,7 +32,7 @@ Shader "Hidden/HSSSS/Deferred Reflections"
                 ASurface s = aDeferredSurface(i);
                 float blendDistance = unity_SpecCube1_ProbePosition.w; // will be set to blend distance for this probe
 
-                if (s.scatteringMask > 0.1h && s.scatteringMask < 0.4h)
+                if (s.scatteringMask == SHADING_MODEL_ANISOTROPIC)
                 {
                     half anisotropy = clamp(mad(s.transmission, 2.0h, -1.0h), -1.0h, 1.0h);
 

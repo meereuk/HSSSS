@@ -45,15 +45,7 @@ Shader "Hidden/HSSSS/Deferred Shading"
             #endif
 
             uniform float4 _CameraGBufferTexture3_TexelSize;
-
             #define _TexelSize _CameraGBufferTexture3_TexelSize
-
-            // RGB to YCoCg color space
-            static const half3x3 EncodeRGB = {
-                { 0.25h,  0.50h,  0.25h },
-                { 0.50h,  0.00h, -0.50h },
-                {-0.25h,  0.50h, -0.25h }
-            };
 
             half4 CalculateLight (unity_v2f_deferred i)
             {
@@ -69,14 +61,13 @@ Shader "Hidden/HSSSS/Deferred Shading"
                 specular = aHdrClamp(specular);
 
                 #ifdef _SCREENSPACE_SSS
-                    if (s.scatteringMask < 1.0h)
+                    if (s.scatteringMask != SHADING_MODEL_SKIN)
                     {
                         return half4(diffuse + specular, 0.0h);
                     }
 
                     else
                     {
-                        //uint2 coord = UnityPixelSnap(i.pos);
                         uint2 coord = round((s.screenUv - 0.5f * _TexelSize.xy) * _TexelSize.zw);
 
                         _SpecularBufferR[coord] += specular.r;
@@ -84,14 +75,6 @@ Shader "Hidden/HSSSS/Deferred Shading"
                         _SpecularBufferB[coord] += specular.b;
 
                         return half4(diffuse, 0.0h);
-
-                        /*
-                        diffuse = mul(EncodeRGB, diffuse);
-                        specular = mul(EncodeRGB, specular);
-
-                        bool pattern = (coord.x & 1) == (coord.y & 1);
-                        return pattern ? half4(diffuse.rg, specular.rg) : half4(diffuse.rb, specular.rb);
-                        */
                     }
                 #else
                     return half4(diffuse + specular, 1.0h);

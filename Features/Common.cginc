@@ -186,7 +186,7 @@ inline void aSampleTransmission(inout ASurface s)
 
 inline void aSampleScattering(inout ASurface s)
 {
-    s.scatteringMask = _MaterialType / 3.0h;
+    s.scatteringMask = _MaterialType / 3.0f;
 }
 
 inline void aSetDefaultBaseUv(inout ASurface s)
