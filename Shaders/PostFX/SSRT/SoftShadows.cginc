@@ -52,6 +52,7 @@ inline float3 SampleNoise(float2 uv)
 // gram-schmidt process
 inline float3x3 GramSchmidtMatrix(float3 axis)
 {
+	axis = normalize(axis);
 	float3 vec = normalize(lerp(float3(1.0f, 0.0f, 0.0f), float3(0.0f, 1.0f, 0.0f), abs(axis.x)));
     float3 tangent = normalize(vec - axis * dot(vec, axis));
     float3 bitangent = normalize(cross(axis, tangent));
@@ -119,9 +120,17 @@ half2 SamplePCFShadows(float3 wpos, float2 uv, float depth, float3 nrm, float nd
 	// initialize shadow coordinate and depth
 	#if defined(POINT)
 		float pixelDepth = distance(wpos, _LightPos.xyz);
+		if (pixelDepth > 1.0f / _LightPositionRange.w)
+		{
+			return half2(1.0f, 100.0f);
+		}
 	#elif defined(SPOT)
 		float4 pixelCoord = GetShadowCoordinate(wpos);
 		float pixelDepth = pixelCoord.z / pixelCoord.w;
+		if (pixelDepth > 1.0f)
+		{
+			return half2(1.0f, 100.0f);
+		}
 		pixelDepth = 1.0f / (_ShadowDepthParams.z * pixelDepth + _ShadowDepthParams.w);
 	#elif defined(DIRECTIONAL)
 		uint2 cascade = GetCascadeIndex(depth);
@@ -147,7 +156,7 @@ half2 SamplePCFShadows(float3 wpos, float2 uv, float depth, float3 nrm, float nd
 	#if defined(POINT)
 		float3 radius = float3(0.01f, 0.01f, 0.001f);
 		radius *= mad(noise.x, 0.4f, 0.8f);
-		radius *=  _PointLightPenumbra;
+		radius *= _PointLightPenumbra;
 	#elif defined(SPOT)
 		float3 radius = float3(0.01f, 0.01f, 0.001f);
 		radius *= mad(noise.x, 0.4f, 0.8f);
@@ -228,8 +237,9 @@ half2 SamplePCFShadows(float3 wpos, float2 uv, float depth, float3 nrm, float nd
 	// percentage closer filtering //
 	/////////////////////////////////
 
-	#if defined(POINT) || defined(SPOT)
-		pixelDepth -= lerp(0.01f, 0.00f, ndotl) * _SlopeBiasScale * noise.y;
+	#if defined(POINT)
+		float slopeBias = saturate(1.0f - 0.01f * _SlopeBiasScale);
+		pixelDepth *= lerp(slopeBias, 1.0f, ndotl);
 	#endif
 
 	[unroll]
@@ -283,7 +293,7 @@ half2 frag_shadow (v2f_img i) : SV_TARGET
 	// ndotl calculation
 	half3 normal = tex2D(_CameraGBufferTexture2, uv);
 	normal = normalize(mad(normal, 2.0h, -1.0h));
-	float ndotl = saturate(dot(normal, normalize(_LightPos.xyz - wpos.xyz)));
+	float ndotl = saturate(dot(normal, normalize(wpos.xyz - _LightPos.xyz)));
 
 	half2 shadow = 0.0f;
 
